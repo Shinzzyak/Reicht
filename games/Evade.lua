@@ -881,6 +881,654 @@ if State.Opt.KorbloxR then ApplyKorblox("Right", "rbxassetid://101851696") end
 if State.Opt.KorbloxL then ApplyKorblox("Left", "rbxassetid://101851582") end
 if State.Opt.Headless then ApplyHeadless() end
 end
+local Parity = {}
+local registry
+function Parity.Registry()
+if registry ~= nil then return registry or nil end
+local items = ReplicatedStorage:FindFirstChild("Items")
+local module = items and items:FindFirstChild("Registry")
+if not module then
+registry = false
+return nil
+end
+local ok, value = pcall(require, module)
+registry = ok and value or false
+return registry or nil
+end
+function Parity.ItemByName(name)
+local reg = Parity.Registry()
+if not reg or not name or name == "" then return nil end
+if reg.TryGetByName then
+local ok, entry = pcall(reg.TryGetByName, reg, name)
+if ok then return entry end
+end
+return nil
+end
+function Parity.ItemConfig(idOrName)
+local reg = Parity.Registry()
+if not reg then return nil end
+local id = tonumber(idOrName)
+if not id and reg.TryGetByName then
+local ok, entry = pcall(reg.TryGetByName, reg, tostring(idOrName))
+if ok and entry then id = entry.Id end
+end
+if id and reg.GetConfig then
+local ok, config = pcall(reg.GetConfig, reg, id)
+if ok then return config, id end
+end
+return nil, id
+end
+function Parity.ShopItems()
+local out = {}
+local reg = Parity.Registry()
+if not reg or not reg.GetAll then return out end
+local ok, ids = pcall(reg.GetAll, reg)
+if not ok or type(ids) ~= "table" then return out end
+for id in pairs(ids) do
+local config = select(1, Parity.ItemConfig(id))
+local purchase = config and config.PurchaseInfo
+if purchase and purchase.AppearsIn == "Shop" and purchase.OwnershipType == "Multiple" then
+local appearance = config.AppearanceInfo
+table.insert(out, (appearance and appearance.Name) or config.Name or tostring(id))
+end
+end
+table.sort(out)
+return out
+end
+function Parity.Purchase(name, amount)
+local reg = Parity.Registry()
+if not reg or not reg.GetAll or not name or name == "" then return false, "no registry" end
+local ok, ids = pcall(reg.GetAll, reg)
+if not ok or type(ids) ~= "table" then return false, "registry empty" end
+local target
+for id in pairs(ids) do
+local config = select(1, Parity.ItemConfig(id))
+local purchase = config and config.PurchaseInfo
+if purchase and purchase.AppearsIn == "Shop" and purchase.OwnershipType == "Multiple" then
+local appearance = config.AppearanceInfo
+local label = (appearance and appearance.Name) or config.Name
+if label == name then
+target = id
+break
+end
+end
+end
+if not target then return false, "item not in shop" end
+local remote = ReplicatedStorage:FindFirstChild("Shared")
+and ReplicatedStorage.Shared:FindFirstChild("UserData")
+and ReplicatedStorage.Shared.UserData:FindFirstChild("Events")
+and ReplicatedStorage.Shared.UserData.Events:FindFirstChild("Requests")
+and ReplicatedStorage.Shared.UserData.Events.Requests:FindFirstChild("Purchase")
+if not remote then return false, "no purchase remote" end
+local sent = pcall(function() remote:FireServer(target, amount or 1) end)
+if not sent then return false, "fire failed" end
+return true
+end
+Parity.CosmeticSwaps = {}
+local function scanDescendants(root, folderName, itemName, budget)
+budget = budget or 4000
+local stack = { root }
+local seen = 0
+while #stack > 0 and seen < budget do
+local node = table.remove(stack)
+seen += 1
+if node.Name == folderName then
+local hit = node:FindFirstChild(itemName)
+if hit then return hit end
+end
+for _, child in ipairs(node:GetChildren()) do
+if child:IsA("Folder") or child:IsA("Model") or child:IsA("Configuration") then
+table.insert(stack, child)
+end
+end
+end
+return nil
+end
+function Parity.CosmeticNames()
+local out = {}
+local reg = Parity.Registry()
+if not reg or not reg.GetByCategory then return out end
+local ok, bucket = pcall(reg.GetByCategory, reg, "Cosmetics")
+if not ok or type(bucket) ~= "table" then
+ok, bucket = pcall(reg.GetByCategory, reg, "Cosmetic")
+end
+if not ok or type(bucket) ~= "table" then return out end
+for _, entry in pairs(bucket) do
+if type(entry) == "table" and entry.Module then table.insert(out, entry.Module.Name) end
+end
+table.sort(out)
+return out
+end
+function Parity.SwapCosmetics(first, second)
+if not first or not second or first == "" or second == "" or first == second then
+return false, "pick two different items"
+end
+local items = ReplicatedStorage:FindFirstChild("Items")
+if not items then return false, "no Items folder" end
+local source = scanDescendants(items, "Cosmetics", first)
+local target = scanDescendants(items, "Cosmetics", second)
+if not source or not target then return false, "cosmetic not found" end
+local holder = Instance.new("Folder")
+holder.Name = "ReichtSwap"
+holder.Parent = ReplicatedStorage
+local sourceKids, targetKids = source:GetChildren(), target:GetChildren()
+for _, child in ipairs(sourceKids) do child.Parent = holder end
+for _, child in ipairs(targetKids) do child.Parent = source end
+for _, child in ipairs(holder:GetChildren()) do child.Parent = target end
+holder:Destroy()
+table.insert(Parity.CosmeticSwaps, { first, second })
+return true
+end
+function Parity.RestoreCosmetics()
+local swaps = Parity.CosmeticSwaps
+if #swaps == 0 then return 0 end
+local undone = 0
+for index = #swaps, 1, -1 do
+local pair = swaps[index]
+if Parity.SwapCosmetics(pair[2], pair[1]) then undone += 1 end
+table.remove(swaps, index)
+end
+Parity.CosmeticSwaps = {}
+return undone
+end
+function Parity.Emotes()
+local out = {}
+local items = ReplicatedStorage:FindFirstChild("Items")
+if not items then return out end
+local stack = { items }
+while #stack > 0 do
+local node = table.remove(stack)
+if node.Name == "Emotes" then
+for _, module in ipairs(node:GetChildren()) do
+if module:IsA("ModuleScript") then
+table.insert(out, { Name = module.Name, ID = module:GetAttribute("ID"), Module = module })
+end
+end
+else
+for _, child in ipairs(node:GetChildren()) do
+if child:IsA("Folder") then table.insert(stack, child) end
+end
+end
+end
+table.sort(out, function(a, b) return a.Name < b.Name end)
+return out
+end
+function Parity.FindEmote(input)
+if not input or input == "" then return nil end
+local numeric = tonumber(input)
+local list = Parity.Emotes()
+if numeric then
+for _, entry in ipairs(list) do
+if entry.ID == numeric then return entry end
+end
+return { Name = tostring(numeric), ID = numeric }
+end
+local needle = tostring(input):lower():gsub("%s+", "")
+for _, entry in ipairs(list) do
+if entry.Name:lower():gsub("%s+", "") == needle then return entry end
+end
+local reg = Parity.Registry()
+if reg and reg.TryGetByName then
+local ok, found = pcall(reg.TryGetByName, reg, input)
+if ok and found and found.Module then
+return { Name = found.Module.Name, ID = found.Id or found.Module:GetAttribute("ID"), Module = found.Module }
+end
+end
+return nil
+end
+function Parity.SetEmote(id)
+if not id then return false end
+local character = Character()
+local tag = character and character:GetAttribute("Tag")
+local remote = Event("UpdateCharacterDataRegistry")
+if not tag or not remote or not firesignal then return false end
+return pcall(function()
+local packed = buffer.create(2)
+buffer.writeu16(packed, 0, tag)
+firesignal(remote.OnClientEvent, { buffer.fromstring("\24\1"), id, packed })
+end)
+end
+function Parity.SwapEmote(first, second)
+local target = Parity.FindEmote(second)
+if not target or not target.ID then return false, "target emote not found" end
+local sent = Parity.SetEmote(target.ID)
+if not sent then return false, "emote signal failed" end
+return true
+end
+Parity.EmoteHook = { Active = false, Map = {} }
+function Parity.StartEmoteWatcher()
+if Parity.EmoteHook.Active then return true end
+local objects = ReplicatedStorage:FindFirstChild("Objects")
+local items = objects and objects:FindFirstChild("Items")
+local module = items and items:FindFirstChild("Emote")
+if not module then return false end
+local ok, class = pcall(require, module)
+if not ok or type(class) ~= "table" then return false end
+Parity.EmoteHook.Original = class.Activate
+Parity.EmoteHook.Class = class
+local original = class.Activate
+if type(original) ~= "function" then return false end
+class.Activate = function(self, ...)
+original(self, ...)
+local name = self.EmoteModule and self.EmoteModule.Name
+local replacement = name and Parity.EmoteHook.Map[name]
+if replacement and Parity.EmoteHook.Last ~= name then
+Parity.EmoteHook.Last = name
+Parity.SetEmote(replacement)
+end
+end
+Parity.EmoteHook.Active = true
+return true
+end
+function Parity.StopEmoteWatcher()
+local hook = Parity.EmoteHook
+if not hook.Active then return end
+if hook.Class and hook.Original then hook.Class.Activate = hook.Original end
+hook.Active = false
+hook.Last = nil
+end
+function Parity.BuildEmoteMap(currentName, targetName)
+local current = Parity.FindEmote(currentName)
+local target = Parity.FindEmote(targetName)
+if not current or not target or not target.ID then return false, "emote not found" end
+Parity.EmoteHook.Map[current.Name] = target.ID
+return true, current.Name .. " -> " .. target.Name
+end
+function Parity.Status(player)
+if not player or not player.Character then return "DEAD" end
+local character = player.Character
+local services = ReplicatedStorage:FindFirstChild("Services")
+local asset = services and services:FindFirstChild("Asset")
+local module = asset and asset:FindFirstChild("CharacterService")
+if module then
+local ok, service = pcall(require, module)
+if ok and service and service.GetCharacterFromPlayer then
+local got, data = pcall(function() return service:GetCharacterFromPlayer(player) end)
+if got and data and data.DataRegistry then
+local downed = data.DataRegistry:Get("Downed")
+if downed then return "DOWNED" end
+end
+end
+end
+local folder = Workspace:FindFirstChild("Players")
+local mirror = folder and folder:FindFirstChild(player.Name)
+if mirror then
+local downed = mirror:GetAttribute("Downed")
+if downed == true or downed == 1 or downed == "true" then return "DOWNED" end
+end
+if character:GetAttribute("Downed") == true then return "DOWNED" end
+local humanoid = character:FindFirstChildOfClass("Humanoid")
+if humanoid and humanoid.Health > 0 then return "ALIVE" end
+return "DEAD"
+end
+function Parity.Ragdolled(player)
+local character = player and player.Character
+if not character then return false end
+if character:FindFirstChild("RagdollConstraints") then return true end
+local primary = character.PrimaryPart
+if primary and primary.Anchored then return true end
+return false
+end
+function Parity.DownedModel()
+local folder = Workspace:FindFirstChild("Players")
+if not folder then return nil end
+for _, model in ipairs(folder:GetChildren()) do
+if model:GetAttribute("Downed") and model:FindFirstChild("HumanoidRootPart") then
+return model
+end
+end
+return nil
+end
+function Parity.TeleportToDowned()
+local model = Parity.DownedModel()
+local _, _, root = Character()
+local target = model and model:FindFirstChild("HumanoidRootPart")
+if not root or not target then return false end
+root.CFrame = CFrame.new(target.Position + Vector3.new(0, 2, 0))
+return true
+end
+function Parity.SafeCFrame(mode, root, distance, threat)
+if mode == "Spawn" then
+local gameFolder = Workspace:FindFirstChild("Game")
+local map = gameFolder and gameFolder:FindFirstChild("Map")
+local spawns = map and (map:FindFirstChild("ItemSpawns")
+or map:FindFirstChild("Spawns") or map:FindFirstChild("MapLogic"))
+if spawns then
+local parts = {}
+for _, part in ipairs(spawns:GetDescendants()) do
+if part:IsA("BasePart") then table.insert(parts, part) end
+end
+if #parts > 0 then
+local pick = parts[math.random(1, #parts)]
+return CFrame.new(pick.Position + Vector3.new(0, 3, 0))
+end
+end
+elseif mode == "Players" then
+local pool = {}
+for _, player in ipairs(Players:GetPlayers()) do
+local other = player.Character
+if player ~= LocalPlayer and other and other:FindFirstChild("HumanoidRootPart") then
+table.insert(pool, other.HumanoidRootPart)
+end
+end
+if #pool > 0 then
+local pick = pool[math.random(1, #pool)]
+return pick.CFrame + Vector3.new(0, 3, 0)
+end
+elseif mode == "Distance" and root and threat then
+local away = root.Position - threat
+if away.Magnitude > 0.1 then
+return CFrame.new(root.Position + away.Unit * (distance or 100))
+end
+end
+return root and (root.CFrame + Vector3.new(0, 50, 0)) or CFrame.new(0, 100, 0)
+end
+function Parity.AntiNextbot()
+local _, _, root = Character()
+if not root then return false end
+local range = State.Opt.AntiBotRange or 50
+local mode = State.Opt.AntiBotMode or "Spawn"
+local folder = NextbotFolder()
+local moved = false
+local function sweep(container)
+if not container then return end
+for _, model in ipairs(container:GetChildren()) do
+local bot = model:FindFirstChild("HumanoidRootPart")
+if bot and IsNextbot(model) and (root.Position - bot.Position).Magnitude < range then
+root.CFrame = Parity.SafeCFrame(mode, root, 100, bot.Position)
+moved = true
+return
+end
+end
+end
+sweep(folder)
+if not moved then
+local players = PlayerModels()
+sweep(players)
+end
+return moved
+end
+function Parity.InvisParts(state)
+local gameFolder = Workspace:FindFirstChild("Game")
+local map = gameFolder and gameFolder:FindFirstChild("Map")
+local folder = map and (map:FindFirstChild("InvisParts") or map:FindFirstChild("MapLogic"))
+if not folder then return 0 end
+local touched = 0
+for _, part in ipairs(folder:GetDescendants()) do
+if part:IsA("BasePart") then
+part.CanCollide = state and true or false
+touched += 1
+end
+end
+return touched
+end
+local STAT_KEYS = {
+Speed = "Speed",
+Friction = "Friction",
+AirAcceleration = "AirAcceleration",
+AirStrafeAcceleration = "AirStrafeAcceleration",
+SprintAcceleration = "SprintAcceleration",
+SprintCap = "SprintCap",
+JumpHeight = "JumpHeight",
+JumpSpeedMultiplier = "JumpSpeedMultiplier",
+JumpCap = "JumpCap",
+GroundAcceleration = "GroundAcceleration",
+BhopEnabled = "BhopEnabled",
+}
+function Parity.Stat(key, value)
+local mapped = STAT_KEYS[key]
+if not mapped then return false end
+return MovementValueSet(mapped, value)
+end
+function Parity.ResetStats()
+MovementValueSet("Speed", 16)
+MovementValueSet("Friction", 5)
+MovementValueSet("AirAcceleration", 1)
+MovementValueSet("AirStrafeAcceleration", 182)
+MovementValueSet("SprintAcceleration", 1)
+MovementValueSet("SprintCap", 2)
+MovementValueSet("JumpHeight", 3)
+MovementValueSet("JumpSpeedMultiplier", 1.45)
+MovementValueSet("JumpCap", 1)
+MovementValueSet("BhopEnabled", false)
+end
+function Parity.Bounce()
+local character, humanoid = Character()
+if not humanoid then return end
+if not State.Opt.Bounce then
+humanoid.WalkSpeed = 16
+return
+end
+local state = character:GetAttribute("State")
+if state == "Default" or state == "Downed" then
+humanoid.WalkSpeed = 0
+elseif state == "Emoting" or state == "EmotingAir" or state == "EmotingSlide" or state == "EmotingSlideAir" then
+humanoid.WalkSpeed = State.Opt.BounceEmote or 60
+else
+humanoid.WalkSpeed = State.Opt.BounceDefault or 30
+end
+end
+function Parity.Speedometer()
+local gui = LocalPlayer:FindFirstChild("PlayerGui")
+local node = gui and gui:FindFirstChild("Shared")
+for _, step in ipairs({ "HUD", "Overlay", "Default", "CharacterInfo", "Item", "Speedometer", "Players" }) do
+node = node and node:FindFirstChild(step)
+if not node then return nil end
+end
+return node
+end
+function Parity.Loadouts()
+local out = {}
+local items = ReplicatedStorage:FindFirstChild("Items")
+local folder = items and items:FindFirstChild("Loadout")
+if not folder then return out end
+for _, child in ipairs(folder:GetChildren()) do
+if child:IsA("ModuleScript") or child:IsA("LocalScript") then
+table.insert(out, child.Name)
+end
+end
+table.sort(out)
+return out
+end
+function Parity.RevertCosmetics()
+local character = Character()
+if not character then return false end
+local head = character:FindFirstChild("Head")
+if head then
+head.Transparency = 0
+local mesh = head:FindFirstChild("ReichtHeadless")
+if mesh then mesh:Destroy() end
+end
+for _, name in ipairs({ "Right Leg", "RightUpperLeg", "Left Leg", "LeftUpperLeg" }) do
+local leg = character:FindFirstChild(name)
+if leg then
+leg.Color = Color3.new(1, 1, 1)
+local mesh = leg:FindFirstChild("ReichtKorblox")
+if mesh then mesh:Destroy() end
+end
+end
+State.Opt.Headless = false
+State.Opt.KorbloxR = false
+State.Opt.KorbloxL = false
+return true
+end
+function Parity.ToggleButton(name, label, callback)
+local gui = LocalPlayer:FindFirstChild("PlayerGui")
+if not gui or gui:FindFirstChild(name) then return nil end
+local screen = Instance.new("ScreenGui")
+screen.Name = name
+screen.ResetOnSpawn = false
+screen.Parent = gui
+local frame = Instance.new("Frame")
+frame.Name = name
+frame.Size = UDim2.new(0, 160, 0, 44)
+frame.Position = UDim2.new(0.02, 0, 0.35, 0)
+frame.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
+frame.BackgroundTransparency = 0.15
+frame.Parent = screen
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 12)
+corner.Parent = frame
+local stroke = Instance.new("UIStroke")
+stroke.Color = Color3.fromRGB(90, 200, 255)
+stroke.Thickness = 1.5
+stroke.Parent = frame
+local button = Instance.new("TextButton")
+button.Size = UDim2.new(1, 0, 1, 0)
+button.BackgroundTransparency = 1
+button.Text = label or name
+button.Font = Enum.Font.SourceSansBold
+button.TextSize = 18
+button.TextColor3 = Color3.new(1, 1, 1)
+button.Parent = frame
+local dragging, dragStart, frameStart = false, nil, nil
+button.InputBegan:Connect(function(input)
+if input.UserInputType == Enum.UserInputType.MouseButton1
+or input.UserInputType == Enum.UserInputType.Touch then
+dragging = true
+dragStart = input.Position
+frameStart = frame.Position
+input.Changed:Connect(function()
+if input.UserInputState == Enum.UserInputState.End then dragging = false end
+end)
+end
+end)
+button.InputChanged:Connect(function(input)
+if not dragging then return end
+if input.UserInputType ~= Enum.UserInputType.MouseMovement
+and input.UserInputType ~= Enum.UserInputType.Touch then return end
+local delta = input.Position - dragStart
+frame.Position = UDim2.new(
+frameStart.X.Scale, frameStart.X.Offset + delta.X,
+frameStart.Y.Scale, frameStart.Y.Offset + delta.Y
+)
+end)
+button.Activated:Connect(function()
+if callback then callback() end
+end)
+table.insert(State.Connections, screen)
+return frame
+end
+function Parity.DropButton(name)
+local gui = LocalPlayer:FindFirstChild("PlayerGui")
+local screen = gui and gui:FindFirstChild(name)
+if screen then screen:Destroy() end
+end
+function Parity.RealName(folder, input)
+if not input or input == "" then return nil end
+local entry = Parity.ItemByName(input)
+if entry and entry.Module then return entry.Module.Name end
+if not folder then return nil end
+local needle = tostring(input):lower():gsub("%s+", "")
+for _, item in ipairs(folder:GetChildren()) do
+if item.Name:lower():gsub("%s+", "") == needle then return item.Name end
+end
+return nil
+end
+function Parity.InfiniteSlide()
+local character = Character()
+if not character then return end
+local state = character:GetAttribute("State")
+if state == "Slide" or state == "EmotingSlide" or state == "CarrySlide" then
+MovementValueSet("GroundAcceleration", State.Opt.SlideAcceleration or 40)
+else
+MovementValueSet("GroundAcceleration", 5)
+end
+end
+function Parity.SetBhop(enabled, hold)
+State.Opt.Bhop = enabled and true or false
+State.Opt.BhopHold = hold and true or false
+local mode = State.Opt.BhopMode or "Acceleration"
+local flag = (State.Opt.Bhop or State.Opt.BhopHold) and mode ~= "No Acceleration"
+MovementValueSet("BhopEnabled", flag and true or false)
+end
+Parity.EmoteDash = { Active = false, Multiplier = 1 }
+function Parity.StartAggressiveEmote()
+if Parity.EmoteDash.Active then return true end
+local objects = ReplicatedStorage:FindFirstChild("Objects")
+local gameFolder = objects and objects:FindFirstChild("Game")
+local character = gameFolder and gameFolder:FindFirstChild("Character")
+local client = character and character:FindFirstChild("Client")
+local module = client and client:FindFirstChild("Movement")
+if not module then return false end
+local ok, movement = pcall(require, module)
+if not ok or type(movement) ~= "table" then return false end
+local original = movement.RegistryTermUpdated
+if type(original) ~= "function" then return false end
+Parity.EmoteDash.Movement = movement
+Parity.EmoteDash.Original = original
+movement.RegistryTermUpdated = function(self, term)
+if term ~= "Emote" then return original(self, term) end
+local id = self.DataRegistry and self.DataRegistry:Get("Emote")
+if not id or id == 0 then
+if self.MoveStats then self.MoveStats:SpeedChange("Emote", nil) end
+return
+end
+local multiplier = Parity.EmoteDash.Multiplier
+if State.Opt.EmoteDashBlatant then
+multiplier = multiplier * ((State.Opt.EmoteDashSpeed or 1000) / 1000)
+end
+if self.MoveStats then self.MoveStats:SpeedChange("Emote", multiplier) end
+return
+end
+Parity.EmoteDash.Active = true
+return true
+end
+function Parity.StopAggressiveEmote()
+local state = Parity.EmoteDash
+if not state.Active then return end
+if state.Movement and state.Original then
+state.Movement.RegistryTermUpdated = state.Original
+end
+state.Active = false
+end
+function Parity.ClearEmoteMap()
+Parity.StopEmoteWatcher()
+Parity.EmoteHook.Map = {}
+return true
+end
+Parity.Admin = { LastMap = 0, LastSpecial = 0, LastTime = 0 }
+local function adminSend(command)
+local remote = ReplicatedStorage:FindFirstChild("Events")
+and ReplicatedStorage.Events:FindFirstChild("Admin")
+and ReplicatedStorage.Events.Admin:FindFirstChild("Command")
+if not remote then return false end
+return pcall(function() remote:FireServer(command) end)
+end
+local function normalizeText(text)
+return tostring(text or ""):gsub("%s+", ""):lower()
+end
+function Parity.AutoAdmin()
+if not State.Opt.AutoAdmin then return end
+local now = os.clock()
+local map = State.Opt.AutoMapName
+if State.Opt.AutoMap and map and map ~= "" and now - Parity.Admin.LastMap >= 1 then
+local current = RegistryValue("Map")
+if normalizeText(current) ~= normalizeText(map) then
+if type(RegistryValue("MapLoading")) ~= "string" then
+adminSend("!Map " .. map)
+Parity.Admin.LastMap = now
+end
+end
+end
+local special = State.Opt.AutoSpecialName
+if State.Opt.AutoSpecial and special and special ~= "" and now - Parity.Admin.LastSpecial >= 1 then
+local current = RegistryValue("SpecialRound")
+if normalizeText(current) ~= normalizeText(special) then
+adminSend("!SpecialRound " .. special)
+Parity.Admin.LastSpecial = now
+end
+end
+local seconds = State.Opt.AutoTime
+if seconds and tonumber(seconds) and now - Parity.Admin.LastTime >= 3 then
+local current = RegistryValue("Time")
+local wanted = tonumber(seconds)
+if wanted and current ~= wanted then
+adminSend("!Time " .. tostring(wanted))
+Parity.Admin.LastTime = now
+end
+end
+end
 local body = game:HttpGet(UI_URL)
 if type(body) ~= "string" or not body:sub(-64):find("return Library%s*$") then
 Alert("Could not download the menu. Check the connection and try again.")
@@ -1628,6 +2276,14 @@ State.Opt.VoteMode = 1
 State.Opt.TokenDelay = 2
 State.Opt.LagMs = 200
 State.Opt.TrimpDrop = 6
+State.Opt.AntiBotRange = 50
+State.Opt.AntiBotMode = "Spawn"
+State.Opt.ShopAmount = 1
+State.Opt.BounceDefault = 30
+State.Opt.BhopMode = "Acceleration"
+State.Opt.SlideAcceleration = 40
+State.Opt.EmoteDashSpeed = 1000
+State.Opt.BounceEmote = 60
 State.Opt.TrimpHeight = 1.4
 LocalPlayer.Idled:Connect(function()
 if not State.Opt.AntiAfk then return end
@@ -1667,6 +2323,19 @@ humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
 end
 end
 if State.Opt.EdgeTrimp and character then EdgeTrimp() end
+if State.Opt.Bounce then Parity.Bounce() end
+if State.Opt.AntiBot then Parity.AntiNextbot() end
+if State.Opt.InfSlide then Parity.InfiniteSlide() end
+if State.Opt.BhopHold and UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+local _, holdHumanoid = Character()
+if holdHumanoid then
+local state = holdHumanoid:GetState()
+if state ~= Enum.HumanoidStateType.Jumping and state ~= Enum.HumanoidStateType.Freefall then
+holdHumanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+end
+end
+end
+if State.Opt.AutoAdmin then Parity.AutoAdmin() end
 if State.Opt.EspPlayers then
 for _, player in ipairs(Players:GetPlayers()) do
 local other = player.Character
@@ -1779,6 +2448,334 @@ State.SpecialLabel.Text = ""
 end
 end
 end)
+local extraTab = win:AddTab("Extras", "package", "Shop, emotes, anti nextbot, stats")
+local shopGroup = extraTab:AddLeftGroupbox("Shop", "shopping-cart")
+local shopNames = Parity.ShopItems()
+shopGroup:AddDropdown("ShopItem", {
+Text = "Item",
+Values = shopNames,
+Default = 1,
+Callback = function(value) State.Opt.ShopItem = value end,
+})
+shopGroup:AddSlider("ShopAmount", {
+Text = "Amount",
+Min = 1,
+Max = 100,
+Default = 1,
+Rounding = 0,
+Callback = function(value) State.Opt.ShopAmount = value end,
+})
+shopGroup:AddButton({
+Text = "Buy Item",
+Func = function()
+local name = State.Opt.ShopItem or shopNames[1]
+local ok, why = Parity.Purchase(name, State.Opt.ShopAmount or 1)
+Alert(ok and string.format("Bought %s x%d", tostring(name), State.Opt.ShopAmount or 1)
+or string.format("Buy failed: %s", tostring(why)))
+end,
+})
+shopGroup:AddButton({
+Text = "Refresh Item List",
+Func = function()
+shopNames = Parity.ShopItems()
+Alert(string.format("%d shop items in the registry", #shopNames))
+end,
+})
+local cosGroup = extraTab:AddRightGroupbox("Cosmetics", "shirt")
+local cosNames = Parity.CosmeticNames()
+cosGroup:AddDropdown("CosCurrent", {
+Text = "Replace",
+Values = cosNames,
+Default = 1,
+Callback = function(value) State.Opt.CosCurrent = value end,
+})
+cosGroup:AddDropdown("CosTarget", {
+Text = "With",
+Values = cosNames,
+Default = 1,
+Callback = function(value) State.Opt.CosTarget = value end,
+})
+cosGroup:AddButton({
+Text = "Swap Cosmetics",
+Func = function()
+local ok, why = Parity.SwapCosmetics(State.Opt.CosCurrent, State.Opt.CosTarget)
+Alert(ok and "Cosmetics swapped" or tostring(why))
+end,
+})
+cosGroup:AddButton({
+Text = "Restore Cosmetics",
+Func = function()
+local undone = Parity.RestoreCosmetics()
+Alert(string.format("Restored %d cosmetic swaps", undone))
+end,
+})
+local emoteSwapGroup = extraTab:AddLeftGroupbox("Emote Replace", "smile")
+local emoteNames = {}
+for _, entry in ipairs(Parity.Emotes()) do table.insert(emoteNames, entry.Name) end
+if #emoteNames == 0 then emoteNames = { "None" } end
+emoteSwapGroup:AddDropdown("EmotePlay", {
+Text = "When playing",
+Values = emoteNames,
+Default = 1,
+Callback = function(value) State.Opt.EmotePlay = value end,
+})
+emoteSwapGroup:AddDropdown("EmoteShow", {
+Text = "Show instead",
+Values = emoteNames,
+Default = 1,
+Callback = function(value) State.Opt.EmoteShow = value end,
+})
+emoteSwapGroup:AddButton({
+Text = "Add Mapping",
+Func = function()
+local ok, why = Parity.BuildEmoteMap(State.Opt.EmotePlay, State.Opt.EmoteShow)
+Alert(ok and why or tostring(why))
+end,
+})
+emoteSwapGroup:AddToggle("EmoteWatcher", {
+Text = "Emote Watcher",
+Default = false,
+Callback = function(on)
+State.Opt.EmoteWatcher = on
+local ok = on and Parity.StartEmoteWatcher() or not Parity.StopEmoteWatcher()
+Alert(on and (ok and "Watcher installed" or "Emote class not found") or "Watcher removed")
+end,
+})
+emoteSwapGroup:AddButton({
+Text = "Play Emote Now",
+Func = function()
+local ok, why = Parity.SwapEmote(State.Opt.EmotePlay, State.Opt.EmoteShow)
+Alert(ok and "Emote signal sent" or tostring(why))
+end,
+})
+local botGroup = extraTab:AddRightGroupbox("Anti Nextbot", "shield-off")
+botGroup:AddToggle("AntiBot", {
+Text = "Enabled",
+Default = false,
+Callback = function(on) State.Opt.AntiBot = on end,
+})
+botGroup:AddDropdown("AntiBotMode", {
+Text = "Escape to",
+Values = { "Spawn", "Players", "Distance" },
+Default = 1,
+Callback = function(value) State.Opt.AntiBotMode = value end,
+})
+botGroup:AddSlider("AntiBotRange", {
+Text = "Trigger Range",
+Min = 10,
+Max = 200,
+Default = 50,
+Rounding = 0,
+Callback = function(value) State.Opt.AntiBotRange = value end,
+})
+botGroup:AddToggle("InvisWalk", {
+Text = "Walk Through Invisible Walls",
+Default = false,
+Callback = function(on)
+local touched = Parity.InvisParts(not on)
+Alert(string.format("%s on %d parts", on and "Collision off" or "Collision on", touched))
+end,
+})
+botGroup:AddButton({
+Text = "Teleport To Downed",
+Func = function()
+Alert(Parity.TeleportToDowned() and "Moved to downed body" or "Nobody is downed")
+end,
+})
+local statGroup2 = extraTab:AddLeftGroupbox("Movement Stats", "activity")
+local statRows = {
+{ "StatSpeed", "Speed", "Speed", 0, 500, 16 },
+{ "StatFriction", "Friction", "Friction", 0, 100, 5 },
+{ "StatAirAccel", "Air Acceleration", "AirAcceleration", 0, 100, 1 },
+{ "StatAirStrafe", "Air Strafe", "AirStrafeAcceleration", 0, 500, 182 },
+{ "StatSprintAccel", "Sprint Acceleration", "SprintAcceleration", 0, 50, 1 },
+{ "StatSprintCap", "Sprint Cap", "SprintCap", 0, 50, 2 },
+{ "StatJumpHeight", "Jump Height", "JumpHeight", 0, 100, 3 },
+{ "StatJumpMult", "Jump Multiplier", "JumpSpeedMultiplier", 0, 20, 1.45 },
+{ "StatJumpCap", "Jump Cap", "JumpCap", 0, 50, 1 },
+}
+for _, row in ipairs(statRows) do
+local key, label, mapped, low, high, default = row[1], row[2], row[3], row[4], row[5], row[6]
+statGroup2:AddSlider(key, {
+Text = label,
+Min = low,
+Max = high,
+Default = default,
+Rounding = mapped == "JumpSpeedMultiplier" and 2 or 0,
+Callback = function(value) Parity.Stat(mapped, value) end,
+})
+end
+statGroup2:AddToggle("StatBhop", {
+Text = "Bhop Enabled",
+Default = false,
+Callback = function(on) Parity.Stat("BhopEnabled", on) end,
+})
+statGroup2:AddButton({
+Text = "Reset Movement Stats",
+Func = function()
+Parity.ResetStats()
+Alert("Movement stats reset")
+end,
+})
+local toolGroup2 = extraTab:AddRightGroupbox("On Screen", "layout")
+local toggleLabelInput = toolGroup2:AddInput("ToggleLabel", {
+Text = "Button Label",
+Default = "Reicht",
+Placeholder = "text on the button",
+})
+toolGroup2:AddButton({
+Text = "Add Toggle Button",
+Func = function()
+local label = toggleLabelInput.Value
+local frame = Parity.ToggleButton("ReichtToggle", label, function()
+State.Opt.Bounce = not State.Opt.Bounce
+Alert(State.Opt.Bounce and "Bounce on" or "Bounce off")
+end)
+Alert(frame and "Button added" or "Button already on screen")
+end,
+})
+toolGroup2:AddButton({
+Text = "Remove Toggle Button",
+Func = function()
+Parity.DropButton("ReichtToggle")
+Alert("Button removed")
+end,
+})
+toolGroup2:AddToggle("Bounce", {
+Text = "Bounce (state driven)",
+Default = false,
+Callback = function(on) State.Opt.Bounce = on end,
+})
+toolGroup2:AddSlider("BounceDefault", {
+Text = "Bounce Speed",
+Min = 0,
+Max = 200,
+Default = 30,
+Rounding = 0,
+Callback = function(value) State.Opt.BounceDefault = value end,
+})
+toolGroup2:AddSlider("BounceEmote", {
+Text = "Emote Bounce Speed",
+Min = 0,
+Max = 200,
+Default = 60,
+Rounding = 0,
+Callback = function(value) State.Opt.BounceEmote = value end,
+})
+toolGroup2:AddButton({
+Text = "Speedometer Reading",
+Func = function()
+local meter = Parity.Speedometer()
+Alert(meter and ("Speedometer: " .. tostring(meter.Text)) or "Speedometer not found")
+end,
+})
+toolGroup2:AddButton({
+Text = "Revert Headless / Korblox",
+Func = function()
+Alert(Parity.RevertCosmetics() and "Visuals reverted" or "No character")
+end,
+})
+toolGroup2:AddButton({
+Text = "List Loadouts",
+Func = function()
+local names = Parity.Loadouts()
+Alert(#names > 0 and table.concat(names, ", ") or "No loadout folder")
+end,
+})
+local leftoverGroup = extraTab:AddLeftGroupbox("Physics & Admin", "zap")
+leftoverGroup:AddToggle("InfSlide", {
+Text = "Infinite Slide",
+Default = false,
+Callback = function(on) State.Opt.InfSlide = on end,
+})
+leftoverGroup:AddSlider("SlideAcceleration", {
+Text = "Slide Acceleration",
+Min = 0,
+Max = 200,
+Default = 40,
+Rounding = 0,
+Callback = function(value) State.Opt.SlideAcceleration = value end,
+})
+leftoverGroup:AddDropdown("BhopMode", {
+Text = "Bhop Mode",
+Values = { "Acceleration", "Ground Acceleration", "No Acceleration" },
+Default = 1,
+Callback = function(value)
+State.Opt.BhopMode = value
+Parity.SetBhop(State.Opt.Bhop, State.Opt.BhopHold)
+end,
+})
+leftoverGroup:AddToggle("BhopFlag", {
+Text = "Bhop Flag",
+Default = false,
+Callback = function(on) Parity.SetBhop(on, State.Opt.BhopHold) end,
+})
+leftoverGroup:AddToggle("BhopHold", {
+Text = "Bhop On Hold",
+Default = false,
+Callback = function(on) Parity.SetBhop(State.Opt.Bhop, on) end,
+})
+leftoverGroup:AddToggle("EmoteDashAggressive", {
+Text = "Aggressive Emote Dash",
+Default = false,
+Callback = function(on)
+State.Opt.EmoteDashAggressive = on
+local ok = on and Parity.StartAggressiveEmote() or not Parity.StopAggressiveEmote()
+Alert(on and (ok and "Emote dash hooked" or "Movement module not found") or "Emote dash unhooked")
+end,
+})
+leftoverGroup:AddSlider("EmoteDashSpeed", {
+Text = "Dash Speed",
+Min = 1,
+Max = 3000,
+Default = 1000,
+Rounding = 0,
+Callback = function(value) State.Opt.EmoteDashSpeed = value end,
+})
+leftoverGroup:AddToggle("EmoteDashBlatant", {
+Text = "Blatant Multiplier",
+Default = false,
+Callback = function(on) State.Opt.EmoteDashBlatant = on end,
+})
+leftoverGroup:AddButton({
+Text = "Clear Emote Map",
+Func = function()
+Parity.ClearEmoteMap()
+Alert("Emote mappings cleared")
+end,
+})
+local autoAdminGroup = extraTab:AddRightGroupbox("Auto Admin", "terminal")
+autoAdminGroup:AddToggle("AutoAdminOn", {
+Text = "Enabled",
+Default = false,
+Callback = function(on) State.Opt.AutoAdmin = on end,
+})
+autoAdminGroup:AddToggle("AutoMapOn", {
+Text = "Force Map",
+Default = false,
+Callback = function(on) State.Opt.AutoMap = on end,
+})
+autoAdminGroup:AddInput("AutoMapName", {
+Text = "Map Name",
+Placeholder = "map module name",
+Callback = function(text) State.Opt.AutoMapName = text end,
+})
+autoAdminGroup:AddToggle("AutoSpecialOn", {
+Text = "Force Special Round",
+Default = false,
+Callback = function(on) State.Opt.AutoSpecial = on end,
+})
+autoAdminGroup:AddInput("AutoSpecialName", {
+Text = "Round Name",
+Placeholder = "special round name",
+Callback = function(text) State.Opt.AutoSpecialName = text end,
+})
+autoAdminGroup:AddInput("AutoTimeInput", {
+Text = "Force Time",
+Numeric = true,
+Placeholder = "seconds",
+Callback = function(text) State.Opt.AutoTime = tonumber(text) end,
+})
 Connect(Players.PlayerRemoving, function(player)
 local character = player.Character
 local highlight = character and character:FindFirstChild("ReichtEsp")
