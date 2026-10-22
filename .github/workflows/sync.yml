@@ -16,6 +16,10 @@ on:
         description: "Rebuild even if the upstream commit is unchanged"
         type: boolean
         default: false
+      ref:
+        description: "Upstream ref to mirror (branch, tag or commit sha)"
+        type: string
+        default: main
 
 permissions:
   contents: write
@@ -50,6 +54,7 @@ jobs:
         env:
           UPSTREAM_DIR: ${{ runner.temp }}/upstream
           FORCE: ${{ inputs.force && '1' || '0' }}
+          UPSTREAM_REF: ${{ inputs.ref || 'main' }}
         run: |
           set -o pipefail
           mkdir -p "$UPSTREAM_DIR"
