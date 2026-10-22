@@ -2497,7 +2497,7 @@ Values = cosNames,
 Default = 1,
 Callback = function(value) State.Opt.CosTarget = value end,
 })
-swapGroup:AddButton({
+cosGroup:AddButton({
 Text = "Swap Cosmetics",
 Func = function()
 local ok, why = Parity.SwapCosmetics(State.Opt.CosCurrent, State.Opt.CosTarget)
