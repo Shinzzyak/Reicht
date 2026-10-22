@@ -49,6 +49,7 @@ jobs:
         id: build
         env:
           UPSTREAM_DIR: ${{ runner.temp }}/upstream
+          FORCE: ${{ inputs.force && '1' || '0' }}
         run: |
           set -o pipefail
           mkdir -p "$UPSTREAM_DIR"
@@ -67,7 +68,7 @@ jobs:
           git config user.name  "reicht-sync"
           git config user.email "reicht-sync@users.noreply.github.com"
           git add -A
-          if git diff --cached --quiet && [ "${{ inputs.force }}" != "true" ]; then
+          if git diff --cached --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "no upstream change"
             exit 0

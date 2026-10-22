@@ -23,6 +23,13 @@ head_sha=$(curl -sSf --max-time 30 \
   | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])')
 echo "upstream head: ${head_sha}"
 
+# Nothing to do when the upstream commit has not moved. FORCE=1 rebuilds anyway.
+STATE_FILE="$(dirname "$0")/../.upstream-sha"
+if [ "${FORCE:-0}" != "1" ] && [ -f "${STATE_FILE}" ] && [ "$(cat "${STATE_FILE}")" = "${head_sha}" ]; then
+  echo "already at ${head_sha}; nothing to do (FORCE=1 to rebuild)"
+  exit 0
+fi
+
 mkdir -p "${UPSTREAM_DIR}"
 
 fetch() {
@@ -68,5 +75,5 @@ fi
 export UPSTREAM_DIR
 python3 "$(dirname "$0")/build.py"
 
-echo "${head_sha}" > "$(dirname "$0")/../.upstream-sha"
+echo "${head_sha}" > "${STATE_FILE}"
 echo "sync complete: ${head_sha}"
