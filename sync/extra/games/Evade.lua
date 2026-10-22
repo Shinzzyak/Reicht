@@ -743,6 +743,274 @@ local function SetNoCooldown(data)
     end
 end
 
+--[[ Second source. The V2.9.2 payload ships a dozen DFunctions as empty stubs, but the readable
+     source tree of the same hub family (Phantomwrym rebrand) still carries their real bodies.
+     Everything below is ported from those bodies, not guessed:
+
+       DisableTouch(t)            v.CanTouch = false for every BasePart in a folder
+       RemoveDamagePart()         same over the whole Map
+       RemoveReduceRewards()      destroy Workspace.Game.Map.SafeZones
+       DisableCameraShake()       FOVAdjusters:SetAttribute("Fear", 1)
+                                  CameraSet:Invoke("CFrameOffset", "Shake", CFrame.new())
+       DisableVignette()          Shared.HUD.NextbotNoise.ImageTransparency = 1 (+Noise/Noise2)
+       GetEventNPC()              model named "Lupen" inside Workspace.Game.Players
+       TPEventNPC()               teleport onto it along Humanoid.MoveDirection
+       SetToMovableEmote(n, s)    require(Items.Emotes[n]).EmoteInfo.SpeedMult = s
+       ChangeAnimation(f, v)      swap Animation.AnimationId from PossibleOptions[v]
+       InstantRevive()            Events.Character.Interact("Revive", nil/false/true, tostring(plr)) x7
+       Whistle()                  Events.Character.Whistle:FireServer()
+       GetAdjustments()           getgc(true) scan for the game's own movement stat tables
+     ]]
+
+local function GameChild(...)
+    local node = Workspace:FindFirstChild("Game")
+    for _, name in ipairs({ ... }) do
+        if not node then return nil end
+        node = node:FindFirstChild(name)
+    end
+    return node
+end
+
+--[[ movement override: the hub does not write WalkSpeed. It scans the Lua GC for any table whose
+     Character field is our character, then rawset()s the game's own movement numbers in place.
+     Needs an executor that exposes getgc; without it the panel reports zero tables. ]]
+local Adjustments = {}
+
+local function CollectAdjustments()
+    table.clear(Adjustments)
+    local character = LocalPlayer.Character
+    if not character or not getgc then return 0 end
+    for _, value in pairs(getgc(true)) do
+        if type(value) == "table" then
+            local owner = rawget(value, "Character")
+            if typeof(owner) == "Instance" and owner == character then
+                local override = rawget(value, "overrideMovementStats")
+                local default = rawget(value, "defaultMovementStats")
+                if type(override) == "table" then table.insert(Adjustments, override) end
+                if type(default) == "table" then table.insert(Adjustments, default) end
+            end
+        end
+    end
+    return #Adjustments
+end
+
+local function SetAdjustment(key, value)
+    if #Adjustments == 0 then CollectAdjustments() end
+    local touched = 0
+    for _, stats in ipairs(Adjustments) do
+        if rawget(stats, key) ~= nil then
+            rawset(stats, key, value)
+            touched += 1
+        end
+    end
+    return touched
+end
+
+local function ResetAdjustments()
+    if #Adjustments == 0 then CollectAdjustments() end
+    local touched = 0
+    for _, stats in ipairs(Adjustments) do
+        for key, value in pairs({
+            Speed = 16,
+            Friction = 5,
+            AirStrafeAcceleration = 182,
+            AirAcceleration = 3,
+            BhopEnabled = false,
+            JumpHeight = 7.2,
+            JumpCap = 80,
+        }) do
+            if rawget(stats, key) ~= nil then
+                rawset(stats, key, value)
+                touched += 1
+            end
+        end
+    end
+    return touched
+end
+
+local function DisableTouch(folder)
+    if not folder then return 0 end
+    local touched = 0
+    for _, part in ipairs(folder:GetDescendants()) do
+        if part:IsA("BasePart") and part.CanTouch then
+            part.CanTouch = false
+            touched += 1
+        end
+    end
+    return touched
+end
+
+local function RemoveSafeZones()
+    local safe = GameChild("Map", "SafeZones")
+    if not safe then return 0 end
+    local removed = 0
+    for _, part in ipairs(safe:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part:Destroy()
+            removed += 1
+        end
+    end
+    return removed
+end
+
+local function DisableCameraShake()
+    local scripts = LocalPlayer:FindFirstChild("PlayerScripts")
+    local camera = scripts and scripts:FindFirstChild("Camera")
+    local adjusters = camera and camera:FindFirstChild("FOVAdjusters")
+    local set = camera and camera:FindFirstChild("CameraSet")
+    if not adjusters or not set then return false end
+    adjusters:SetAttribute("Fear", 1)
+    pcall(function() set:Invoke("CFrameOffset", "Shake", CFrame.new()) end)
+    return true
+end
+
+local function DisableVignette()
+    local shared = LocalPlayer:FindFirstChild("Shared")
+    local hud = shared and shared:FindFirstChild("HUD")
+    local noise = hud and hud:FindFirstChild("NextbotNoise")
+    if not noise then return false end
+    noise.ImageTransparency = 1
+    local inner = noise:FindFirstChild("Noise") or noise:FindFirstChild("Noise2")
+    if inner then inner.ImageTransparency = 1 end
+    return true
+end
+
+local function EventNPC()
+    local folder = GameChild("Players")
+    if not folder then return nil end
+    for _, model in ipairs(folder:GetChildren()) do
+        if model.Name == "Lupen" and model:FindFirstChild("HumanoidRootPart") then return model end
+    end
+    return nil
+end
+
+local function TeleportEventNPC()
+    local npc = EventNPC()
+    if not npc then return false end
+    local _, _, root = Character()
+    local npcRoot = npc:FindFirstChild("HumanoidRootPart")
+    local npcHumanoid = npc:FindFirstChildOfClass("Humanoid")
+    if not root or not npcRoot then return false end
+    local offset = npcHumanoid and npcHumanoid.MoveDirection or Vector3.zero
+    root.CFrame = CFrame.new(npcRoot.Position + offset)
+    return true
+end
+
+local function SetMovableEmote(name, speed)
+    local items = ReplicatedStorage:FindFirstChild("Items")
+    local folder = items and items:FindFirstChild("Emotes")
+    local module = folder and folder:FindFirstChild(name or "")
+    if not module then return false end
+    local ok, data = pcall(require, module)
+    if not ok or type(data) ~= "table" or type(data.EmoteInfo) ~= "table" then return false end
+    data.EmoteInfo.SpeedMult = speed
+    return true
+end
+
+local function ChangeAnimation(folder, version)
+    if not folder or not version then return 0 end
+    local r15 = folder:FindFirstChild("PossibleOptions")
+    local r6 = folder:FindFirstChild("PossibleOptionsClassic")
+    local changed = 0
+    local function swap(optionSet, targetName, backupName)
+        local option = optionSet and optionSet:FindFirstChild(version)
+        local animation = option and option:FindFirstChildWhichIsA("Animation")
+        local target = folder:FindFirstChild(targetName)
+        if not animation or not target then return end
+        if not folder:FindFirstChild(backupName) then
+            local backup = Instance.new("StringValue")
+            backup.Name = backupName
+            backup.Value = target.AnimationId
+            backup.Parent = folder
+        end
+        target.AnimationId = animation.AnimationId
+        changed += 1
+    end
+    swap(r15, "Animation", "OriginalAnimId")
+    swap(r6, "AnimationClassic", "OriginalAnimIdClassic")
+    return changed
+end
+
+local function EmoteFolders()
+    local items = ReplicatedStorage:FindFirstChild("Items")
+    local folder = items and items:FindFirstChild("Emotes")
+    local out = {}
+    if not folder then return out end
+    for _, module in ipairs(folder:GetChildren()) do
+        if module:FindFirstChild("PossibleOptions") or module:FindFirstChild("PossibleOptionsClassic") then
+            table.insert(out, module)
+        end
+    end
+    return out
+end
+
+--[[ instant revive: this build family exposes a second revive path under Events.Character.Interact
+     that takes the player as a string and wants three shapes of the same call, spammed. ]]
+local function InstantRevive()
+    local remote = ReplicatedStorage:FindFirstChild("Events")
+        and ReplicatedStorage.Events:FindFirstChild("Character")
+        and ReplicatedStorage.Events.Character:FindFirstChild("Interact")
+    local target = NearestDowned()
+    if not remote or not target then return false end
+    local name = tostring(target)
+    return pcall(function()
+        for _ = 1, 7 do
+            remote:FireServer("Revive", nil, name)
+            remote:FireServer("Revive", false, name)
+            remote:FireServer("Revive", true, name)
+        end
+    end)
+end
+
+local function WhistleRemote()
+    local remote = ReplicatedStorage:FindFirstChild("Events")
+        and ReplicatedStorage.Events:FindFirstChild("Character")
+        and ReplicatedStorage.Events.Character:FindFirstChild("Whistle")
+    if not remote then return false end
+    return pcall(function() remote:FireServer() end)
+end
+
+local function ApplyKorblox(side, meshId)
+    local character = Character()
+    if not character then return end
+    local legName = (side == "Right")
+        and (character:FindFirstChild("Right Leg") and "Right Leg" or "RightUpperLeg")
+        or (character:FindFirstChild("Left Leg") and "Left Leg" or "LeftUpperLeg")
+    local leg = character:FindFirstChild(legName)
+    if not leg then return end
+    for _, child in ipairs(leg:GetChildren()) do
+        if child:IsA("SpecialMesh") then child:Destroy() end
+    end
+    leg.Color = Color3.fromRGB(50, 50, 50)
+    local mesh = Instance.new("SpecialMesh")
+    mesh.Name = "ReichtKorblox"
+    mesh.MeshType = Enum.MeshType.FileMesh
+    mesh.MeshId = meshId
+    mesh.Parent = leg
+end
+
+local function ApplyHeadless()
+    local character = Character()
+    local head = character and character:FindFirstChild("Head")
+    if not head then return end
+    head.Transparency = 1
+    local face = head:FindFirstChild("face")
+    if face then face:Destroy() end
+    if head:FindFirstChild("ReichtHeadless") then return end
+    local mesh = Instance.new("SpecialMesh")
+    mesh.Name = "ReichtHeadless"
+    mesh.MeshType = Enum.MeshType.FileMesh
+    mesh.MeshId = "rbxassetid://1095708"
+    mesh.Scale = Vector3.new(0.001, 0.001, 0.001)
+    mesh.Parent = head
+end
+
+local function UpdateCosmetics()
+    if State.Opt.KorbloxR then ApplyKorblox("Right", "rbxassetid://101851696") end
+    if State.Opt.KorbloxL then ApplyKorblox("Left", "rbxassetid://101851582") end
+    if State.Opt.Headless then ApplyHeadless() end
+end
+
 local body = game:HttpGet(UI_URL)
 if type(body) ~= "string" or not body:sub(-64):find("return Library%s*$") then
     Alert("Could not download the menu. Check the connection and try again.")
@@ -1389,6 +1657,196 @@ clientGroup:AddToggle("AntiAfk", {
 clientGroup:AddButton({
     Text = "Unload Reicht",
     Func = function() Unload() end,
+})
+
+local statGroup = miscTab:AddLeftGroupbox("Stat Override", "gauge")
+
+statGroup:AddButton({
+    Text = "Scan Movement Tables",
+    Func = function()
+        local found = CollectAdjustments()
+        Alert(found > 0 and string.format("Found %d movement tables", found)
+            or "No movement tables in the GC (getgc unavailable)")
+    end,
+})
+
+statGroup:AddSlider("OverrideSpeed", {
+    Text = "Speed",
+    Min = 0,
+    Max = 300,
+    Default = 16,
+    Rounding = 0,
+    Callback = function(value) SetAdjustment("Speed", value) end,
+})
+
+statGroup:AddSlider("OverrideFriction", {
+    Text = "Friction",
+    Min = 0,
+    Max = 100,
+    Default = 5,
+    Rounding = 0,
+    Callback = function(value) SetAdjustment("Friction", value) end,
+})
+
+statGroup:AddSlider("OverrideStrafe", {
+    Text = "Air Strafe Acceleration",
+    Min = 0,
+    Max = 500,
+    Default = 182,
+    Rounding = 0,
+    Callback = function(value) SetAdjustment("AirStrafeAcceleration", value) end,
+})
+
+statGroup:AddToggle("OverrideBhop", {
+    Text = "Bhop Enabled",
+    Default = false,
+    Callback = function(on) SetAdjustment("BhopEnabled", on) end,
+})
+
+statGroup:AddButton({
+    Text = "Reset Stats",
+    Func = function()
+        local touched = ResetAdjustments()
+        Alert(string.format("Reset %d movement values", touched))
+    end,
+})
+
+local mapGroup = miscTab:AddRightGroupbox("Map & FX", "shield")
+
+mapGroup:AddButton({
+    Text = "No Touch Triggers",
+    Func = function()
+        local touched = DisableTouch(GameChild("Map"))
+        Alert(string.format("Disabled touch on %d parts", touched))
+    end,
+})
+
+mapGroup:AddButton({
+    Text = "Remove Safe Zones",
+    Func = function()
+        local removed = RemoveSafeZones()
+        Alert(string.format("Removed %d safe zone parts", removed))
+    end,
+})
+
+mapGroup:AddButton({
+    Text = "Kill Camera Shake",
+    Func = function()
+        Alert(DisableCameraShake() and "Camera shake killed" or "Camera shake hook not found")
+    end,
+})
+
+mapGroup:AddButton({
+    Text = "Kill Vignette",
+    Func = function()
+        Alert(DisableVignette() and "Nextbot vignette killed" or "Vignette not found")
+    end,
+})
+
+mapGroup:AddButton({
+    Text = "Teleport Event NPC",
+    Func = function()
+        Alert(TeleportEventNPC() and "Teleported to event NPC" or "Event NPC not in the map")
+    end,
+})
+
+local emoteGroup = miscTab:AddLeftGroupbox("Emotes & Cosmetics", "shirt")
+
+local movableInput = emoteGroup:AddInput("MovableEmote", {
+    Text = "Emote Name",
+    Default = "",
+    Placeholder = "Emote folder name",
+})
+
+emoteGroup:AddSlider("MovableSpeed", {
+    Text = "Emote SpeedMult",
+    Min = 0,
+    Max = 10,
+    Default = 1,
+    Rounding = 1,
+    Callback = function(value) State.Opt.MovableSpeed = value end,
+})
+
+emoteGroup:AddButton({
+    Text = "Make Emote Movable",
+    Func = function()
+        local name = movableInput.Value
+        local ok = SetMovableEmote(name, State.Opt.MovableSpeed or 1)
+        Alert(ok and string.format("SpeedMult set on %s", tostring(name)) or "Emote module not found")
+    end,
+})
+
+local function AnimationVersions()
+    local out = {}
+    local folder = EmoteFolders()[1]
+    local options = folder and (folder:FindFirstChild("PossibleOptions") or folder:FindFirstChild("PossibleOptionsClassic"))
+    if options then
+        for _, child in ipairs(options:GetChildren()) do table.insert(out, child.Name) end
+    end
+    if #out == 0 then out = { "None" } end
+    return out
+end
+
+State.Opt.AnimationVersion = AnimationVersions()[1]
+
+emoteGroup:AddDropdown("AnimationVersion", {
+    Text = "Animation Version",
+    Values = AnimationVersions(),
+    Default = 1,
+    Callback = function(value) State.Opt.AnimationVersion = value end,
+})
+
+emoteGroup:AddButton({
+    Text = "Swap Emote Animations",
+    Func = function()
+        local version = State.Opt.AnimationVersion
+        local changed = 0
+        for _, folder in ipairs(EmoteFolders()) do
+            changed += ChangeAnimation(folder, version)
+        end
+        Alert(string.format("Swapped %d animation ids to %s", changed, tostring(version)))
+    end,
+})
+
+emoteGroup:AddToggle("KorbloxR", {
+    Text = "Korblox Right Leg",
+    Default = false,
+    Callback = function(on)
+        State.Opt.KorbloxR = on
+        UpdateCosmetics()
+    end,
+})
+
+emoteGroup:AddToggle("KorbloxL", {
+    Text = "Korblox Left Leg",
+    Default = false,
+    Callback = function(on)
+        State.Opt.KorbloxL = on
+        UpdateCosmetics()
+    end,
+})
+
+emoteGroup:AddToggle("Headless", {
+    Text = "Headless",
+    Default = false,
+    Callback = function(on)
+        State.Opt.Headless = on
+        UpdateCosmetics()
+    end,
+})
+
+emoteGroup:AddButton({
+    Text = "Whistle (remote)",
+    Func = function()
+        Alert(WhistleRemote() and "Whistled" or "Whistle remote missing")
+    end,
+})
+
+emoteGroup:AddButton({
+    Text = "Instant Revive",
+    Func = function()
+        Alert(InstantRevive() and "Revive spam sent" or "No downed player nearby")
+    end,
 })
 
 State.Opt.AntiAfk = true
