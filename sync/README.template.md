@@ -53,3 +53,35 @@ luau-compile --binary games/"<Display Name>.lua"
   before pushing.
 - The UI library is fetched per game script, not by the loader. A 300 KB+ download on
   mobile data needs a timeout budget in the tens of seconds, not single digits.
+
+## Mirror behaviour
+
+This repo tracks an upstream hub and re-applies a patch set on top of it. The sync runs
+from `.github/workflows/sync.yml` every six hours, and can be triggered by hand:
+
+```bash
+gh workflow run sync-upstream --ref main                      # mirror current upstream
+gh workflow run sync-upstream -f ref=<sha> -f force=true      # pin to an older commit
+```
+
+What the sync guarantees:
+
+- **A failed sync changes nothing.** The build stages into `.stage/`, compiles every file
+  with `luau-compile`, and only swaps into the repo on a clean pass. A patch that no
+  longer applies, a compile error, or a half-downloaded upstream all exit non-zero with
+  the served files exactly as they were.
+- **Upstream deleting something does not delete it here.** If a game script disappears
+  upstream, the copy already committed stays, and its `GAMES` entry is carried forward
+  so the loader keeps routing to it. Upstream vanishing entirely is just a failed sync.
+- **A failed sync opens an issue** labelled `sync` with the tail of the log, so a silent
+  breakage becomes visible instead of the mirror quietly going stale.
+
+Patches live in `sync/build.py`, each as a literal string or regex replace that raises if
+it cannot be applied. Adding a patch means adding a rule there, not editing the generated
+files by hand — the next sync would overwrite them.
+
+To rebuild locally without GitHub:
+
+```bash
+UPSTREAM_DIR=/tmp/upstream LUAU_COMPILE=/path/to/luau-compile bash sync/pull-upstream.sh
+```
