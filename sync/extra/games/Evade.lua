@@ -2964,6 +2964,20 @@ botGroup:AddToggle("InvisWalk", {
 })
 
 botGroup:AddButton({
+    Text = "Scan Player States",
+    Func = function()
+        local downed, ragdolled = 0, 0
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                if Parity.Status(player) == "DOWNED" then downed += 1 end
+                if Parity.Ragdolled(player) then ragdolled += 1 end
+            end
+        end
+        Alert(string.format("%d downed, %d ragdolled", downed, ragdolled))
+    end,
+})
+
+botGroup:AddButton({
     Text = "Teleport To Downed",
     Func = function()
         Alert(Parity.TeleportToDowned() and "Moved to downed body" or "Nobody is downed")
