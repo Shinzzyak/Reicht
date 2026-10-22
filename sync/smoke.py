@@ -107,9 +107,13 @@ OBJ.__index = function(self, k)
     end
     return nil
 end
-OBJ.__newindex = function(self, k, v) rawget(self, "_p")[k] = v end
+-- Side-effect counter. A callback that runs clean but touches nothing is a dead
+-- feature, and pcall hides that; the audit needs a number to point at.
+EFFECTS = 0
+OBJ.__newindex = function(self, k, v) EFFECTS += 1 rawget(self, "_p")[k] = v end
 
 newInstance = function(class, name)
+    EFFECTS += 1
     local self = setmetatable({ _p = { ClassName = class, Name = name or class, Parent = nil, Children = {} } }, OBJ)
     return self
 end
@@ -710,11 +714,19 @@ if LIB and type(LIB.Options) == "table" then
             elseif kind == "string" then
                 value = (type(opt.Default) == "string" and opt.Default ~= "") and opt.Default or "1"
             end
+            local before = #errors
+            local effectsBefore = EFFECTS
             if value ~= nil then
-                local before = #errors
                 try("option " .. tostring(id), function() opt:SetValue(value) end)
                 if #errors == before then driven += 1 end
             end
+            local effectCount = EFFECTS - effectsBefore
+            -- One line per option so the audit can tell "built but inert" (no
+            -- callback, nothing wired) from "built and live".
+            _PRINT(string.format("OPT|%s|%s|%s|%s|%s|%d",
+                tostring(id), tostring(opt.Type or "?"), type(opt.Value),
+                tostring(type(opt.Callback) == "function" or #(opt.Changed or {}) > 0),
+                tostring(value ~= nil and #errors == before), effectCount))
         end
     end
     _PRINT("library: real ui.lua buttons=" .. type(LIB.Buttons) .. " tabs=" .. type(LIB.Tabs))
@@ -728,6 +740,11 @@ if LIB and type(LIB.Options) == "table" then
             end
         end
         _PRINT("buttons pressed: " .. tostring(pressed) .. " / " .. tostring(#LIB.Buttons))
+        for _, button in ipairs(LIB.Buttons) do
+            local info = button.Info or {}
+            _PRINT(string.format("BTN|%s|%s", tostring(info.Text or info.Title or "?"),
+                tostring(type(info.Func or info.Callback) == "function")))
+        end
     end
     if type(LIB.Tabs) == "table" then _PRINT("tabs: " .. tostring(#LIB.Tabs)) end
 end

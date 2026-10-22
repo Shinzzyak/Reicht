@@ -3691,7 +3691,10 @@ Toggle:OnChanged(function(State)
         end
     end
 end)
-Tabs.Misc:AddInput("PlayerJumpPower", {
+-- The payload reuses "PlayerJumpPower" for both the toggle and this input, so the
+-- second registration steals the first one's Library.Options slot and config
+-- save/load ends up pointed at the wrong widget. Suffixed to keep both.
+Tabs.Misc:AddInput("PlayerJumpPowerValue", {
     Title = "Player Jump Power",
     Default = "20",
     Placeholder = "Jump Number",

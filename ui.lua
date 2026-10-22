@@ -3235,6 +3235,9 @@ option.Callback = spec.Callback or spec.Func
 option.Changed = {}
 option.NoSave = spec.NoSave == true or idx == nil
 if idx ~= nil then
+if Library.Options[idx] then
+warn("[Reicht] duplicate widget id: " .. tostring(idx))
+end
 Library.Options[idx] = option
 end
 if spec.Tooltip and option.Row then

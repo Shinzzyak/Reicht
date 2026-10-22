@@ -134,6 +134,27 @@ def add_button_registry(text):
     return text
 
 
+def warn_duplicate_ids(text):
+    """Warn when two widgets claim the same id.
+
+    Library.Options is keyed by id, so a second widget with an existing id
+    silently steals the first one's slot: the toggle keeps working through its
+    closure while config save/load quietly targets the wrong widget. A payload
+    that reuses an id for a toggle and its paired input hits this exactly.
+    """
+    text = resub(
+        text,
+        r"(\n(\s*)if idx ~= nil then\n\s*Library\.Options\[idx\] = option)",
+        lambda m: (m.group(1).replace("Library.Options[idx] = option",
+                                      "if Library.Options[idx] then\n"
+                                      + m.group(2) + "    warn(\"[Reicht] duplicate widget id: \" .. tostring(idx))\n"
+                                      + m.group(2) + "end\n"
+                                      + m.group(2) + "Library.Options[idx] = option")),
+        "ui.lua duplicate id warning",
+    )
+    return text
+
+
 def strip_attribution(text):
     # Order matters: the repo-owner string contains the namespace as a prefix.
     text = text.replace("xDTaraZz", "Shinzzyak")
@@ -481,8 +502,11 @@ def main():
 
     open(os.path.join(stage, "loader.lua"), "w", encoding="utf-8").write(
         build_loader(open(upstream_loader, encoding="utf-8").read(), keep, extra_table))
-    open(os.path.join(stage, "ui.lua"), "w", encoding="utf-8").write(
-        add_button_registry(add_press_mode(strip_attribution(open(ui_path, encoding="utf-8").read()))))
+    ui_text = strip_attribution(open(ui_path, encoding="utf-8").read())
+    ui_text = add_press_mode(ui_text)
+    ui_text = warn_duplicate_ids(ui_text)
+    ui_text = add_button_registry(ui_text)
+    open(os.path.join(stage, "ui.lua"), "w", encoding="utf-8").write(ui_text)
 
     built = []
     for name in upstream_games:

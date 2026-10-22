@@ -3656,7 +3656,7 @@ humanoid.JumpPower = DConfiguration.Misc.Humanoids.JP
 end
 end
 end)
-Tabs.Misc:AddInput("PlayerJumpPower", {
+Tabs.Misc:AddInput("PlayerJumpPowerValue", {
 Title = "Player Jump Power",
 Default = "20",
 Placeholder = "Jump Number",
