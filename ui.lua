@@ -11,6 +11,7 @@ local LocalPlayer = Players.LocalPlayer
 local Library = {
 Version = "1.0",
 Options = {},
+Buttons = {},
 Toggles = {},
 Unloaded = false,
 Window = nil,
@@ -4007,6 +4008,7 @@ info = { Text = info, Func = callback }
 end
 local style = Button.Styles[info.Style or "Default"] or Button.Styles.Default
 local button = setmetatable({ Container = container, Info = info, Func = info.Func or info.Callback or callback, Style = style, Armed = false }, Button)
+table.insert(Library.Buttons, button)
 local holder, face, _, depth = Draw.Block(nil, style.Face, style.Shade, 10, 4)
 face.ClipsDescendants = true
 button.Holder, button.Face, button.Depth = holder, face, depth

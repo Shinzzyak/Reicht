@@ -27,9 +27,22 @@ SPECS = {}
 RECORD.log = function(...) end
 
 local function mkEnum()
+    -- Enum items need FromEnum/GetEnums the way Roblox exposes them: ui.lua maps
+    -- saved key names back through Enum.KeyCode:FromEnum(...).
+    local function mkItem(name, value)
+        local item = { Name = name, Value = value, EnumType = nil }
+        function item.FromValue(v) return mkItem(name, v) end
+        return setmetatable(item, { __tostring = function() return name end })
+    end
     return setmetatable({}, { __index = function(t, k)
-        local sub = setmetatable({}, { __index = function(_, name)
-            local item = setmetatable({ Name = name, Value = 0 }, { __tostring = function() return name end })
+        local items = {}
+        local sub = {}
+        function sub.GetEnumItems() return items end
+        function sub.FromValue(v) return mkItem(k, v) end
+        function sub.FromName(n) return mkItem(n, 0) end
+        setmetatable(sub, { __index = function(_, name)
+            local item = mkItem(name, #items + 1)
+            table.insert(items, item)
             return item
         end })
         rawset(t, k, sub)
@@ -37,18 +50,66 @@ local function mkEnum()
     end })
 end
 Enum = mkEnum()
+Font = {
+    fromEnum = function(value) return { Enum = value, Name = tostring(value) } end,
+    fromName = function(name) return { Name = name } end,
+    new = function(...) return { Args = { ... } } end,
+}
 
+-- Properties scripts read before writing them (gradient.Rotation, ...).
+local DEFAULTS = { Rotation = 0, Transparency = 0,
+ AbsoluteSize = { X = 220, Y = 56 },
+ AbsolutePosition = { X = 0, Y = 0 },
+ AbsoluteContentSize = { X = 220, Y = 56 }, TextTransparency = 0, ImageTransparency = 0,
+                   BackgroundTransparency = 0, TextSize = 14, Thickness = 1, Volume = 1,
+                   ZIndex = 1, LayoutOrder = 0, Visible = true, Enabled = true,
+                   TextBounds = { X = 42, Y = 16 } }
+
+local newInstance
 local OBJ = {}
+-- Roblox GuiObjects expose their events as properties; without this list the
+-- first :Connect() on a mock button kills the chunk.
+local SIGNAL_NAMES = {}
+for _, name in ipairs({
+    "InputBegan", "InputChanged", "InputEnded", "MouseButton1Click", "MouseButton2Click",
+    "Activated", "Focused", "FocusLost", "Changed", "Ended", "Touched", "TouchEnded",
+    "AncestryChanged", "ChildAdded", "ChildRemoved", "DescendantAdded", "DescendantRemoving", "Destroying", "Touched", "TouchEnded", "MouseEnter", "MouseLeave", "SelectionChanged", "Deactivated",
+    "CharacterAdded", "CharacterRemoving", "Died", "StateChanged", "Running", "Heartbeat",
+    "RenderStepped", "Stepped", "PlayerAdded", "PlayerRemoving", "OnClientEvent",
+    "OnServerEvent", "Completed", "PromptButtonHoldBegan", "Triggered", "TriggerEnded",
+    "MouseEnter", "MouseLeave", "MouseMoved", "Deactivated", "DragBegin", "DragEnd",
+    "MouseButton1Down", "MouseButton1Up", "MouseButton2Down", "MouseButton2Up",
+    "DragStopped", "TouchTap", "TouchLongPress", "TouchPan", "TouchPinch",
+    "TouchRotate", "TouchSwipe", "MouseWheelForward", "MouseWheelBackward",
+    "DescendantRemoving", "ChildAdded", "Changed", "GetPropertyChangedSignal",
+}) do SIGNAL_NAMES[name] = true end
+
 OBJ.__index = function(self, k)
     local m = rawget(OBJ, "m_" .. k)
     if m then return m end
     local v = rawget(self, "_p")[k]
     if v ~= nil then return v end
+    if SIGNAL_NAMES[k] then
+        local s = newSignal()
+        rawget(self, "_p")[k] = s
+        return s
+    end
+    -- Dot-path module lookups (ReplicatedStorage.Objects.Game...) need a child
+    -- that exists; only containers marked Permissive do this.
+    local def = DEFAULTS[k]
+    if def ~= nil then return def end
+    if rawget(self, "_p").Permissive then
+        local o = newInstance("Folder", k)
+        o._p.Parent = self
+        o._p.Permissive = true
+        table.insert(rawget(self, "_p").Children, o)
+        return o
+    end
     return nil
 end
 OBJ.__newindex = function(self, k, v) rawget(self, "_p")[k] = v end
 
-local function newInstance(class, name)
+newInstance = function(class, name)
     local self = setmetatable({ _p = { ClassName = class, Name = name or class, Parent = nil, Children = {} } }, OBJ)
     return self
 end
@@ -61,11 +122,33 @@ local function childOf(self, name)
 end
 
 OBJ.m_FindFirstChild = function(self, name) return childOf(self, name) end
-OBJ.m_WaitForChild = function(self, name) return childOf(self, name) end
+OBJ.m_WaitForChild = function(self, name)
+    local c = childOf(self, name)
+    if c then return c end
+    local o = newInstance("Folder", name)
+    o._p.Parent = self
+    table.insert(self._p.Children, o)
+    return o
+end
 OBJ.m_FindFirstChildOfClass = function(self, class)
     for _, c in ipairs(self._p.Children) do if c._p.ClassName == class then return c end end
 end
 OBJ.m_GetChildren = function(self) return self._p.Children end
+OBJ.m_IsFocused = function() return false end
+OBJ.m_CaptureFocus = function() end
+OBJ.m_ReleaseFocus = function() end
+OBJ.m_ClearAllChildren = function(self) self._p.Children = {} end
+OBJ.m_IsDescendantOf = function() return true end
+OBJ.m_GetAttributeChangedSignal = function() return newSignal() end
+OBJ.m_TweenPosition = function() end
+OBJ.m_TweenSize = function() end
+OBJ.m_TweenSizeAndPosition = function() end
+OBJ.m_FindFirstChildWhichIsA = function(self, class)
+    for _, c in ipairs(self._p.Children) do
+        if c._p.ClassName == class then return c end
+    end
+    return nil
+end
 OBJ.m_GetDescendants = function(self) return self._p.Children end
 OBJ.m_IsA = function(self, class) return self._p.ClassName == class end
 OBJ.m_Destroy = function(self) self._p.Destroyed = true end
@@ -88,11 +171,36 @@ OBJ.m_Kick = function(self, msg) RECORD.kicked = msg end
 function newSignal()
     local s = { handlers = {} }
     function s:Connect(fn) table.insert(self.handlers, fn); return { Disconnect = function() end } end
-    function s:Wait() return nil end
+    function s:Wait()
+    -- Roblox's :Wait() suspends the calling thread; returning immediately turns
+    -- `while flag do Signal:Wait() end` into a busy loop that never ends.
+    coroutine.yield()
+    return 1 / 60
+end
     function s:Once(fn) table.insert(self.handlers, fn) end
     s.Fire = function(self, ...) for _, fn in ipairs(self.handlers) do pcall(fn, ...) end end
     return s
 end
+
+-- Game modules (CharacterService, MovementModule, CameraService, ...) are
+-- required by path inside the script; hand back a permissive stub so the menu
+-- builds and callbacks stay callable.
+-- A module stub has to behave like both a table and a function: the payload
+-- reads fields (svc.Registry[key]) and calls methods (svc:Get()) off the same
+-- value.
+local function anyModule()
+    local t = {}
+    local mt = {}
+    mt.__index = function(_, k)
+        local v = anyModule()
+        rawset(t, k, v)
+        return v
+    end
+    mt.__call = function() return anyModule() end
+    mt.__tostring = function() return "module" end
+    return setmetatable(t, mt)
+end
+require = function() return anyModule() end
 
 Instance = { new = function(class, parent)
     local o = newInstance(class)
@@ -130,24 +238,92 @@ lp.UserId = 1
 lp.GetAttribute = OBJ.m_GetAttribute
 lp.SetAttribute = OBJ.m_SetAttribute
 lp.Idled = newSignal()
+lp.PlayerGui = newInstance("PlayerGui", "PlayerGui")
+lp.PlayerScripts = newInstance("PlayerScripts", "PlayerScripts")
 players.LocalPlayer = lp
 players.GetPlayers = function() return { lp } end
 players.GetPlayerFromCharacter = function() return lp end
 players.GetUserIdFromNameAsync = function() return 1 end
 
 local rs = get("ReplicatedStorage")
+rs.Permissive = true
 local ws = get("Workspace")
 ws.Gravity = 196.2
 ws.CurrentCamera = newInstance("Camera", "Camera")
 ws.CurrentCamera.FieldOfView = 70
 
 game = newInstance("DataModel", "Game")
+game.Workspace = ws
+game.Players = players
 game.GameId = GAME_ID
 game.PlaceId = GAME_ID
 game.IsLoaded = function() return true end
-game.GetService = function(_, name) return get(name) end
+-- ui.lua animates with TweenService:Create(...):Play(); the mock has to hand back
+-- a real tween object or the whole library aborts while building the window.
+local TWEEN_SERVICE = {}
+function TWEEN_SERVICE:Create()
+    local tween = {}
+    tween.Completed = newSignal()
+    function tween.Play() return tween end
+    function tween.Pause() return tween end
+    function tween.Cancel() return tween end
+    return tween
+end
+-- Configs round-trip through HttpService:JSONEncode -> writefile -> readfile ->
+-- JSONDecode. Encoding for real and remembering the table per string keeps that
+-- loop honest inside one process.
+local JSON_MEMORY = {}
+local function jsonEncode(value)
+    local kind = type(value)
+    if kind == "nil" then return "null" end
+    if kind == "boolean" or kind == "number" then return tostring(value) end
+    if kind == "string" then
+        return '"' .. value:gsub('[%z\1-\31\\"]', function(c)
+            return string.format("\\u%04x", c:byte())
+        end) .. '"'
+    end
+    if kind == "table" then
+        local parts = {}
+        if #value > 0 then
+            for _, item in ipairs(value) do table.insert(parts, jsonEncode(item)) end
+            return "[" .. table.concat(parts, ",") .. "]"
+        end
+        for key, item in pairs(value) do
+            table.insert(parts, jsonEncode(tostring(key)) .. ":" .. jsonEncode(item))
+        end
+        return "{" .. table.concat(parts, ",") .. "}"
+    end
+    return "null"
+end
+local HTTPSERVICE = {}
+function HTTPSERVICE:JSONEncode(value)
+    local text = jsonEncode(value)
+    JSON_MEMORY[text] = value
+    return text
+end
+function HTTPSERVICE:JSONDecode(text)
+    if JSON_MEMORY[text] ~= nil then return JSON_MEMORY[text] end
+    return {}
+end
+local TELEPORT_SERVICE = {}
+function TELEPORT_SERVICE:TeleportToPlaceInstance() end
+function TELEPORT_SERVICE:Teleport() end
+function TELEPORT_SERVICE:TeleportAsync() end
+local _getService = function(_, name) return get(name) end
+game.GetService = function(self, name)
+    if name == "TweenService" then return TWEEN_SERVICE end
+    if name == "HttpService" then return HTTPSERVICE end
+    if name == "TeleportService" then return TELEPORT_SERVICE end
+    return _getService(self, name)
+end
+-- Real menu source, inlined by the runner: exercising the shipped ui.lua beats a
+-- stand-in, because that is the code the user actually gets.
+UI_SOURCE = __UI_SOURCE__
+FBM_SOURCE = __FBM_SOURCE__
 game.HttpGet = function(_, url)
-    -- The script validates the tail and loadstrings the body, expecting Library back.
+    url = tostring(url)
+    if url:find("ui%.lua") and type(UI_SOURCE) == "string" and #UI_SOURCE > 1024 then return UI_SOURCE end
+    if url:find("FloatingButton") and type(FBM_SOURCE) == "string" and #FBM_SOURCE > 1024 then return FBM_SOURCE end
     return "return Library"
 end
 
@@ -169,24 +345,112 @@ task = {
 }
 PENDING_ERRORS = {}
 wait = function() coroutine.yield() return 0 end
-tick = os.clock
+-- Busy-wait loops (`while tick() - start < delay do end`) would hang the run on
+-- real time; a fast clock makes them terminate in a bounded number of steps.
+local FAKE_CLOCK = 0
+local function fakeClock()
+    FAKE_CLOCK = FAKE_CLOCK + 0.02
+    return FAKE_CLOCK
+end
+tick = fakeClock
+time = fakeClock
 typeof = type
-warn = function() end
 _PRINT = print
+warn = function(...)
+    local parts = {}
+    for i = 1, select("#", ...) do parts[i] = tostring((select(i, ...))) end
+    _PRINT("WARN " .. table.concat(parts, " "))
+end
 
-Color3 = { fromRGB = function(r, g, b) return { R = r, G = g, B = b } end, new = function(r,g,b) return {R=r,G=g,B=b} end, fromHSV = function() return {} end }
+local C3 = {}
+C3.__index = C3
+local function c3(r, g, b) return setmetatable({ R = r or 0, G = g or 0, B = b or 0 }, C3) end
+C3.Lerp = function(a, b, t)
+    return c3(a.R + (b.R - a.R) * t, a.G + (b.G - a.G) * t, a.B + (b.B - a.B) * t)
+end
+Color3 = { fromRGB = function(r, g, b) return c3((r or 0) / 255, (g or 0) / 255, (b or 0) / 255) end,
+           new = function(r, g, b) return c3(r, g, b) end, fromHSV = function() return c3() end }
 ColorSequence = { new = function() return {} end }
+ColorSequenceKeypoint = { new = function(t, c) return { Time = t, Value = c } end }
 NumberSequence = { new = function() return {} end }
-UDim2 = { new = function(...) return { ... } end, fromOffset = function(x, y) return { x, y } end, fromScale = function(x, y) return { x, y } end }
-UDim = { new = function(...) return { ... } end, fromOffset = function(x) return x end, fromScale = function(x) return x end }
-Vector2 = { new = function(x, y) return { X = x or 0, Y = y or 0 } end, zero = { X = 0, Y = 0 } }
+NumberSequenceKeypoint = { new = function(t, v) return { Time = t, Value = v } end }
+-- UDim2/UDim carry real fields and arithmetic: the payload animates sizes with
+-- `+=` on .X.Scale, which a plain table cannot survive.
+local UDIM2 = {}
+UDIM2.__index = UDIM2
+local function udim2(xs, xo, ys, yo)
+    return setmetatable({ X = { Scale = xs or 0, Offset = xo or 0 }, Y = { Scale = ys or 0, Offset = yo or 0 } }, UDIM2)
+end
+UDIM2.__add = function(a, b)
+    return udim2(a.X.Scale + b.X.Scale, a.X.Offset + b.X.Offset, a.Y.Scale + b.Y.Scale, a.Y.Offset + b.Y.Offset)
+end
+UDIM2.__sub = function(a, b)
+    return udim2(a.X.Scale - b.X.Scale, a.X.Offset - b.X.Offset, a.Y.Scale - b.Y.Scale, a.Y.Offset - b.Y.Offset)
+end
+UDIM2.__mul = function(a, b)
+    if type(b) == "number" then
+        return udim2(a.X.Scale * b, a.X.Offset * b, a.Y.Scale * b, a.Y.Offset * b)
+    end
+    return udim2(a.X.Scale * b.X.Scale, a.X.Offset * b.X.Offset, a.Y.Scale * b.Y.Scale, a.Y.Offset * b.Y.Offset)
+end
+UDIM2.__div = function(a, b) return udim2(a.X.Scale / b, a.X.Offset / b, a.Y.Scale / b, a.Y.Offset / b) end
+UDIM2.__tostring = function(a) return string.format("{%s, %s}, {%s, %s}", a.X.Scale, a.X.Offset, a.Y.Scale, a.Y.Offset) end
+UDim2 = {
+    new = function(a, b, c, d) return udim2(a, b, c, d) end,
+    fromOffset = function(x, y) return udim2(0, x, 0, y) end,
+    fromScale = function(x, y) return udim2(x, 0, y, 0) end,
+}
+local UDIM = {}
+UDIM.__index = UDIM
+local function udim(s, o) return setmetatable({ Scale = s or 0, Offset = o or 0 }, UDIM) end
+UDIM.__add = function(a, b) return udim(a.Scale + b.Scale, a.Offset + b.Offset) end
+UDIM.__sub = function(a, b) return udim(a.Scale - b.Scale, a.Offset - b.Offset) end
+UDIM.__mul = function(a, b) return udim(a.Scale * b, a.Offset * b) end
+UDim = {
+    new = function(s, o) return udim(s, o) end,
+    fromOffset = function(o) return udim(0, o) end,
+    fromScale = function(s) return udim(s, 0) end,
+}
+local V2 = {}
+V2.__index = V2
+local function v2(x, y) return setmetatable({ X = x or 0, Y = y or 0 }, V2) end
+V2.__add = function(a, b) return v2(a.X + b.X, a.Y + b.Y) end
+V2.__sub = function(a, b) return v2(a.X - b.X, a.Y - b.Y) end
+V2.__mul = function(a, b)
+    if type(b) == "number" then return v2(a.X * b, a.Y * b) end
+    return v2(a.X * b.X, a.Y * b.Y)
+end
+V2.__div = function(a, b) return v2(a.X / b, a.Y / b) end
+V2.Lerp = function(a, b, t) return v2(a.X + (b.X - a.X) * t, a.Y + (b.Y - a.Y) * t) end
+Vector2 = { new = v2, zero = v2(0, 0), one = v2(1, 1) }
 local V3 = {}
-V3.__index = V3
+V3.__index = function(self, k)
+    if k == "Magnitude" then
+        return math.sqrt(self.X * self.X + self.Y * self.Y + self.Z * self.Z)
+    end
+    if k == "Unit" then
+        local m = math.sqrt(self.X * self.X + self.Y * self.Y + self.Z * self.Z)
+        if m == 0 then return v3(0, 0, 0) end
+        return v3(self.X / m, self.Y / m, self.Z / m)
+    end
+    return V3[k]
+end
 local function v3(x, y, z)
     return setmetatable({ X = x or 0, Y = y or 0, Z = z or 0 }, V3)
 end
-V3.__add = function(a, b) return v3(a.X + b.X, a.Y + b.Y, a.Z + b.Z) end
-V3.__sub = function(a, b) return v3(a.X - b.X, a.Y - b.Y, a.Z - b.Z) end
+-- Roblox mixes Vector3 with CFrame/other types; a strict __add would abort the
+-- whole feature, so unsupported operands pass through unchanged.
+local function isVec3(b) return type(b) == "table" and b.X ~= nil end
+V3.__add = function(a, b)
+    if not isVec3(a) then return b end
+    if not isVec3(b) then return a end
+    return v3(a.X + b.X, a.Y + b.Y, a.Z + b.Z)
+end
+V3.__sub = function(a, b)
+    if not isVec3(a) then return b end
+    if not isVec3(b) then return a end
+    return v3(a.X - b.X, a.Y - b.Y, a.Z - b.Z)
+end
 V3.__mul = function(a, b)
     if type(b) == "number" then return v3(a.X * b, a.Y * b, a.Z * b) end
     return v3(a.X * b.X, a.Y * b.Y, a.Z * b.Z)
@@ -227,20 +491,37 @@ local function record(kind, tab, group, id, spec)
     table.insert(RECORD.widgets, { kind = kind, tab = tab, group = group, id = id,
         text = spec and (spec.Text or spec.Title) })
 end
+-- Fluent widgets are created empty and wired afterwards with :OnChanged(fn), so
+-- the mock has to keep those handlers: driving only spec.Callback would leave
+-- most of the payload's features untested.
+WIDGETS = {}
+local function mkWidget(kind, tab, group, id, spec)
+    local w = { Kind = kind, Id = id, Spec = spec or {}, Handlers = {} }
+    function w:OnChanged(fn) table.insert(self.Handlers, fn) return self end
+    function w:OnClick(fn) table.insert(self.Handlers, fn) return self end
+    function w:OnChanged2(fn) table.insert(self.Handlers, fn) return self end
+    function w:SetValue(value)
+        for _, fn in ipairs(self.Handlers) do pcall(fn, value) end
+        if self.Spec.Callback then pcall(self.Spec.Callback, value) end
+    end
+    function w:Set(value) return self:SetValue(value) end
+    function w:SetText() end
+    function w:SetBadge() end
+    function w:AddKeyPicker() return self end
+    function w:AddColorPicker() return self end
+    table.insert(WIDGETS, w)
+    return w
+end
 local function mkContainer(tabName, groupName)
     local c = {}
     for _, kind in ipairs({ "Toggle", "Slider", "Input", "Dropdown", "Keybind", "Button", "ColorPicker", "Label", "Paragraph", "Divider", "Section", "Stepper", "RangeSlider", "Segmented" }) do
         c["Add" .. kind] = function(self, id, spec)
-            if kind == "Button" or kind == "Label" or kind == "Paragraph" or kind == "Divider" or kind == "Section" then
-                record(kind, tabName, groupName, nil, id)
-                if type(id) == "table" then SPECS["btn:" .. (id.Text or tostring(#RECORD.widgets))] = id end
-                return { SetText = function() end, OnChanged = function() end }
-            end
-            if type(id) == "table" then record(kind, tabName, groupName, nil, id); return { SetValue = function() end, OnChanged = function() end } end
-            record(kind, tabName, groupName, id, spec)
-            SPECS[id] = spec
-            return { SetValue = function() end, Set = function() end, OnChanged = function() end,
-                     SetBadge = function() end, AddKeyPicker = function() end, AddColorPicker = function() end }
+            local key = id
+            if type(id) == "table" then key, spec = nil, id end
+            record(kind, tabName, groupName, key, spec)
+            local w = mkWidget(kind, tabName, groupName, key, spec)
+            if key then SPECS[key] = spec end
+            return w
         end
     end
     return c
@@ -269,6 +550,24 @@ end
 setmetatable(__MOCK_LIBRARY, { __index = function() return function() return __MOCK_LIBRARY end end })
 Library = __MOCK_LIBRARY
 
+-- Capture the real library instance: the script loadstrings ui.lua and keeps the
+-- result local, so the harness wraps loadstring to grab it on the way out.
+CAPTURED = {}
+do
+    local raw = loadstring
+    loadstring = function(src, name)
+        local fn = raw(src, name)
+        if type(src) == "string" and src:find("return Library", 1, true) and type(fn) == "function" then
+            return function(...)
+                local lib = fn(...)
+                if type(lib) == "table" then CAPTURED.Library = lib end
+                return lib
+            end
+        end
+        return fn
+    end
+end
+
 -- The chunk must run inside a coroutine: hub files call task.wait() in the main body, and
 -- yielding the main thread is a hard error in Luau.
 local chunk, cerr = loadstring(SCRIPT_SOURCE, "evade")
@@ -278,6 +577,18 @@ do
     local ok, err = coroutine.resume(MAIN)
     if not ok then _PRINT("RUNTIME ERROR: " .. tostring(err)) end
 end
+-- Builders yield on task.wait() between sections; keep resuming until the menu
+-- is fully built, or the chunk stops making progress.
+DRAIN_ERRORS = {}
+for _ = 1, 600 do
+    if coroutine.status(MAIN) ~= "suspended" then break end
+    local ok, err = coroutine.resume(MAIN)
+    if not ok then
+        table.insert(DRAIN_ERRORS, tostring(err))
+        break
+    end
+end
+for _, e in ipairs(DRAIN_ERRORS) do _PRINT("BUILD ERROR " .. e) end
 
 _PRINT("kicked: " .. tostring(RECORD.kicked))
 _PRINT("tabs: " .. table.concat(RECORD.tabs, ", "))
@@ -355,35 +666,93 @@ local cg = get("CoreGui")
 table.insert(ws._p.Children, char)
 
 local errors = {}
+-- Callbacks may yield (task.wait inside a toggle handler); run each in its own
+-- coroutine and hand the survivors to the frame loop.
 local function try(label, fn)
-    local ok, err = pcall(fn)
+    local co = coroutine.create(fn)
+    local ok, err = coroutine.resume(co)
     if not ok then table.insert(errors, label .. " -> " .. tostring(err)) end
+    if coroutine.status(co) == "suspended" then table.insert(PENDING, co) end
 end
 
--- 1. turn every toggle on, fill every input, pick every dropdown, press every button
+-- 1. drive every widget: its creation callback and every :OnChanged handler
+local function valueFor(kind, spec)
+    if kind == "Toggle" then return true end
+    if kind == "Slider" then return spec.Default or spec.Min or 50 end
+    if kind == "Input" then return spec.Default or "1" end
+    if kind == "Dropdown" then return (spec.Values and spec.Values[1]) or "1" end
+    if kind == "Keybind" then return true end
+    if kind == "ColorPicker" then return { R = 1, G = 1, B = 1 } end
+    return nil
+end
+local TRACE = rawget(_G, "SMOKE_TRACE")
 local fired = 0
-for _, w in ipairs(RECORD.widgets) do
-    if w.id and SPECS[w.id] then
-        local spec = SPECS[w.id]
-        if w.kind == "Toggle" and spec.Callback then
-            try("toggle " .. w.id, function() spec.Callback(true) end); fired += 1
-        elseif w.kind == "Slider" and spec.Callback then
-            try("slider " .. w.id, function() spec.Callback(spec.Default or 50) end); fired += 1
-        elseif w.kind == "Input" and spec.Callback then
-            try("input " .. w.id, function() spec.Callback(spec.Default or "1") end); fired += 1
-        elseif w.kind == "Dropdown" and spec.Callback then
-            local v = spec.Values and spec.Values[1] or "1"
-            try("dropdown " .. w.id, function() spec.Callback(v) end); fired += 1
-        elseif w.kind == "Keybind" and spec.Callback then
-            try("keybind " .. w.id, function() spec.Callback(true) end); fired += 1
+
+-- Real-library mode: drive every option the shipped ui.lua registered. The mock
+-- recorder only sees widgets built through the stand-in library.
+local LIB = CAPTURED.Library
+if LIB and type(LIB.Options) == "table" then
+    local total, driven = 0, 0
+    for id, opt in pairs(LIB.Options) do
+        total += 1
+        if type(opt) == "table" and type(opt.SetValue) ~= "function" then
+            _PRINT("option without SetValue: " .. tostring(id) .. " (" .. type(opt) .. ")")
+        end
+        if type(opt) == "table" and type(opt.SetValue) == "function" then
+            local value
+            local kind = type(opt.Value)
+            if type(opt.Values) == "table" and #opt.Values > 0 then
+                value = opt.Values[1]
+            elseif kind == "boolean" then
+                value = true
+            elseif kind == "number" then
+                value = opt.Default or opt.Value
+            elseif kind == "string" then
+                value = (type(opt.Default) == "string" and opt.Default ~= "") and opt.Default or "1"
+            end
+            if value ~= nil then
+                local before = #errors
+                try("option " .. tostring(id), function() opt:SetValue(value) end)
+                if #errors == before then driven += 1 end
+            end
+        end
+    end
+    _PRINT("library: real ui.lua buttons=" .. type(LIB.Buttons) .. " tabs=" .. type(LIB.Tabs))
+    _PRINT("options: " .. tostring(total) .. " driven: " .. tostring(driven))
+    if type(LIB.Buttons) == "table" then
+        local pressed = 0
+        for _, button in ipairs(LIB.Buttons) do
+            if type(button.Click) == "function" then
+                try("button " .. tostring(button.Info and (button.Info.Text or button.Info.Title)), function() button:Click() end)
+                pressed += 1
+            end
+        end
+        _PRINT("buttons pressed: " .. tostring(pressed) .. " / " .. tostring(#LIB.Buttons))
+    end
+    if type(LIB.Tabs) == "table" then _PRINT("tabs: " .. tostring(#LIB.Tabs)) end
+end
+
+for _, w in ipairs(WIDGETS) do
+    if TRACE then _PRINT("drive " .. tostring(w.Kind) .. ":" .. tostring(w.Id) .. string.rep(" ", 600)) end
+    local value = valueFor(w.Kind, w.Spec)
+    if w.Kind == "Button" then
+        if w.Spec.Func then try("button " .. tostring(w.Spec.Text), w.Spec.Func); fired += 1 end
+        if w.Spec.Callback then try("button " .. tostring(w.Spec.Text), w.Spec.Callback); fired += 1 end
+        for _, fn in ipairs(w.Handlers) do try("button handler " .. tostring(w.Spec.Text), fn); fired += 1 end
+    elseif value ~= nil then
+        if w.Spec.Callback then
+            try(w.Kind:lower() .. " " .. tostring(w.Id), function() w.Spec.Callback(value) end); fired += 1
+        end
+        for _, fn in ipairs(w.Handlers) do
+            try(w.Kind:lower() .. " " .. tostring(w.Id), function() fn(value) end); fired += 1
         end
     end
 end
-for key, spec in pairs(SPECS) do
-    if key:sub(1, 4) == "btn:" and spec.Func then
-        try("button " .. key, spec.Func); fired += 1
-    end
+local wired = 0
+for _, w in ipairs(WIDGETS) do
+    if #w.Handlers > 0 or w.Spec.Callback or w.Spec.Func then wired += 1 end
 end
+_PRINT("widgets wired: " .. tostring(wired) .. " / " .. tostring(#WIDGETS))
 _PRINT("controls fired: " .. tostring(fired))
 
 -- 2. run frames: 3 of each signal, the way the client would
@@ -425,6 +794,13 @@ end
 """
 
 
+def lua_long(text: str) -> str:
+    level = 0
+    while "]" + "=" * level + "]" in text:
+        level += 1
+    return "[" + "=" * level + "[" + text + "]" + "=" * level + "]"
+
+
 def main() -> int:
     target = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "games" / "Evade.lua"
     if not target.is_absolute():
@@ -439,6 +815,10 @@ def main() -> int:
     game_id = guard.group(1) if guard else "3647333358"
     script = HARNESS.replace("SCRIPT_SOURCE", "[" + "=" * level + "[" + src + "]" + "=" * level + "]")
     script = script.replace("GAME_ID", game_id)
+    script = script.replace("__UI_SOURCE__", lua_long((ROOT / "ui.lua").read_text(encoding="utf-8")))
+    fbm_path = ROOT / "FloatingButton.lua"
+    fbm = fbm_path.read_text(encoding="utf-8") if fbm_path.exists() else ""
+    script = script.replace("__FBM_SOURCE__", lua_long(fbm))
     run = Path("/tmp") / ("smoke_" + target.stem.replace(" ", "_") + ".lua")
     run.write_text(script, encoding="utf-8")
 
@@ -448,7 +828,9 @@ def main() -> int:
     if proc.stderr.strip():
         print("stderr: " + proc.stderr.strip()[:2000])
 
-    bad = ("RUNTIME ERROR" in out) or ("errors: 0" not in out) or ("widgets: 0" in out)
+    has_options = "options: " in out and "driven: 0" not in out
+    has_widgets = "widgets: 0" not in out and "widgets wired: 0 / 0" not in out
+    bad = ("RUNTIME ERROR" in out) or ("errors: 0" not in out) or not (has_options or has_widgets)
     print("SMOKE " + ("FAIL " + str(target) if bad else "PASS " + str(target)))
     return 1 if bad else 0
 

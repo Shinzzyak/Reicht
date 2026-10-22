@@ -112,6 +112,28 @@ def add_press_mode(text):
     return text
 
 
+def add_button_registry(text):
+    """Expose every button on `Library.Buttons`.
+
+    A button keeps its callback in a closure, so nothing outside the widget can
+    reach it -- which leaves every button-driven feature untestable by the smoke
+    run. One list plus one insert at creation time fixes that.
+    """
+    text = resub(
+        text,
+        r'(local Library = \{\n(\s*)Version = "1\.0",\n(\s*)Options = \{\},)',
+        lambda m: m.group(1) + "\n" + m.group(2) + "Buttons = {},",
+        "ui.lua button registry: list",
+    )
+    text = resub(
+        text,
+        r'(\n(\s*)local button = setmetatable\(\{[^\n]*\}, Button\))',
+        lambda m: m.group(1) + "\n" + m.group(2) + "table.insert(Library.Buttons, button)",
+        "ui.lua button registry: insert",
+    )
+    return text
+
+
 def strip_attribution(text):
     # Order matters: the repo-owner string contains the namespace as a prefix.
     text = text.replace("xDTaraZz", "Shinzzyak")
@@ -460,7 +482,7 @@ def main():
     open(os.path.join(stage, "loader.lua"), "w", encoding="utf-8").write(
         build_loader(open(upstream_loader, encoding="utf-8").read(), keep, extra_table))
     open(os.path.join(stage, "ui.lua"), "w", encoding="utf-8").write(
-        add_press_mode(strip_attribution(open(ui_path, encoding="utf-8").read())))
+        add_button_registry(add_press_mode(strip_attribution(open(ui_path, encoding="utf-8").read()))))
 
     built = []
     for name in upstream_games:
