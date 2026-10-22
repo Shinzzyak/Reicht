@@ -35,9 +35,29 @@ silently dead toggle.
 
 ## Adding a game
 
+Two kinds of game live here.
+
+**Mirrored** — comes from upstream, patched by `sync/build.py`:
+
 1. Put `games/<Display Name>.lua` in place. The file name must match the string in
    the `GAMES` table exactly, spaces included — the loader percent-encodes it.
 2. Add `[<GameId>] = "<Display Name>"` to `GAMES` in `loader.lua`.
+
+**Authored here** — written in this repo, upstream has never heard of it:
+
+1. Drop the script at `sync/extra/games/<Display Name>.lua`.
+2. Register it in `sync/extra/games.json`:
+
+```json
+{ "<Display Name>": { "id": <GameId>, "name": "<Display Name>" } }
+```
+
+The build copies it into `games/` and injects the `GAMES` entry itself, so nothing in
+the upstream loader has to be touched by hand. The id must not collide with one
+upstream already serves — the build refuses to run if it does.
+
+Either way:
+
 3. Make the script start with a guard, `if game.GameId ~= <GameId> then return end`,
    so a wrong entry cannot run against the wrong place.
 4. Compile it before committing:

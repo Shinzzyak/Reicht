@@ -18,6 +18,7 @@ Usage:
     UPSTREAM_DIR=/tmp/rsclone LUAU_COMPILE=/tmp/luau/luau-compile python3 build.py
 """
 import os
+import json
 import re
 import shutil
 import subprocess
@@ -106,8 +107,12 @@ def game_table(text):
 
 # ---------------------------------------------------------------- loader -----
 
-def build_loader(text, keep):
-    """`keep` maps GameId -> name for games upstream dropped but we still serve."""
+def build_loader(text, keep, extra=None):
+    """`keep` maps GameId -> name for games upstream dropped but we still serve.
+
+    `extra` maps GameId -> name for games this repo authors itself. Those are not
+    mirrors of anything: upstream has never heard of them.
+    """
     text = strip_attribution(text)
 
     text = sub(
@@ -130,6 +135,17 @@ def build_loader(text, keep):
          'Notify(name .. " stopped with an error: " .. tostring(trace):match("^[^\\n]*"), "\\n" .. tostring(trace))'),
     ):
         text = sub(text, old, new, "loader notify: " + old[:44], required=False)
+
+    # Games this repo ships itself, written here rather than mirrored. Upstream has
+    # no entry for them, so they get their own block and their own wording.
+    if extra:
+        block = "".join(f'    [{gid}] = "{name}",\n' for gid, name in sorted(extra.items()))
+        text = resub(
+            text,
+            r"(local GAMES = \{\n)",
+            lambda m: m.group(1) + "    -- Written and maintained in this repo. Not mirrored.\n" + block,
+            "loader extra entries",
+        )
 
     # Carry forward games upstream no longer lists but whose script we still hold.
     if keep:
@@ -333,6 +349,21 @@ def previous_state():
     return table, files
 
 
+def extra_games():
+    """Games authored in this repo: `extra/games.json` maps script stem -> {id, name}."""
+    root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "extra")
+    manifest = os.path.join(root, "games.json")
+    if not os.path.isfile(manifest):
+        return {}, root
+    with open(manifest, encoding="utf-8") as handle:
+        data = json.load(handle)
+    table = {int(entry["id"]): entry["name"] for entry in data.values()}
+    for stem in data:
+        if not os.path.isfile(os.path.join(root, "games", stem + ".lua")):
+            raise SystemExit(f"extra/games.json lists {stem} but extra/games/{stem}.lua is missing")
+    return table, root
+
+
 def main():
     # Validate every upstream input BEFORE touching the repo. A missing upstream is
     # the normal end state of a mirror, and it must leave the served files intact.
@@ -367,13 +398,21 @@ def main():
     prev_table, prev_files = previous_state()
     served = dict(prev_files)
 
-    # Which games do we keep serving that upstream no longer lists?
+    extra_table, extra_root = extra_games()
+    extra_stems = {name for name in extra_table.values()}
+
+    clash = set(extra_table) & set(upstream_table)
+    if clash:
+        raise SystemExit(f"extra/games.json claims game ids upstream already serves: {sorted(clash)}")
+
+    # Which games do we keep serving that upstream no longer lists? A game we author
+    # ourselves is never "dropped" -- it is rebuilt from extra/ every time.
     keep = {gid: name for gid, name in prev_table.items()
-            if gid not in upstream_table and name in prev_files}
+            if gid not in upstream_table and name in prev_files and name not in extra_stems}
     carried.extend(sorted(keep.values()))
 
     open(os.path.join(stage, "loader.lua"), "w", encoding="utf-8").write(
-        build_loader(open(upstream_loader, encoding="utf-8").read(), keep))
+        build_loader(open(upstream_loader, encoding="utf-8").read(), keep, extra_table))
     open(os.path.join(stage, "ui.lua"), "w", encoding="utf-8").write(
         strip_attribution(open(ui_path, encoding="utf-8").read()))
 
@@ -384,9 +423,17 @@ def main():
             build_game(text, name))
         built.append(name)
 
+    # Games authored here. They go through the same compile gate and the same
+    # minifier, but not through the upstream patch set -- those patterns belong to
+    # files we do not own.
+    for stem in sorted(extra_table.values()):
+        source = os.path.join(extra_root, "games", stem + ".lua")
+        shutil.copy(source, os.path.join(stage, "games", stem + ".lua"))
+        built.append(stem + ".lua")
+
     # A game upstream deleted keeps the copy we already serve. Dropping it would
     # take a working game away for no reason, which is the whole point of mirroring.
-    dropped = sorted(set(served) - {n[:-4] for n in upstream_games})
+    dropped = sorted(set(served) - {n[:-4] for n in upstream_games} - extra_stems)
     for name in dropped:
         open(os.path.join(stage, "games", name + ".lua"), "w", encoding="utf-8").write(
             served[name])
