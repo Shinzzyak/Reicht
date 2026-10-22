@@ -10,7 +10,7 @@ UPSTREAM_REPO="${UPSTREAM_REPO:-Roblox-Scripts}"
 UPSTREAM_REF="${UPSTREAM_REF:-main}"
 UPSTREAM_DIR="${UPSTREAM_DIR:-$(mktemp -d)}"
 API="https://api.github.com/repos/${UPSTREAM_OWNER}/${UPSTREAM_REPO}"
-RAWUP="https://raw.githubusercontent.com/${UPSTREAM_OWNER}/${UPSTREAM_REPO}/refs/heads/${UPSTREAM_REF}"
+RAWUP="https://raw.githubusercontent.com/${UPSTREAM_OWNER}/${UPSTREAM_REPO}/${UPSTREAM_REF}"
 
 echo "upstream: ${UPSTREAM_OWNER}/${UPSTREAM_REPO}@${UPSTREAM_REF}"
 echo "snapshot: ${UPSTREAM_DIR}"
