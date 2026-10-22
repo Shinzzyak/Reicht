@@ -7,6 +7,9 @@ Bug class this catches: a widget added through a variable that does not exist ye
 every tab built after it silently never appears - while compile and luau-analyze are clean.
 
     python3 sync/smoke.py games/Evade.lua
+
+The mock surface is tuned for Evade (Drawing, Highlight, remotes, a fake character).
+Other games in games/ need their own mocks before their FAIL means anything.
 """
 import subprocess
 import sys
@@ -114,6 +117,12 @@ local function get(name)
     return services[name]
 end
 
+get("GuiService").IsTenFootInterface = function() return false end
+get("GuiService").TopbarInset = { Height = 36 }
+get("RunService").IsStudio = function() return false end
+get("UserInputService").TouchEnabled = false
+get("UserInputService").MouseEnabled = true
+
 local players = get("Players")
 local lp = newInstance("Player", "Tester")
 lp.Character = nil
@@ -133,8 +142,8 @@ ws.CurrentCamera = newInstance("Camera", "Camera")
 ws.CurrentCamera.FieldOfView = 70
 
 game = newInstance("DataModel", "Game")
-game.GameId = 3647333358
-game.PlaceId = 9872472334
+game.GameId = GAME_ID
+game.PlaceId = GAME_ID
 game.IsLoaded = function() return true end
 game.GetService = function(_, name) return get(name) end
 game.HttpGet = function(_, url)
@@ -207,7 +216,9 @@ getgc = function() return {} end
 readfile = function() return "" end
 writefile = function() end
 isfile = function() return false end
-getgenv = function() return _G end
+GENV = {}
+getgenv = function() return GENV end
+getrenv = function() return GENV end
 hookfunction = function(a) return a end
 request = nil
 
@@ -245,14 +256,17 @@ function __MOCK_LIBRARY:CreateWindow()
         function t:AddGroupbox(gname) return mkContainer(name, gname) end
         function t:Select() end
         function t:AddSection() return mkContainer(name, "section") end
+        setmetatable(t, { __index = function() return function() return mkContainer(name, "?") end end })
         return t
     end
+    setmetatable(win, { __index = function() return function() return mkContainer("?", "?") end end })
     function win:SelectTab() end
     function win:Dialog() end
     function win:Toggle() end
     function win:Unload() end
     return win
 end
+setmetatable(__MOCK_LIBRARY, { __index = function() return function() return __MOCK_LIBRARY end end })
 Library = __MOCK_LIBRARY
 
 local ok, err = pcall(function()
@@ -411,7 +425,12 @@ def main() -> int:
     level = 0
     while "]" + "=" * level + "]" in src:
         level += 1
+    # Feed the harness the id the file's own guard expects, so the guard does not kick us.
+    import re
+    guard = re.search(r"game\.(?:GameId|PlaceId) ~= (\d+)", src)
+    game_id = guard.group(1) if guard else "3647333358"
     script = HARNESS.replace("SCRIPT_SOURCE", "[" + "=" * level + "[" + src + "]" + "=" * level + "]")
+    script = script.replace("GAME_ID", game_id)
     run = Path("/tmp") / ("smoke_" + target.stem.replace(" ", "_") + ".lua")
     run.write_text(script, encoding="utf-8")
 
