@@ -51,10 +51,10 @@ Reicht.Config = {
     FailWindow = 10,
     FovColor = Color3.fromRGB(232, 160, 76),
     BannerCaps = { "HookFunction", "Namecall", "Gc", "Upvalues", "Drawing", "Connections", "FileSystem" },
-    CombatToggles = { "Aimbot", "SilentAim", "Ragebot", "TriggerBot", "NoRecoil", "NoSpread", "InstantScope", "FullAuto", "InstantReload", "InfiniteAmmo", "HitboxExpander", "AntiAim", "KnifeAura", "NoScopeOverlay", "FastSwitch" },
+    CombatToggles = { "Aimbot", "SilentAim", "Ragebot", "TriggerBot", "NoRecoil", "NoSpread", "InstantScope" },
     ModuleFeatures = {
         EntityService = { "Aimbot", "SilentAim", "Ragebot", "TriggerBot" },
-        CombatService = { "SilentAim", "Ragebot", "TriggerBot", "NoRecoil", "NoSpread", "InstantScope", "FullAuto", "InstantReload", "SkinChanger" },
+        CombatService = { "SilentAim", "Ragebot", "TriggerBot", "NoRecoil", "NoSpread", "InstantScope", "SkinChanger" },
         CameraController = { "SilentAim", "Ragebot" },
         WeaponConfig = { "SkinChanger" },
         GachaService = { "AutoOpenCases" },
@@ -92,13 +92,8 @@ Reicht.Options = {
     AntiAfk = false,
 
     InfiniteDash = false,
-    InfiniteAirJump = false,
-    AutoBhop = false,
-    SpeedMultiplier = 1,
-    CustomFov = 70,
     FastRespawn = false,
     AutoJoin = false,
-    AutoFlag = false,
     SkinChanger = false,
     SkinRarities = {},
 
@@ -114,29 +109,11 @@ Reicht.Options = {
     SilentAim = false,
     Ragebot = false,
     InstantScope = false,
-    FullAuto = false,
-    InstantReload = false,
-    InfiniteAmmo = false,
-    HitboxExpander = false,
-    HitboxSize = 6,
-    HitboxPart = "Head",
-    HitboxTransparency = 0.6,
-    AntiAim = false,
-    AntiAimMode = "Spinbot",
-    SpinSpeed = 1080,
-    KnifeAura = false,
-    KnifeAuraRange = 16,
-    NoScopeOverlay = false,
-    FastSwitch = false,
     HitChance = 100,
     HeadChance = 100,
     TriggerBot = false,
     NoRecoil = false,
     NoSpread = false,
-    AntiFlash = false,
-    AntiSmoke = false,
-    EnemyChams = false,
-    AntiPeekBypass = false,
     AimTeamCheck = true,
     AimWallCheck = true,
     AimSmooth = 1,
@@ -396,7 +373,7 @@ do
     local constantFolder = ReplicatedStorage:FindFirstChild("Constant")
     GameLib.LoadEnds = osClock() + Reicht.Config.RequireBudget
 
-    for _, name in ipairs({ "Config", "WeaponConfig", "WrapConfig", "QuestConfig" }) do
+    for _, name in ipairs({ "WeaponConfig", "WrapConfig", "QuestConfig" }) do
         GameLib.Config[name] = RequireChild(configFolder, name)
     end
     GameLib.RarityColor = RequireChild(constantFolder, "RarityColor")
@@ -410,11 +387,6 @@ do
     end
     GameLib.CameraController = RequireChild(ReplicatedStorage:FindFirstChild("Client"), "CameraController")
     GameLib.WeaponController = RequireChild(ReplicatedStorage:FindFirstChild("Client"), "WeaponController")
-    GameLib.LocalCharacterController = RequireChild(ReplicatedStorage:FindFirstChild("Client"), "LocalCharacterController")
-    GameLib.HighlightController = RequireChild(ReplicatedStorage:FindFirstChild("Client"), "HighlightController")
-    GameLib.AntiPeekController = RequireChild(ReplicatedStorage:FindFirstChild("Client"), "AntiPeekController")
-    GameLib.Effects = RequireChild(ReplicatedStorage:FindFirstChild("Client"), "Effects")
-    GameLib.Settings = RequireChild(ReplicatedStorage:FindFirstChild("Client"), "Settings")
     local gameService = remoteFolder and remoteFolder:FindFirstChild("GameService")
     GameLib.RoomManager = RequireChild(gameService, "RoomManager")
     GameLib.Status = RequireChild(constantFolder, "Status")
@@ -448,37 +420,13 @@ function Reicht.Entity.Service()
     return GameLib.Service.EntityService
 end
 
----@return table  all combatant entities (focused + all server players)
+---@return table  focused combatant entities (empty in lobby / combat paused)
 function Reicht.Entity.List()
     local service = Reicht.Entity.Service()
     if not service then return {} end
-    local list = {}
-    local seen = {}
-
     local ok, focused = pcall(function() return service.WorldManager:GetFocusedEntities() end)
-    if ok and type(focused) == "table" then
-        local items = focused._items or focused.Items or focused
-        for _, ent in pairs(items) do
-            if type(ent) == "table" and ent.Instance and not seen[ent.Instance] then
-                seen[ent.Instance] = true
-                list[#list + 1] = ent
-            end
-        end
-    end
-
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and plr.Character and not seen[plr] and not seen[plr.Character] then
-            local ent = (service.GetEntity and service.GetEntity(plr))
-                or (service.FetchEntity and service.FetchEntity(plr.Character))
-            if ent and type(ent) == "table" then
-                seen[plr] = true
-                seen[plr.Character] = true
-                list[#list + 1] = ent
-            end
-        end
-    end
-
-    return list
+    if not ok or type(focused) ~= "table" then return {} end
+    return focused._items or focused.Items or focused
 end
 
 function Reicht.Entity.Local()
@@ -518,24 +466,18 @@ function Reicht.Entity.Team(entity)
 end
 
 function Reicht.Entity.Friendly(entity)
-    if type(entity) ~= "table" and typeof(entity) ~= "Instance" then return false end
-    local service = Reicht.Entity.Service()
-    local localEnt = Reicht.Entity.Local()
-    if localEnt and type(entity) == "table" and type(localEnt.IsFriendly) == "function" then
-        local ok, friendly = pcall(localEnt.IsFriendly, localEnt, entity)
-        if ok and friendly ~= nil then return friendly == true end
+    local char = Reicht.Entity.Character(entity)
+    local marks = Workspace:FindFirstChild("Highlight")
+    if char and marks then
+        local friendly = marks:FindFirstChild("Friendly")
+        if friendly and char:IsDescendantOf(friendly) then return true end
+        if char:IsDescendantOf(marks) then return false end
     end
-    if service and type(service.IsFriendly) == "function" then
-        local target = type(entity) == "table" and (entity.Instance or Reicht.Entity.Character(entity)) or entity
-        local ok, friendly = pcall(service.IsFriendly, target, LocalPlayer)
-        if ok and friendly ~= nil then return friendly == true end
-    end
-    local targetChar = type(entity) == "table" and Reicht.Entity.Character(entity) or (typeof(entity) == "Instance" and entity)
-    local targetPlayer = targetChar and Players:GetPlayerFromCharacter(targetChar)
-    if targetPlayer and targetPlayer.Team and LocalPlayer.Team then
-        return targetPlayer.Team == LocalPlayer.Team
-    end
-    return false
+
+    if Reicht.Match.ModeSet() ~= "TDM" then return false end
+    local mine = Reicht.Entity.Team(Reicht.Entity.Local())
+    local theirs = Reicht.Entity.Team(entity)
+    return mine ~= nil and mine == theirs
 end
 
 function Reicht.Entity.Health(entity)
@@ -546,18 +488,8 @@ function Reicht.Entity.Health(entity)
 end
 
 function Reicht.Entity.Character(entity)
-    if typeof(entity) == "Instance" then
-        if entity:IsA("Player") then return entity.Character end
-        if entity:FindFirstChildOfClass("Humanoid") then return entity end
-        if entity.Parent and entity.Parent:FindFirstChildOfClass("Humanoid") then return entity.Parent end
-        return entity
-    end
     local humanoid = entity and entity.Humanoid
     if humanoid and humanoid.Parent then return humanoid.Parent end
-    if entity and entity.Instance then
-        if entity.Instance:IsA("Player") then return entity.Instance.Character end
-        return entity.Instance
-    end
     return entity and entity.Character or nil
 end
 
@@ -934,7 +866,7 @@ function Reicht.Player.Join.Step()
     firetouchinterest(root, pad, 1)
 end
 
-Reicht.Movement = { Booted = false, Dash = nil, Resolving = false, SavedAirJump = nil, HookedAirJump = false }
+Reicht.Movement = { Booted = false, Dash = nil, Resolving = false }
 
 ---@return ModuleScript?  dash helper, searched by name if CombatHelper moved
 function Reicht.Movement.FindDash()
@@ -963,63 +895,10 @@ function Reicht.Movement.DashHelper()
     return nil
 end
 
-function Reicht.Movement.ApplyAirJump()
-    if Reicht.Movement.HookedAirJump then return end
-    local lcc = Reicht.GameLib.LocalCharacterController
-    if not (lcc and type(lcc.CanAirJump) == "function" and hookfunction) then return end
-    Reicht.Movement.SavedAirJump = lcc.CanAirJump
-    Reicht.Movement.HookedAirJump = true
-    hookfunction(lcc.CanAirJump, function(...)
-        if Reicht.Options.InfiniteAirJump then return true end
-        return Reicht.Movement.SavedAirJump(...)
-    end)
-end
-
-function Reicht.Movement.RestoreAirJump()
-    if not Reicht.Movement.HookedAirJump then return end
-    local lcc = Reicht.GameLib.LocalCharacterController
-    if lcc and lcc.CanAirJump and restorefunction then
-        pcall(restorefunction, lcc.CanAirJump)
-    end
-    Reicht.Movement.SavedAirJump = nil
-    Reicht.Movement.HookedAirJump = false
-end
-
 function Reicht.Movement.OnStepped()
-    if Reicht.Options.InfiniteDash then
-        local dash = Reicht.Movement.DashHelper()
-        if dash and dash.RefreshNextDashTime then pcall(dash.RefreshNextDashTime) end
-    end
-
-    if Reicht.Options.InfiniteAirJump then
-        Reicht.Movement.ApplyAirJump()
-    elseif Reicht.Movement.HookedAirJump then
-        Reicht.Movement.RestoreAirJump()
-    end
-
-    local localEnt = Reicht.Entity.Local()
-    if localEnt and localEnt.SetWalkSpeedMultiplier then
-        local mult = tonumber(Reicht.Options.SpeedMultiplier) or 1
-        if mult > 1 then
-            localEnt:SetWalkSpeedMultiplier("MarioSpeed", mult)
-        elseif localEnt.WalkSpeedMultipliers and localEnt.WalkSpeedMultipliers.MarioSpeed then
-            localEnt:SetWalkSpeedMultiplier("MarioSpeed", nil)
-        end
-    end
-
-    if Reicht.Options.AutoBhop then
-        local char = LocalPlayer.Character
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if hum and hum.MoveDirection.Magnitude > 0 and hum:GetState() ~= Enum.HumanoidStateType.Freefall and hum:GetState() ~= Enum.HumanoidStateType.Jumping then
-            hum:ChangeState(Enum.HumanoidStateType.Jumping)
-        end
-    end
-
-    local fov = tonumber(Reicht.Options.CustomFov) or 70
-    local cam = Workspace.CurrentCamera
-    if cam and fov > 70 then
-        cam.FieldOfView = fov
-    end
+    if not Reicht.Options.InfiniteDash then return end
+    local dash = Reicht.Movement.DashHelper()
+    if dash and dash.RefreshNextDashTime then pcall(dash.RefreshNextDashTime) end
 end
 
 function Reicht.Movement.Start()
@@ -1028,26 +907,11 @@ function Reicht.Movement.Start()
     Reicht:Connect(RunService.Stepped, Reicht.Movement.OnStepped)
 end
 
-function Reicht.Movement.Restore()
-    Reicht.Movement.RestoreAirJump()
-    local localEnt = Reicht.Entity.Local()
-    if localEnt and localEnt.SetWalkSpeedMultiplier and localEnt.WalkSpeedMultipliers and localEnt.WalkSpeedMultipliers.MarioSpeed then
-        localEnt:SetWalkSpeedMultiplier("MarioSpeed", nil)
-    end
-    local cam = Workspace.CurrentCamera
-    if cam then cam.FieldOfView = 70 end
-end
-
 function Reicht.Movement.GetStatus()
-    local parts = {}
-    if Reicht.Options.InfiniteDash then table.insert(parts, "Dash") end
-    if Reicht.Options.InfiniteAirJump then table.insert(parts, "AirJump") end
-    local mult = tonumber(Reicht.Options.SpeedMultiplier) or 1
-    if mult > 1 then table.insert(parts, string.format("Speed x%.1f", mult)) end
-    return #parts > 0 and table.concat(parts, " · ") or "Off"
+    return Reicht.Options.InfiniteDash and "Infinite dash" or "Off"
 end
 
-Reicht.Esp = { Count = 0, Rows = {}, Chammed = {}, AntiPeekHooked = false, SavedAntiPeek = nil }
+Reicht.Esp = { Count = 0, Rows = {} }
 
 function Reicht.Esp.Enabled()
     local visuals = Reicht.Library and Reicht.Library.Visuals
@@ -1090,73 +954,7 @@ function Reicht.Esp.Expire(seen, now)
     end
 end
 
-function Reicht.Esp.ApplyAntiPeek()
-    local apc = Reicht.GameLib.AntiPeekController
-    if not apc then return end
-    pcall(apc.SetActive, false)
-    if Reicht.Esp.AntiPeekHooked or not (hookfunction and type(apc.SetActive) == "function") then return end
-    Reicht.Esp.SavedAntiPeek = apc.SetActive
-    Reicht.Esp.AntiPeekHooked = true
-    hookfunction(apc.SetActive, function(...)
-        if Reicht.Options.AntiPeekBypass then return end
-        return Reicht.Esp.SavedAntiPeek(...)
-    end)
-end
-
-function Reicht.Esp.RestoreAntiPeek()
-    if not Reicht.Esp.AntiPeekHooked then return end
-    local apc = Reicht.GameLib.AntiPeekController
-    if apc and apc.SetActive and restorefunction then
-        pcall(restorefunction, apc.SetActive)
-    end
-    Reicht.Esp.SavedAntiPeek = nil
-    Reicht.Esp.AntiPeekHooked = false
-end
-
-function Reicht.Esp.UpdateChams()
-    local hc = Reicht.GameLib.HighlightController
-    if not hc or type(hc.Set) ~= "function" then return end
-
-    if not Reicht.Options.EnemyChams then
-        if next(Reicht.Esp.Chammed) then
-            for model in pairs(Reicht.Esp.Chammed) do
-                pcall(hc.Cancel, model, "EnemyXRay")
-            end
-            table.clear(Reicht.Esp.Chammed)
-        end
-        return
-    end
-
-    local current = {}
-    for _, entity in pairs(Reicht.Entity.List()) do
-        if Reicht.Entity.IsLocal(entity) or Reicht.Entity.Friendly(entity) then continue end
-        local health = Reicht.Entity.Health(entity)
-        local char = Reicht.Entity.Character(entity)
-        if not (char and char.Parent and health > 0) then continue end
-        current[char] = true
-        if not Reicht.Esp.Chammed[char] then
-            pcall(hc.Set, char, "EnemyXRay", -1)
-            Reicht.Esp.Chammed[char] = true
-        end
-    end
-
-    for model in pairs(Reicht.Esp.Chammed) do
-        if not current[model] then
-            pcall(hc.Cancel, model, "EnemyXRay")
-            Reicht.Esp.Chammed[model] = nil
-        end
-    end
-end
-
 function Reicht.Esp.Step()
-    if Reicht.Options.AntiPeekBypass then
-        Reicht.Esp.ApplyAntiPeek()
-    elseif Reicht.Esp.AntiPeekHooked then
-        Reicht.Esp.RestoreAntiPeek()
-    end
-
-    Reicht.Esp.UpdateChams()
-
     if not Reicht.Esp.Enabled() then
         table.clear(Reicht.Esp.Rows)
         Reicht.State.EspSnapshot = {}
@@ -1184,28 +982,14 @@ function Reicht.Esp.Step()
     Reicht.Esp.Count = #snapshot
 end
 
-function Reicht.Esp.Restore()
-    Reicht.Esp.RestoreAntiPeek()
-    local hc = Reicht.GameLib.HighlightController
-    if hc and type(hc.Cancel) == "function" then
-        for model in pairs(Reicht.Esp.Chammed) do
-            pcall(hc.Cancel, model, "EnemyXRay")
-        end
-    end
-    table.clear(Reicht.Esp.Chammed)
-end
-
 ---@return table[]  last snapshot from the scheduler, never touches game modules
 function Reicht.Esp.Targets()
     return Reicht.State.EspSnapshot
 end
 
 function Reicht.Esp.GetStatus()
-    local list = {}
-    if Reicht.Esp.Enabled() then table.insert(list, Reicht.Esp.Count .. " ESP") end
-    if Reicht.Options.EnemyChams then table.insert(list, "Chams") end
-    if Reicht.Options.AntiPeekBypass then table.insert(list, "Anti-Peek") end
-    return #list > 0 and table.concat(list, " · ") or "Off"
+    if not Reicht.Esp.Enabled() then return "Off" end
+    return Reicht.Esp.Count .. " targets"
 end
 
 ---@param probe function  re-read until it differs from before or ResultWait runs out
@@ -1457,72 +1241,6 @@ function Reicht.Collect.GetStatus()
     return Reicht.Options.AutoClaimQuest and Reicht.Collect.Status or "Off"
 end
 
-Reicht.Code = {
-    Codes = {
-        "freecase", "dreamcase", "FREELIKE1", "FREELIKE2", "FREELIKE3", "FREELIKE4", "FREELIKE5",
-        "140mvisit", "EASTER2026", "weaponfix", "50mvisit", "3mvisit"
-    },
-    LastResult = "",
-}
-
-function Reicht.Code.RedeemAll()
-    local folder = ReplicatedStorage:FindFirstChild("Remote")
-    local anyFolder = folder and folder:FindFirstChild("Any")
-    local remote = anyFolder and anyFolder:FindFirstChild("Code")
-    if not remote then
-        Reicht.Code.LastResult = "no code remote"
-        return Reicht.Code.LastResult
-    end
-
-    local redeemed, skipped = 0, 0
-    for _, code in ipairs(Reicht.Code.Codes) do
-        local ok, result = pcall(function() return remote:InvokeServer(code) end)
-        if ok and result ~= nil and result ~= false and result ~= -2 then
-            redeemed += 1
-        else
-            skipped += 1
-        end
-        task.wait(0.25)
-    end
-    Reicht.Code.LastResult = redeemed > 0 and (redeemed .. " codes redeemed") or "All codes already claimed"
-    return Reicht.Code.LastResult
-end
-
-Reicht.Flag = { Status = "Off" }
-
-function Reicht.Flag.Step()
-    if not Reicht.Options.AutoFlag then Reicht.Flag.Status = "Off" return end
-    if not Reicht.Match.InRound() then Reicht.Flag.Status = "Waiting round" return end
-
-    local remote = ReplicatedStorage:FindFirstChild("Remote")
-    local gameService = remote and remote:FindFirstChild("GameService")
-    local gameMode = gameService and gameService:FindFirstChild("GameMode")
-    local ffa = gameMode and gameMode:FindFirstChild("FFA")
-    local ctf = ffa and ffa:FindFirstChild("FFA_CaptureFlag")
-    local pickRemote = ctf and ctf:FindFirstChild("PickFlag")
-
-    if pickRemote then
-        pcall(function() pickRemote:FireServer() end)
-    end
-
-    local root = Reicht.Player.Root
-    if root and root.Parent then
-        local CollectionService = game:GetService("CollectionService")
-        for _, flagPart in ipairs(CollectionService:GetTagged("CTF_PickFlag_FFA")) do
-            if flagPart:IsA("BasePart") and (root.Position - flagPart.Position).Magnitude < 30 then
-                firetouchinterest(root, flagPart, 0)
-                task.wait(0.05)
-                firetouchinterest(root, flagPart, 1)
-            end
-        end
-    end
-    Reicht.Flag.Status = "Active"
-end
-
-function Reicht.Flag.GetStatus()
-    return Reicht.Options.AutoFlag and Reicht.Flag.Status or "Off"
-end
-
 Reicht.Combat = { State = "Idle", Status = "Off", Target = nil, Part = nil, Look = nil, Bound = false, LastShot = 0, Circle = nil, OriginFn = nil, OriginParams = nil, LookSource = nil, LookHolders = nil, LockedSince = 0 }
 
 local aimParams = RaycastParams.new()
@@ -1539,9 +1257,6 @@ end
 function Reicht.Combat.Active()
     local opts = Reicht.Options
     return opts.Aimbot or opts.SilentAim or opts.Ragebot or opts.TriggerBot or opts.ShowFov
-        or opts.NoRecoil or opts.NoSpread or opts.InstantScope or opts.FullAuto or opts.InstantReload
-        or opts.InfiniteAmmo or opts.HitboxExpander or opts.AntiFlash or opts.AntiSmoke
-        or opts.AntiAim or opts.KnifeAura or opts.NoScopeOverlay or opts.FastSwitch
 end
 
 ---@return BasePart?  server hitbox for the chosen bone
@@ -1550,11 +1265,9 @@ function Reicht.Combat.BonePart(entity, bone)
     if not char then return nil end
     local collider = char:FindFirstChild("Collider")
     bone = bone or Reicht.Options.AimBone or "Head"
-    local bonePart = (collider and (collider:FindFirstChild(bone) or collider:FindFirstChild("Head")))
-        or char:FindFirstChild(bone)
+    return collider and (collider:FindFirstChild(bone) or collider:FindFirstChild("Head"))
         or char:FindFirstChild("Head")
         or Reicht.Entity.Root(entity)
-    return bonePart
 end
 
 function Reicht.Combat.Filter()
@@ -1644,7 +1357,7 @@ function Reicht.Combat.SelectTarget()
         if not part then continue end
         local score = Reicht.Combat.Score(entity, part, cam, center, origin)
         if not score or (bestScore and score >= bestScore) then continue end
-        if Reicht.Options.AimWallCheck and not Reicht.Combat.Visible(part, Reicht.Entity.Character(entity)) then continue end
+        if (Reicht.Options.AimWallCheck or Reicht.Options.Ragebot) and not Reicht.Combat.Visible(part, Reicht.Entity.Character(entity)) then continue end
         best, bestPart, bestScore = entity, part, score
     end
     return best, bestPart
@@ -1689,38 +1402,17 @@ function Reicht.Combat.CrosshairOnEnemy()
     return false
 end
 
-function Reicht.Combat.TriggerFastSwitch()
-    local combat = Reicht.GameLib.Service.CombatService
-    if not combat or type(combat.SwitchSlot) ~= "function" then return end
-    task.spawn(function()
-        combat.SwitchSlot("Secondary")
-        task.wait(0.02)
-        combat.SwitchSlot("Primary")
-    end)
-end
-
 ---@return boolean  true when the weapon accepted the shot
 function Reicht.Combat.Fire()
-    local weapon, shooter = Reicht.Combat.Shooter()
-    if not shooter or not weapon then return false end
-
-    if weapon.CanActionNow and not weapon:CanActionNow() then return false end
-
     local now = os.clock()
-    local rate = (weapon.GetCurrentAttackRate and weapon:GetCurrentAttackRate()) or (weapon.GetAttackRate and weapon:GetAttackRate()) or 0.8
-    local baseInterval = 1 / math.max(rate, 0.1)
-    local interval = math.max(baseInterval, Reicht.Config.FireInterval)
-
-    if now - Reicht.Combat.LastShot < interval then return false end
+    if now - Reicht.Combat.LastShot < Reicht.Config.FireInterval then return false end
     Reicht.Combat.LastShot = now
+
+    local _, shooter = Reicht.Combat.Shooter()
+    if not shooter then return false end
 
     local ok, fired = pcall(shooter.LocalShoot, shooter)
     if not ok then warn("[SniperArena] shoot:", fired) end
-
-    if ok and fired ~= nil and Reicht.Options.FastSwitch then
-        Reicht.Combat.TriggerFastSwitch()
-    end
-
     return ok and fired ~= nil
 end
 
@@ -1762,111 +1454,17 @@ function Reicht.Combat.ShootAt(shooter, entity, part, opts)
     return fired and shot or nil
 end
 
----@return any, BasePart?  entity and bone when crosshair hits an enemy (including expanded hitbox)
-function Reicht.Combat.FindHitboxTarget()
-    local camCtrl = Reicht.GameLib.CameraController
-    local targetingFn = camCtrl and camCtrl.GetTargetingFn and camCtrl.GetTargetingFn()
-    if targetingFn then
-        local ok, _, inst = pcall(targetingFn)
-        if ok and inst and inst:IsA("BasePart") then
-            for _, entity in pairs(Reicht.Entity.List()) do
-                if Reicht.Entity.IsLocal(entity) or Reicht.Entity.Friendly(entity) then continue end
-                local char = Reicht.Entity.Character(entity)
-                if char and inst:IsDescendantOf(char) then
-                    local bone = (inst.Name == "Head" or Reicht.Options.HitboxPart == "Head") and "Head" or "Body"
-                    local realBone = Reicht.Combat.BonePart(entity, bone)
-                    return entity, realBone
-                end
-            end
-        end
-    end
-
-    local origin = Reicht.Combat.Origin()
-    local cam = Workspace.CurrentCamera
-    local start = origin.Position
-    local dir = origin.LookVector * 1000
-
-    local params = RaycastParams.new()
-    params.RespectCanCollide = false
-    params.CollisionGroup = "LookDet"
-    local localChar = Reicht.Entity.Character(Reicht.Entity.Local())
-    params.FilterDescendantsInstances = localChar and { cam, localChar } or { cam }
-    params.FilterType = Enum.RaycastFilterType.Exclude
-
-    local hit = Workspace:Raycast(start, dir, params)
-    if not hit or not hit.Instance then return nil, nil end
-
-    for _, entity in pairs(Reicht.Entity.List()) do
-        if Reicht.Entity.IsLocal(entity) or Reicht.Entity.Friendly(entity) then continue end
-        local char = Reicht.Entity.Character(entity)
-        if char and hit.Instance:IsDescendantOf(char) then
-            local bone = (hit.Instance.Name == "Head" or Reicht.Options.HitboxPart == "Head") and "Head" or "Body"
-            local realBone = Reicht.Combat.BonePart(entity, bone)
-            return entity, realBone
-        end
-    end
-    return nil, nil
-end
-
-function Reicht.Combat.ApplyActionHook()
-    local combat = Reicht.GameLib.Service.CombatService
-    if not combat or Reicht.Combat.OldInvokeAction or combat.InvokeAction == Reicht.Combat.ActionHook then return end
-    Reicht.Combat.OldInvokeAction = combat.InvokeAction
-    combat.InvokeAction = Reicht.Combat.ActionHook
-end
-
-function Reicht.Combat.ActionHook(weap, action, args)
-    if action == "Shoot" and type(args) == "table" and args.Target then
-        args.CustomStart = nil
-        args.CustomFPStart = nil
-        local targetChar = args.Target
-        local col = targetChar:FindFirstChild("Collider")
-        local head = (col and col:FindFirstChild("Head")) or targetChar:FindFirstChild("Head")
-        local aimPos = head and head.Position or targetChar:GetPivot().Position
-        args.Direction = (aimPos - args.Start).Unit
-        local ok, localPos = pcall(function() return targetChar:GetPivot():PointToObjectSpace(aimPos) end)
-        if ok then args.TargetPos = localPos end
-        if head then args.TargetHeadshot = true end
-    end
-    local old = Reicht.Combat.OldInvokeAction
-    if old and old ~= Reicht.Combat.ActionHook then
-        return old(weap, action, args)
-    end
-    return nil
-end
-
-function Reicht.Combat.RestoreActionHook()
-    local combat = Reicht.GameLib.Service.CombatService
-    local old = Reicht.Combat.OldInvokeAction
-    if combat and old then
-        combat.InvokeAction = old
-        Reicht.Combat.OldInvokeAction = nil
-    end
-end
-
----@return any  same as the game's LocalShoot, bullet sent at the locked target or expanded hitbox
+---@return any  same as the game's LocalShoot, bullet sent at the locked target
 function Reicht.Combat.SilentShoot(shooter, opts)
     local saved = Reicht.Combat.SilentSaved[shooter]
-    if not saved then return end
+    local entity = Reicht.Combat.Target
+    if not (Reicht.Combat.SilentActive() and entity and Reicht.Combat.OriginOverride()) then return saved.Fn(shooter, opts) end
+    if math.random(100) > Reicht.Options.HitChance then return saved.Fn(shooter, opts) end
 
-    if Reicht.Combat.SilentActive() and Reicht.Combat.Target and Reicht.Combat.OriginOverride() then
-        if math.random(100) <= Reicht.Options.HitChance then
-            local bone = math.random(100) <= Reicht.Options.HeadChance and "Head" or "Body"
-            local part = Reicht.Combat.BonePart(Reicht.Combat.Target, bone)
-            if part and part.Parent then
-                return Reicht.Combat.ShootAt(shooter, Reicht.Combat.Target, part, opts)
-            end
-        end
-    end
-
-    if Reicht.Options.HitboxExpander and Reicht.Combat.OriginOverride() then
-        local targetEnt, targetPart = Reicht.Combat.FindHitboxTarget()
-        if targetEnt and targetPart then
-            return Reicht.Combat.ShootAt(shooter, targetEnt, targetPart, opts)
-        end
-    end
-
-    return saved.Fn(shooter, opts)
+    local bone = math.random(100) <= Reicht.Options.HeadChance and "Head" or "Body"
+    local part = Reicht.Combat.BonePart(entity, bone)
+    if not (part and part.Parent) then return saved.Fn(shooter, opts) end
+    return Reicht.Combat.ShootAt(shooter, entity, part, opts)
 end
 
 ---@return CFrame  camera the server is told we look through
@@ -1952,316 +1550,6 @@ function Reicht.Combat.RestoreScope()
         rawset(cfg, "DelayTime", saved[2])
     end
     table.clear(Reicht.Combat.ScopeSaved)
-end
-
-Reicht.Combat.AutoSaved = setmetatable({}, { __mode = "k" })
-
-function Reicht.Combat.ApplyFullAuto()
-    local weapon = Reicht.Combat.Shooter()
-    local cfg = weapon and weapon.Config
-    if type(cfg) ~= "table" or rawget(cfg, "FullAuto") == true then return end
-    if Reicht.Combat.AutoSaved[cfg] == nil then
-        Reicht.Combat.AutoSaved[cfg] = rawget(cfg, "FullAuto") or false
-    end
-    rawset(cfg, "FullAuto", true)
-end
-
-function Reicht.Combat.RestoreFullAuto()
-    for cfg, saved in pairs(Reicht.Combat.AutoSaved) do
-        rawset(cfg, "FullAuto", saved)
-    end
-    table.clear(Reicht.Combat.AutoSaved)
-end
-
-Reicht.Combat.ReloadSaved = setmetatable({}, { __mode = "k" })
-
-function Reicht.Combat.ApplyInstantReload()
-    local weapon = Reicht.Combat.Shooter()
-    local cfg = weapon and weapon.Config
-    if type(cfg) ~= "table" or rawget(cfg, "ReloadTime") == 0.01 then return end
-    if not Reicht.Combat.ReloadSaved[cfg] then
-        Reicht.Combat.ReloadSaved[cfg] = {
-            rawget(cfg, "ReloadTime"),
-            rawget(cfg, "ReloadFinishTime"),
-            rawget(cfg, "ReloadTimeEmpty"),
-        }
-    end
-    rawset(cfg, "ReloadTime", 0.01)
-    rawset(cfg, "ReloadFinishTime", 0.01)
-    rawset(cfg, "ReloadTimeEmpty", 0.01)
-end
-
-function Reicht.Combat.RestoreInstantReload()
-    for cfg, saved in pairs(Reicht.Combat.ReloadSaved) do
-        rawset(cfg, "ReloadTime", saved[1])
-        rawset(cfg, "ReloadFinishTime", saved[2])
-        rawset(cfg, "ReloadTimeEmpty", saved[3])
-    end
-    table.clear(Reicht.Combat.ReloadSaved)
-end
-
-Reicht.Combat.AntiAimHooked = false
-Reicht.Combat.OriginalPitchYawInvoke = nil
-
-function Reicht.Combat.ApplyAntiAim()
-    if Reicht.Combat.AntiAimHooked then return end
-    local service = Reicht.GameLib.Service.EntityService
-    local py = service and service.Common and service.Common.Network and service.Common.Network.Packets
-        and service.Common.Network.Packets.queries and service.Common.Network.Packets.queries.PitchYaw
-    if not py or type(py.invoke) ~= "function" then return end
-
-    Reicht.Combat.OriginalPitchYawInvoke = py.invoke
-    Reicht.Combat.AntiAimHooked = true
-
-    py.invoke = function(data)
-        if Reicht.Options.AntiAim and type(data) == "table" and data.Yaw ~= nil then
-            local mode = Reicht.Options.AntiAimMode or "Spinbot"
-            if mode == "Spinbot" then
-                local speed = tonumber(Reicht.Options.SpinSpeed) or 1080
-                data.Yaw = (os.clock() * speed) % 360
-                data.Pitch = -85
-            elseif mode == "Jitter" then
-                data.Yaw = ((data.Yaw or 0) + (math.random(0, 1) == 0 and 90 or -90)) % 360
-                data.Pitch = math.random(-85, 85)
-            end
-        end
-        return Reicht.Combat.OriginalPitchYawInvoke(data)
-    end
-end
-
-function Reicht.Combat.RestoreAntiAim()
-    if not Reicht.Combat.AntiAimHooked then return end
-    local service = Reicht.GameLib.Service.EntityService
-    local py = service and service.Common and service.Common.Network and service.Common.Network.Packets
-        and service.Common.Network.Packets.queries and service.Common.Network.Packets.queries.PitchYaw
-    if py and Reicht.Combat.OriginalPitchYawInvoke then
-        py.invoke = Reicht.Combat.OriginalPitchYawInvoke
-    end
-    Reicht.Combat.OriginalPitchYawInvoke = nil
-    Reicht.Combat.AntiAimHooked = false
-end
-
-function Reicht.Combat.StepKnifeAura()
-    if not Reicht.Options.KnifeAura then return end
-    local combat = Reicht.GameLib.Service.CombatService
-    local localEnt = Reicht.Entity.Local()
-    if not combat or not localEnt then return end
-
-    local cont = combat.GetCombatDataContainer(localEnt)
-    local secondary = cont and cont.Weapons and cont.Weapons["Secondary"]
-    local melee = secondary and secondary._Meleeable
-    if not melee or not melee:CanMelee() or not melee:CanMeleeNow() then return end
-
-    local myRoot = Reicht.Entity.Root(localEnt)
-    local myPos = myRoot and myRoot.Position
-    if not myPos then return end
-
-    local range = tonumber(Reicht.Options.KnifeAuraRange) or 16
-    local foundEnemy = false
-
-    for _, entity in pairs(Reicht.Entity.List()) do
-        if Reicht.Entity.IsLocal(entity) or Reicht.Entity.Friendly(entity) then continue end
-        local health = Reicht.Entity.Health(entity)
-        if health <= 0 then continue end
-        local root = Reicht.Entity.Root(entity)
-        if root and (root.Position - myPos).Magnitude <= range then
-            foundEnemy = true
-            break
-        end
-    end
-
-    if foundEnemy then
-        pcall(melee.Melee, melee)
-    end
-end
-
-Reicht.Combat.ScopeOverlaySaved = nil
-
-function Reicht.Combat.ApplyNoScopeOverlay()
-    local settingsMod = Reicht.GameLib.Settings
-    local cfg = Reicht.GameLib.Config and Reicht.GameLib.Config.Config
-    if settingsMod and settingsMod.ScopeOverlay and Reicht.Combat.ScopeOverlaySaved == nil then
-        Reicht.Combat.ScopeOverlaySaved = settingsMod.ScopeOverlay.Value
-        settingsMod.ScopeOverlay.Value = false
-    end
-    if cfg then
-        cfg.KeepCrosshairInAim = true
-    end
-end
-
-function Reicht.Combat.RestoreNoScopeOverlay()
-    local settingsMod = Reicht.GameLib.Settings
-    if settingsMod and settingsMod.ScopeOverlay and Reicht.Combat.ScopeOverlaySaved ~= nil then
-        settingsMod.ScopeOverlay.Value = Reicht.Combat.ScopeOverlaySaved
-        Reicht.Combat.ScopeOverlaySaved = nil
-    end
-end
-
-Reicht.Combat.FlashSaved = nil
-Reicht.Combat.SmokeSaved = nil
-
-function Reicht.Combat.ApplyAntiFlash()
-    local effects = Reicht.GameLib.Effects
-    local flash = effects and effects.Flash
-    if not (flash and hookfunction and not Reicht.Combat.FlashSaved) then return end
-    Reicht.Combat.FlashSaved = {
-        Flash = flash.Flash,
-        GetAlpha = flash.GetFlashingAlpha,
-    }
-    hookfunction(flash.Flash, function() end)
-    hookfunction(flash.GetFlashingAlpha, function() return 0 end)
-    local Lighting = game:GetService("Lighting")
-    if Lighting then Lighting.ExposureCompensation = 0 end
-end
-
-function Reicht.Combat.RestoreAntiFlash()
-    if not Reicht.Combat.FlashSaved then return end
-    local effects = Reicht.GameLib.Effects
-    local flash = effects and effects.Flash
-    if flash and restorefunction then
-        pcall(restorefunction, flash.Flash)
-        pcall(restorefunction, flash.GetFlashingAlpha)
-    end
-    Reicht.Combat.FlashSaved = nil
-end
-
-function Reicht.Combat.ApplyAntiSmoke()
-    local effects = Reicht.GameLib.Effects
-    local smoke = effects and effects.Smoke
-    if not (smoke and hookfunction and not Reicht.Combat.SmokeSaved) then return end
-    Reicht.Combat.SmokeSaved = {
-        InSmoke = smoke.InSmoke,
-        PosInSmoke = smoke.PosInSmoke,
-    }
-    hookfunction(smoke.InSmoke, function() return false end)
-    hookfunction(smoke.PosInSmoke, function() return false end)
-end
-
-function Reicht.Combat.RestoreAntiSmoke()
-    if not Reicht.Combat.SmokeSaved then return end
-    local effects = Reicht.GameLib.Effects
-    local smoke = effects and effects.Smoke
-    if smoke and restorefunction then
-        pcall(restorefunction, smoke.InSmoke)
-        pcall(restorefunction, smoke.PosInSmoke)
-    end
-    Reicht.Combat.SmokeSaved = nil
-end
-
-Reicht.Combat.AmmoSaved = setmetatable({}, { __mode = "k" })
-
-function Reicht.Combat.ApplyInfiniteAmmo()
-    local weapon = Reicht.Combat.Shooter()
-    local ammo = weapon and weapon._Ammo
-    if type(ammo) ~= "table" or rawget(ammo, "InfAmmo") == true then return end
-    if not Reicht.Combat.AmmoSaved[ammo] then
-        Reicht.Combat.AmmoSaved[ammo] = { rawget(ammo, "InfAmmo"), rawget(ammo, "InfAmmoStore") }
-    end
-    rawset(ammo, "InfAmmo", true)
-    rawset(ammo, "InfAmmoStore", true)
-end
-
-function Reicht.Combat.RestoreInfiniteAmmo()
-    for ammo, saved in pairs(Reicht.Combat.AmmoSaved) do
-        rawset(ammo, "InfAmmo", saved[1])
-        rawset(ammo, "InfAmmoStore", saved[2])
-    end
-    table.clear(Reicht.Combat.AmmoSaved)
-end
-
-function Reicht.Combat.ApplyAsyncPatch()
-    if Reicht.Combat.AsyncPatched then return end
-    local asyncMod = ReplicatedStorage:FindFirstChild("Common") and ReplicatedStorage.Common:FindFirstChild("AsyncService")
-    local asyncRaycast = asyncMod and asyncMod:FindFirstChild("AsyncRaycast")
-    if not asyncRaycast then return end
-    local ok, rayLib = pcall(require, asyncRaycast)
-    if not (ok and type(rayLib) == "table") then return end
-
-    Reicht.Combat.AsyncPatched = true
-    Reicht.Combat.OrigAsyncRaycast = rayLib.Raycast
-    rayLib.Raycast = function(origin, dir, params, ...)
-        local succ, res = pcall(Reicht.Combat.OrigAsyncRaycast, origin, dir, params, ...)
-        if succ and res ~= nil then return res end
-        return Workspace:Raycast(origin, dir, params)
-    end
-end
-
-function Reicht.Combat.RestoreAsyncPatch()
-    if not Reicht.Combat.AsyncPatched then return end
-    local asyncMod = ReplicatedStorage:FindFirstChild("Common") and ReplicatedStorage.Common:FindFirstChild("AsyncService")
-    local asyncRaycast = asyncMod and asyncMod:FindFirstChild("AsyncRaycast")
-    if asyncRaycast and Reicht.Combat.OrigAsyncRaycast then
-        local ok, rayLib = pcall(require, asyncRaycast)
-        if ok and type(rayLib) == "table" then
-            rayLib.Raycast = Reicht.Combat.OrigAsyncRaycast
-        end
-    end
-    Reicht.Combat.OrigAsyncRaycast = nil
-    Reicht.Combat.AsyncPatched = false
-end
-
-Reicht.Combat.HitboxSaved = {}
-
-function Reicht.Combat.ApplyHitbox()
-    if not Reicht.Options.HitboxExpander then
-        if next(Reicht.Combat.HitboxSaved) then
-            Reicht.Combat.RestoreHitbox()
-        end
-        return
-    end
-
-    local size = math.clamp(tonumber(Reicht.Options.HitboxSize) or 8, 2, 20)
-    local targetSize = Vector3.new(size, size, size)
-    local partChoice = Reicht.Options.HitboxPart or "Head"
-    local trans = tonumber(Reicht.Options.HitboxTransparency) or 0.6
-
-    for _, entity in pairs(Reicht.Entity.List()) do
-        if Reicht.Entity.IsLocal(entity) or Reicht.Entity.Friendly(entity) then continue end
-        local health = Reicht.Entity.Health(entity)
-        if health <= 0 then continue end
-        local char = Reicht.Entity.Character(entity)
-        if not char then continue end
-
-        local col = char:FindFirstChild("Collider")
-        local partsToExpand = {}
-
-        if partChoice == "Head" or partChoice == "Both" then
-            local head = (col and col:FindFirstChild("Head")) or char:FindFirstChild("Head")
-            if head and head:IsA("BasePart") then partsToExpand[#partsToExpand + 1] = head end
-        end
-
-        if partChoice == "RootPart" or partChoice == "Both" then
-            local hrp = (col and col:FindFirstChild("HumanoidRootPart")) or char:FindFirstChild("HumanoidRootPart")
-            if hrp and hrp:IsA("BasePart") then partsToExpand[#partsToExpand + 1] = hrp end
-        end
-
-        for _, part in ipairs(partsToExpand) do
-            if not Reicht.Combat.HitboxSaved[part] then
-                Reicht.Combat.HitboxSaved[part] = {
-                    Size = part.Size,
-                    Transparency = part.Transparency,
-                    CanCollide = part.CanCollide,
-                    CanQuery = part.CanQuery,
-                }
-            end
-            part.Size = targetSize
-            part.CanCollide = false
-            part.CanQuery = true
-            part.Transparency = trans
-        end
-    end
-end
-
-function Reicht.Combat.RestoreHitbox()
-    for part, saved in pairs(Reicht.Combat.HitboxSaved) do
-        if part and part.Parent then
-            part.Size = saved.Size
-            part.Transparency = saved.Transparency
-            part.CanCollide = saved.CanCollide
-            part.CanQuery = saved.CanQuery
-        end
-    end
-    table.clear(Reicht.Combat.HitboxSaved)
 end
 
 ---@return table  { Drawing = circle }, or { Frame = ring } as a Gui circle when Drawing is missing
@@ -2391,53 +1679,14 @@ function Reicht.Combat.Patches()
     elseif next(Reicht.Combat.ScopeSaved) then
         Reicht.Combat.RestoreScope()
     end
-    if opts.FullAuto then
-        Reicht.Combat.ApplyFullAuto()
-    elseif next(Reicht.Combat.AutoSaved) then
-        Reicht.Combat.RestoreFullAuto()
-    end
-    if opts.InstantReload then
-        Reicht.Combat.ApplyInstantReload()
-    elseif next(Reicht.Combat.ReloadSaved) then
-        Reicht.Combat.RestoreInstantReload()
-    end
-    if opts.InfiniteAmmo then
-        Reicht.Combat.ApplyInfiniteAmmo()
-    elseif next(Reicht.Combat.AmmoSaved) then
-        Reicht.Combat.RestoreInfiniteAmmo()
-    end
-    Reicht.Combat.ApplyHitbox()
-    if opts.AntiFlash then
-        Reicht.Combat.ApplyAntiFlash()
-    elseif Reicht.Combat.FlashSaved then
-        Reicht.Combat.RestoreAntiFlash()
-    end
-    if opts.AntiSmoke then
-        Reicht.Combat.ApplyAntiSmoke()
-    elseif Reicht.Combat.SmokeSaved then
-        Reicht.Combat.RestoreAntiSmoke()
-    end
-    if opts.AntiAim then
-        Reicht.Combat.ApplyAntiAim()
-    elseif Reicht.Combat.AntiAimHooked then
-        Reicht.Combat.RestoreAntiAim()
-    end
-    if opts.NoScopeOverlay then
-        Reicht.Combat.ApplyNoScopeOverlay()
-    elseif Reicht.Combat.ScopeOverlaySaved ~= nil then
-        Reicht.Combat.RestoreNoScopeOverlay()
-    end
-    Reicht.Combat.ApplyAsyncPatch()
 
-    if Reicht.Combat.SilentActive() or opts.HitboxExpander or opts.Ragebot or opts.TriggerBot then
+    if Reicht.Combat.SilentActive() then
         Reicht.Combat.ApplySilent()
         Reicht.Combat.ApplyLook()
-        Reicht.Combat.ApplyActionHook()
         return
     end
     if next(Reicht.Combat.SilentSaved) then Reicht.Combat.RestoreSilent() end
     Reicht.Combat.RestoreLook()
-    Reicht.Combat.RestoreActionHook()
 end
 
 function Reicht.Combat.Aim(mode)
@@ -2451,7 +1700,6 @@ end
 
 function Reicht.Combat.Step()
     Reicht.Combat.Patches()
-    Reicht.Combat.StepKnifeAura()
     if not Reicht.Combat.Active() then
         if Reicht.Combat.State ~= "Idle" then Reicht.Combat.Stop() end
         return
@@ -2486,11 +1734,6 @@ function Reicht.Combat.Rest()
     local undo = {
         Reicht.Combat.Stop, Reicht.Combat.RestoreRecoil, Reicht.Combat.RestoreSpread,
         Reicht.Combat.RestoreScope, Reicht.Combat.RestoreSilent, Reicht.Combat.RestoreLook,
-        Reicht.Combat.RestoreFullAuto, Reicht.Combat.RestoreInstantReload,
-        Reicht.Combat.RestoreInfiniteAmmo, Reicht.Combat.RestoreHitbox,
-        Reicht.Combat.RestoreAntiFlash, Reicht.Combat.RestoreAntiSmoke,
-        Reicht.Combat.RestoreAntiAim, Reicht.Combat.RestoreNoScopeOverlay,
-        Reicht.Combat.RestoreActionHook, Reicht.Combat.RestoreAsyncPatch,
     }
     for _, restore in ipairs(undo) do
         Util.Try("combat restore", restore)
@@ -2767,6 +2010,7 @@ function Reicht.UI.BuildCombat(window)
         Description = T("Locks onto the enemy nearest your crosshair", "ล็อคศัตรูที่ใกล้เป้าเล็งที่สุด"),
     }):AddKeyPicker("AimbotKey", { Default = "MB2", Mode = "Hold" })
     aim:AddDropdown("AimPriority", { Text = T("Target priority", "เลือกเป้าตาม"), Values = { "Crosshair", "Mouse", "Distance", "Health" }, Default = "Crosshair" })
+    aim:AddSlider("AimMaxDistance", { Text = T("Max aim distance", "ระยะเล็งสูงสุด"), Min = 50, Max = 2000, Default = 1000, Suffix = "m" })
     aim:AddDropdown("AimBone", { Text = T("Aim part", "จุดเล็ง"), Values = { "Head", "Body", "Arm", "Leg" }, Default = "Head" })
     aim:AddSlider("AimSmooth", { Text = T("Smoothness", "ความนุ่ม"), Min = 1, Max = 20, Default = 1, Rounding = 0 })
     aim:AddSlider("AimPrediction", { Text = T("Prediction", "เล็งดักหน้า"), Min = 0, Max = 200, Default = 60, Suffix = "ms", Rounding = 0 })
@@ -2775,38 +2019,20 @@ function Reicht.UI.BuildCombat(window)
     aim:AddCheckbox("AimWallCheck", { Text = T("Visible only", "เฉพาะที่มองเห็น"), Default = true })
     aim:AddCheckbox("AimTeamCheck", { Text = T("Team check", "เช็คทีม"), Default = true })
 
-    local hitbox = tab:AddLeftGroupbox(T("Hitbox Expander", "ขยายฮิตบ็อกซ์"), "shield")
-    hitbox:AddToggle("HitboxExpander", { Text = T("Hitbox expander", "ขยายเป้าฮิตบ็อกซ์"), Description = T("Expands enemy body and head hitboxes for 100% easy hits", "ขยายขนาดหัวและตัวศัตรูให้ยิงโดนง่าย 100%") })
-    hitbox:AddDropdown("HitboxPart", { Text = T("Target part", "ส่วนที่ขยาย"), Values = { "Head", "RootPart", "Both" }, Default = "Head" })
-    hitbox:AddSlider("HitboxSize", { Text = T("Hitbox size", "ขนาดฮิตบ็อกซ์"), Min = 2, Max = 20, Default = 8, Suffix = " studs" })
-    hitbox:AddSlider("HitboxTransparency", { Text = T("Transparency", "ความโปร่งใส"), Min = 0.1, Max = 1, Default = 0.6, Float = 0.05 })
-
-    local melee = tab:AddLeftGroupbox(T("Melee Aura", "ออร่ามีด"), "swords")
-    melee:AddToggle("KnifeAura", { Text = T("Knife aura", "ออร่าฟันมีดอัตโนมัติ"), Description = T("Swings knife automatically when enemies are in range", "ฟันมีดใส่อัตโนมัติเมื่อศัตรูเข้าใกล้") })
-    melee:AddSlider("KnifeAuraRange", { Text = T("Aura range", "ระยะออร่า"), Min = 5, Max = 25, Default = 16, Suffix = " studs" })
-
-    local rage = tab:AddRightGroupbox(T("Rage & Desync", "เรจและดีซิงก์"), "bomb")
+    local rage = tab:AddRightGroupbox(T("Rage", "เรจ"), "bomb")
     rage:AddToggle("Ragebot", { Text = T("Ragebot", "เรจบอท"), Description = T("Shoots every visible enemy on its own, view stays still", "ยิงศัตรูทุกตัวที่มองเห็นเอง กล้องไม่ขยับ") })
         :AddKeyPicker("RagebotKey", { Default = "None", Mode = "Toggle" })
     rage:AddToggle("SilentAim", { Text = T("Silent aim", "ไซเลนต์เอม"), Description = T("Shots land on the target inside the FOV, your view never moves", "กระสุนเข้าเป้าในวง FOV กล้องไม่ขยับเลย") })
         :AddKeyPicker("SilentAimKey", { Default = "None", Mode = "Toggle" })
     rage:AddSlider("HitChance", { Text = T("Hit chance", "โอกาสยิงโดน"), Min = 0, Max = 100, Default = 100, Suffix = "%", Rounding = 0 })
     rage:AddSlider("HeadChance", { Text = T("Headshot chance", "โอกาสเข้าหัว"), Min = 0, Max = 100, Default = 100, Suffix = "%", Rounding = 0 })
-    rage:AddToggle("AntiAim", { Text = T("Anti-Aim (Spinbot)", "แอนตี้เอม สปินบอท"), Description = T("Spoofs pitch and yaw packet to spin wildly on enemy screens", "หลอกมุมหมุนบนจอศัตรูให้หมุนติ้ว ป้องกันการโดนยิงหัว") })
-    rage:AddDropdown("AntiAimMode", { Text = T("Anti-Aim mode", "โหมดแอนตี้เอม"), Values = { "Spinbot", "Jitter" }, Default = "Spinbot" })
-    rage:AddSlider("SpinSpeed", { Text = T("Spin speed", "ความเร็วหมุน"), Min = 360, Max = 2160, Default = 1080, Suffix = "°/s" })
+    rage:AddToggle("InstantScope", { Text = T("Fast scope", "เปิดสโคปเร็ว"), Description = T("Cuts the wait before the scope is ready", "ลดเวลารอก่อนสโคปพร้อมยิง") })
 
-    local fire = tab:AddRightGroupbox(T("Weapon Mods", "ม็อดอาวุธ"), "zap")
-    fire:AddToggle("FullAuto", { Text = T("Full auto", "ยิงรัวอัตโนมัติ"), Description = T("Turns weapons into automatic fire, removes scope pause", "ยิงต่อเนื่องอัตโนมัติ ไม่ดีดหลุดสโคป") })
-    fire:AddToggle("InstantReload", { Text = T("Fast reload", "รีโหลดเร็วพิเศษ"), Description = T("Cuts reload delay to 0 seconds", "ลดเวลารีโหลดกระสุนเหลือ 0 วิ") })
-    fire:AddToggle("FastSwitch", { Text = T("Fast switch", "สลับอาวุธยกเลิกอนิเมชัน"), Description = T("Quick-switches knife and sniper to cancel bolt-action animation", "สลับมีดแล้วกลับสไนเปอร์ทันทีเพื่อข้ามอนิเมชันชักกระสุน") })
-    fire:AddToggle("InstantScope", { Text = T("Fast scope", "เปิดสโคปเร็ว"), Description = T("Cuts the wait before the scope is ready", "ลดเวลารอก่อนสโคปพร้อมยิง") })
-    fire:AddToggle("NoScopeOverlay", { Text = T("No scope overlay", "ปิดขอบดำสโคป"), Description = T("Removes black sniper scope mask, keeps crosshair visible in aim", "ลบขอบดำสโคปออก มองเห็นเต็มจอและคงเป้าเล็งไว้") })
-    fire:AddToggle("InfiniteAmmo", { Text = T("Infinite ammo", "กระสุนไม่จำกัด"), Description = T("Freezes ammo clip, never run out of bullets", "กระสุนไม่ลด ไม่ต้องรีโหลด") })
-    fire:AddToggle("NoSpread", { Text = T("No spread", "ยิงไม่กระจาย"), Description = T("Shots stay accurate while moving or jumping", "ยิงแม่นแม้ตอนเดินหรือกระโดด") })
-    fire:AddToggle("NoRecoil", { Text = T("No recoil", "ไม่มีแรงถีบ"), Description = T("Camera no longer kicks when firing", "กล้องไม่เด้งตอนยิง") })
+    local fire = tab:AddRightGroupbox(T("Firing", "การยิง"), "swords")
     fire:AddToggle("TriggerBot", { Text = T("Trigger bot", "ยิงอัตโนมัติ"), Description = T("Fires the moment your crosshair is on an enemy", "ยิงทันทีเมื่อเป้าเล็งทับศัตรู") })
         :AddKeyPicker("TriggerBotKey", { Default = "None", Mode = "Toggle" })
+    fire:AddToggle("NoSpread", { Text = T("No spread", "ยิงไม่กระจาย"), Description = T("Shots stay accurate while moving or jumping", "ยิงแม่นแม้ตอนเดินหรือกระโดด") })
+    fire:AddToggle("NoRecoil", { Text = T("No recoil", "ไม่มีแรงถีบ"), Description = T("Camera no longer kicks when firing", "กล้องไม่เด้งตอนยิง") })
 
     Reicht.UI.GuardSilent()
 end
@@ -2819,23 +2045,10 @@ function Reicht.UI.BuildPlayer(window)
     util:AddToggle("FastRespawn", { Text = T("Fast respawn", "เกิดใหม่เร็ว"), Description = T("Back in the fight the moment you die", "กลับเข้าสนามทันทีที่ตาย") })
     util:AddToggle("AutoJoin", { Text = T("Auto join round", "เข้ารอบอัตโนมัติ"), Description = T("Joins the next round from the lobby by itself", "เข้ารอบถัดไปจากล็อบบี้เอง") })
     Library.Compat.NeedCap("AutoJoin", "Touch")
-    util:AddToggle("AutoFlag", { Text = T("Auto pick flag", "เก็บธงอัตโนมัติ"), Description = T("Grabs flags instantly in CTF rounds", "เก็บธงทันทีในรอบชิงธง") })
     util:AddToggle("AntiAfk", { Text = T("Anti AFK", "กันหลุด AFK"), Callback = Reicht.UI.StartStop(Reicht.Player.AntiAfk) })
-
-    local vision = tab:AddLeftGroupbox(T("Vision Mods", "การมองเห็นพิเศษ"), "eye")
-    vision:AddToggle("AntiFlash", { Text = T("Anti flash", "กันแฟลชขาว"), Description = T("Immune to flashbang blindness", "จอไม่ขาวเมื่อโดนระเบิดแฟลช") })
-    vision:AddToggle("AntiSmoke", { Text = T("Anti smoke", "มองทะลุควัน"), Description = T("See and target clearly through smoke", "มองและเล็งทะลุหมอกควันได้ 100%") })
 
     local move = tab:AddRightGroupbox(T("Movement", "การเคลื่อนที่"), "zap")
     move:AddToggle("InfiniteDash", { Text = T("Infinite dash", "พุ่งไม่จำกัด"), Description = T("Dash again without waiting (FFA/TDM)", "พุ่งซ้ำได้ไม่ต้องรอ (FFA/TDM)") })
-    move:AddToggle("InfiniteAirJump", { Text = T("Infinite air jump", "กระโดดกลางอากาศไม่จำกัด"), Description = T("Jump continuously in mid-air", "กระโดดบนอากาศซ้ำได้ไม่จำกัด") })
-    move:AddToggle("AutoBhop", { Text = T("Auto bunny hop", "กระโดดต่อเนื่อง"), Description = T("Jumps automatically while moving", "กระโดดต่อเนื่องอัตโนมัติขณะเดิน") })
-    move:AddSlider("SpeedMultiplier", { Text = T("Speed multiplier", "ตัวคูณความเร็ว"), Min = 1, Max = 3, Default = 1, Float = 0.1, Suffix = "x" })
-    move:AddSlider("CustomFov", { Text = T("Camera FOV", "มุมมองกล้อง FOV"), Min = 70, Max = 120, Default = 70, Suffix = "°" })
-
-    local wall = tab:AddRightGroupbox(T("Wallhack & Chams", "มองทะลุกำแพง"), "shield")
-    wall:AddToggle("EnemyChams", { Text = T("Enemy chams (X-Ray)", "แชมส์ศัตรู X-Ray"), Description = T("Engine-level highlight glowing through walls", "เรืองแสงสีแดงทะลุกำแพงด้วยเอนจินเกม") })
-    wall:AddToggle("AntiPeekBypass", { Text = T("Bypass occlusion", "ปิดการซ่อนตัวหลังกำแพง"), Description = T("Prevents the game from hiding enemies behind walls", "ไม่ให้เกมซ่อนโมเดลศัตรูหลังสิ่งกีดขวาง") })
 end
 
 Reicht.UI.SkinKinds = {
@@ -2966,14 +2179,11 @@ function Reicht.UI.BuildEconomy(window)
     window:AddTabSection(T("Economy", "เศรษฐกิจ"))
     local tab = window:AddTab(T("Economy", "เศรษฐกิจ"), "coin", T("Cases, selling, quests", "เปิดกล่อง ขาย เควสต์"))
 
-    local cases = tab:AddLeftGroupbox(T("Cases & Codes", "กล่องสุ่มและโค้ด"), "qblock")
+    local cases = tab:AddLeftGroupbox(T("Cases", "กล่องสุ่ม"), "qblock")
     cases:AddToggle("AutoOpenCases", { Text = T("Auto open owned cases", "เปิดกล่องที่มีอัตโนมัติ") })
     cases:AddSlider("OpenCount", { Text = T("Open per case", "เปิดต่อกล่อง"), Min = 1, Max = 10, Default = 1 })
     cases:AddButton({ Text = T("Open All Now", "เปิดทั้งหมดตอนนี้"), Style = "Primary", Func = Reicht.UI.Detach(function()
         Reicht.UI.Notice(T("Cases", "กล่องสุ่ม"), Reicht.Shop.OpenAllNow(), "Coin")
-    end) })
-    cases:AddButton({ Text = T("Redeem All Codes", "แลกโค้ดทั้งหมด"), Style = "Success", Func = Reicht.UI.Detach(function()
-        Reicht.UI.Notice(T("Codes", "โค้ด"), Reicht.Code.RedeemAll(), "Success")
     end) })
 
     local sell = tab:AddRightGroupbox(T("Sell", "ขาย"), "shop")
@@ -3088,20 +2298,11 @@ function Reicht.UI.Build()
         window:AddSettingsTab()
     end)
 
-    for _, key in ipairs({
-        "AimFov", "AimBone", "AimPriority", "AimMaxDistance",
+    for _, key in ipairs({ "AimFov", "AimBone", "AimPriority", "AimMaxDistance",
         "Aimbot", "AimSmooth", "AimPrediction", "ShowFov", "AimWallCheck", "AimTeamCheck",
-        "SilentAim", "Ragebot", "InstantScope", "FullAuto", "InstantReload",
-        "HitChance", "HeadChance", "TriggerBot", "NoRecoil", "NoSpread",
-        "AntiAim", "AntiAimMode", "SpinSpeed", "KnifeAura", "KnifeAuraRange",
-        "FastSwitch", "NoScopeOverlay",
-        "FastRespawn", "AutoJoin", "AutoFlag", "AntiAfk",
-        "InfiniteDash", "InfiniteAirJump", "AutoBhop", "SpeedMultiplier", "CustomFov",
-        "AntiFlash", "AntiSmoke", "EnemyChams", "AntiPeekBypass",
-        "InfiniteAmmo", "HitboxExpander", "HitboxPart", "HitboxSize", "HitboxTransparency",
-        "SkinChanger", "OpenCount", "MaxSellPrice", "KeepPerRarity",
-        "AutoOpenCases", "AutoSell", "AutoClaimQuest",
-    }) do
+        "SilentAim", "Ragebot", "InstantScope", "HitChance", "HeadChance", "TriggerBot", "NoRecoil", "NoSpread",
+        "FastRespawn", "InfiniteDash", "SkinChanger", "OpenCount", "MaxSellPrice", "KeepPerRarity",
+        "AutoOpenCases", "AutoSell", "AutoClaimQuest" }) do
         local widget = Library.Options[key]
         if widget then Util.Try("bind " .. key, Reicht.UI.Bind, widget, key) end
     end
@@ -3160,7 +2361,6 @@ function Reicht.Boot()
     Reicht.Scheduler.Every("Auto Open Cases", Reicht.Config.EconomyInterval, Reicht.Shop.Step, { "AutoOpenCases" })
     Reicht.Scheduler.Every("Auto Sell", Reicht.Config.EconomyInterval, Reicht.Sell.Step, { "AutoSell" })
     Reicht.Scheduler.Every("Auto Claim Quests", Reicht.Config.EconomyInterval, Reicht.Collect.Step, { "AutoClaimQuest" })
-    Reicht.Scheduler.Every("Auto Flag", 0.2, Reicht.Flag.Step, { "AutoFlag" })
     Util.Try("scheduler", Reicht.Scheduler.Boot)
     pcall(Reicht.Banner.Step, "Combat + economy online")
     pcall(Reicht.Banner.Ready)
@@ -3171,8 +2371,6 @@ function Reicht:Unload()
     for key, value in pairs(self.Options) do
         if value == true then self.Options[key] = false end
     end
-    Reicht.Movement.Restore()
-    Reicht.Esp.Restore()
     Reicht.Combat.Unload()
     Reicht.Skin.Restore()
     for _, connection in ipairs(self.State.Connections) do
