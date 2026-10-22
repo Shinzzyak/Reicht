@@ -70,6 +70,48 @@ def resub(text, pattern, repl, where, required=True, flags=0, quiet=False):
     return new_text
 
 
+def add_press_mode(text):
+    """Teach the keybind picker a fourth mode, `Press`.
+
+    The picker upstream ships Toggle / Hold / Always. `Press` fires the callback
+    once on key-down and ignores the release -- the mode Draconic's own menu uses
+    for one-shot actions (lag switch, emote dash). Patched at build time so an
+    upstream ui.lua refresh cannot silently drop it.
+    """
+    text = sub(
+        text,
+        'Values = { "Toggle", "Hold", "Always" }',
+        'Values = { "Toggle", "Hold", "Press", "Always" }',
+        "ui.lua press mode: mode menu",
+    )
+    text = resub(
+        text,
+        r'(if self\.Mode == "Always" then\n\s*return\n\s*end\n)(\s*)(if self\.Mode == "Hold" then\n\s*self\.Held = down)',
+        lambda m: (m.group(1) + m.group(2)
+                   + 'if self.Mode == "Press" then\n'
+                   + m.group(2) + '    self.Held = down\n'
+                   + m.group(2) + '    if not down then\n'
+                   + m.group(2) + '        return\n'
+                   + m.group(2) + '    end\n'
+                   + m.group(2) + '    Util.Try(self.Callback, true)\n'
+                   + m.group(2) + '    return\n'
+                   + m.group(2) + 'end\n'
+                   + m.group(2) + m.group(3)),
+        "ui.lua press mode: KeyPicker:Press",
+    )
+    text = resub(
+        text,
+        r'(function KeyPicker:GetState\(\)\n\s*if self\.Mode == "Always" then\n\s*return true\n\s*end\n)(\s*)(if self\.Mode == "Hold" then\n\s*return self\.Held\n\s*end)',
+        lambda m: (m.group(1) + m.group(2)
+                   + 'if self.Mode == "Press" then\n'
+                   + m.group(2) + '    return self.Held\n'
+                   + m.group(2) + 'end\n'
+                   + m.group(2) + m.group(3)),
+        "ui.lua press mode: KeyPicker:GetState",
+    )
+    return text
+
+
 def strip_attribution(text):
     # Order matters: the repo-owner string contains the namespace as a prefix.
     text = text.replace("xDTaraZz", "Shinzzyak")
@@ -418,7 +460,7 @@ def main():
     open(os.path.join(stage, "loader.lua"), "w", encoding="utf-8").write(
         build_loader(open(upstream_loader, encoding="utf-8").read(), keep, extra_table))
     open(os.path.join(stage, "ui.lua"), "w", encoding="utf-8").write(
-        strip_attribution(open(ui_path, encoding="utf-8").read()))
+        add_press_mode(strip_attribution(open(ui_path, encoding="utf-8").read())))
 
     built = []
     for name in upstream_games:

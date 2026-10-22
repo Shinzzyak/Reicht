@@ -1,7 +1,9 @@
 if not game:IsLoaded() then
 game.Loaded:Wait()
 end
-if game.GameId ~= 9872472334 then
+local UNIVERSE_ID = 3647333358
+local PLACE_ID = 9872472334
+if game.GameId ~= UNIVERSE_ID and game.GameId ~= PLACE_ID and game.PlaceId ~= PLACE_ID then
 game:GetService("Players").LocalPlayer:Kick("Reicht: this script is for Evade only")
 return
 end
@@ -1680,29 +1682,29 @@ Rounding = 0,
 Callback = function(value) Workspace.Gravity = value end,
 })
 physicsGroup:AddToggle("EdgeTrimp", {
-Text = "Edge Trimp",
+Text = "Modify Edge Trimp",
 Default = false,
 Description = "Adds lift when you run off a ledge",
 Callback = function(on) State.Opt.EdgeTrimp = on end,
 })
 physicsGroup:AddSlider("TrimpDrop", {
-Text = "Trimp Min Drop",
+Text = "Falling Threshold",
 Min = 1,
 Max = 40,
-Default = 6,
+Default = 4.5,
 Rounding = 0,
 Callback = function(value) State.Opt.TrimpDrop = value end,
 })
 physicsGroup:AddSlider("TrimpHeight", {
-Text = "Trimp Height",
+Text = "Height Multiplier",
 Min = 0.5,
 Max = 4,
-Default = 1.4,
+Default = 1.5,
 Rounding = 1,
 Callback = function(value) State.Opt.TrimpHeight = value end,
 })
 physicsGroup:AddToggle("LagSwitch", {
-Text = "Lag Switch",
+Text = "Lag Switch (Button)",
 Default = false,
 Description = "Freezes the frame while moving",
 Callback = function(on)
@@ -1711,7 +1713,7 @@ if on then StartLagSwitch() else StopLagSwitch() end
 end,
 })
 physicsGroup:AddSlider("LagMs", {
-Text = "Lag Window",
+Text = "Delay MS",
 Min = 50,
 Max = 1000,
 Default = 200,
@@ -1734,7 +1736,7 @@ Alert("Emote dash fired.")
 end,
 })
 physicsGroup:AddInput("EmoteId", {
-Text = "Emote ID",
+Text = "Select Emote ID",
 Placeholder = "numeric id",
 Callback = function(text)
 local id = tonumber(text)
@@ -1743,25 +1745,25 @@ end,
 })
 local farmGroup = farmTab:AddLeftGroupbox("Automation", "tractor")
 farmGroup:AddToggle("TokenFarm", {
-Text = "Token Farm",
+Text = "Auto Farm Token",
 Default = false,
-Description = "Parks on a random player and revives them on a timer",
+Description = "Teleports under a random workspace.Players child and fires Revive",
 Callback = function(on)
 State.Opt.TokenFarm = on
 if on then StartTokenFarm() else StopTokenFarm() end
 end,
 })
 farmGroup:AddSlider("TokenDelay", {
-Text = "Revive Delay",
-Min = 0.5,
-Max = 6,
+Text = "Token Farm Delay",
+Min = 1,
+Max = 4,
 Default = 2,
 Rounding = 1,
 Suffix = " s",
 Callback = function(value) State.Opt.TokenDelay = value end,
 })
 farmGroup:AddToggle("TicketFarm", {
-Text = "Ticket Farm",
+Text = "Auto Farm Tickets",
 Default = false,
 Description = "Walks onto every spawned ticket",
 Callback = function(on)
@@ -1770,7 +1772,7 @@ if on then StartTicketFarm() else StopTicketFarm() end
 end,
 })
 farmGroup:AddToggle("PointFarm", {
-Text = "Point Farm",
+Text = "Auto Complete Objective",
 Default = false,
 Description = "Interact Dynamic on every live objective",
 Callback = function(on)
@@ -1792,7 +1794,7 @@ Alert(string.format("Objective fired %d", fired))
 end,
 })
 farmGroup:AddToggle("AutoAFK", {
-Text = "AFK Pad",
+Text = "AFK Farm",
 Default = false,
 Description = "Holds you on the hub's safe pad",
 Callback = function(on)
@@ -1852,7 +1854,7 @@ if on then StartAutoRespawn() else StopAutoRespawn() end
 end,
 })
 reviveGroup:AddToggle("AutoRevive", {
-Text = "Auto Revive",
+Text = "Self Revive (Button)",
 Default = false,
 Description = "Revives every tracked player on a loop",
 Callback = function(on)
@@ -1880,7 +1882,7 @@ end,
 })
 local voteGroup = autoTab:AddLeftGroupbox("Map Voting", "map")
 voteGroup:AddSlider("VoteMap", {
-Text = "Map Number",
+Text = "Map Section",
 Min = 1,
 Max = 12,
 Default = 1,
@@ -1888,7 +1890,7 @@ Rounding = 0,
 Callback = function(value) State.Opt.VoteMap = value end,
 })
 voteGroup:AddSlider("VoteMode", {
-Text = "Mode Number",
+Text = "Gamemode Section",
 Min = 1,
 Max = 8,
 Default = 1,
@@ -2004,7 +2006,7 @@ if not on then ClearTracers() end
 end,
 })
 tracerGroup:AddToggle("TracerBots", {
-Text = "Tracer Nextbots",
+Text = "Tracer Bots",
 Default = false,
 Callback = function(on)
 State.Opt.TracerBots = on
@@ -2037,7 +2039,7 @@ end
 end,
 })
 overlayGroup:AddToggle("ShowTimer", {
-Text = "Round Timer",
+Text = "Show Timer",
 Default = false,
 Callback = function(on)
 State.Opt.ShowTimer = on
@@ -2045,7 +2047,7 @@ if on then ShowTimer() else HideTimer() end
 end,
 })
 overlayGroup:AddToggle("ShowSpecial", {
-Text = "Special Round",
+Text = "Show Special Round",
 Default = false,
 Callback = function(on)
 State.Opt.ShowSpecial = on
@@ -2053,7 +2055,7 @@ if on then ShowSpecialRound() else HideSpecialRound() end
 end,
 })
 overlayGroup:AddToggle("NoVignette", {
-Text = "Remove Nextbot Vignette",
+Text = "Disable Vignette",
 Default = false,
 Callback = function(on)
 pcall(function()
@@ -2080,7 +2082,7 @@ end,
 })
 local toolGroup = miscTab:AddLeftGroupbox("Tool Patches", "wrench")
 toolGroup:AddButton({
-Text = "Infinite Range",
+Text = "Set to Infinite Range",
 Func = function()
 local touched = WalkToolData(SetInfiniteRange)
 Alert(string.format("Range patched on %d methods", touched))
@@ -2095,7 +2097,7 @@ end,
 })
 local clientGroup = miscTab:AddRightGroupbox("Client", "cpu")
 clientGroup:AddToggle("AntiAfk", {
-Text = "Anti AFK",
+Text = "Anti-AFK",
 Default = true,
 Callback = function(on) State.Opt.AntiAfk = on end,
 })
@@ -2113,7 +2115,7 @@ or "No movement tables in the GC (getgc unavailable)")
 end,
 })
 statGroup:AddSlider("OverrideSpeed", {
-Text = "Speed",
+Text = "Player Speed",
 Min = 0,
 Max = 300,
 Default = 16,
@@ -2129,7 +2131,7 @@ Rounding = 0,
 Callback = function(value) SetAdjustment("Friction", value) end,
 })
 statGroup:AddSlider("OverrideStrafe", {
-Text = "Air Strafe Acceleration",
+Text = "Player Strafe Acceleration",
 Min = 0,
 Max = 500,
 Default = 182,
@@ -2183,12 +2185,12 @@ end,
 })
 local emoteGroup = miscTab:AddLeftGroupbox("Emotes & Cosmetics", "shirt")
 local movableInput = emoteGroup:AddInput("MovableEmote", {
-Text = "Emote Name",
+Text = "Current Emote",
 Default = "",
 Placeholder = "Emote folder name",
 })
 emoteGroup:AddSlider("MovableSpeed", {
-Text = "Emote SpeedMult",
+Text = "Select Emote",
 Min = 0,
 Max = 10,
 Default = 1,
@@ -2452,13 +2454,13 @@ local extraTab = win:AddTab("Extras", "package", "Shop, emotes, anti nextbot, st
 local shopGroup = extraTab:AddLeftGroupbox("Shop", "shopping-cart")
 local shopNames = Parity.ShopItems()
 shopGroup:AddDropdown("ShopItem", {
-Text = "Item",
+Text = "Select Item",
 Values = shopNames,
 Default = 1,
 Callback = function(value) State.Opt.ShopItem = value end,
 })
 shopGroup:AddSlider("ShopAmount", {
-Text = "Amount",
+Text = "Purchase Amount",
 Min = 1,
 Max = 100,
 Default = 1,
@@ -2484,18 +2486,18 @@ end,
 local cosGroup = extraTab:AddRightGroupbox("Cosmetics", "shirt")
 local cosNames = Parity.CosmeticNames()
 cosGroup:AddDropdown("CosCurrent", {
-Text = "Replace",
+Text = "Current Cosmetic",
 Values = cosNames,
 Default = 1,
 Callback = function(value) State.Opt.CosCurrent = value end,
 })
 cosGroup:AddDropdown("CosTarget", {
-Text = "With",
+Text = "New Cosmetic",
 Values = cosNames,
 Default = 1,
 Callback = function(value) State.Opt.CosTarget = value end,
 })
-cosGroup:AddButton({
+swapGroup:AddButton({
 Text = "Swap Cosmetics",
 Func = function()
 local ok, why = Parity.SwapCosmetics(State.Opt.CosCurrent, State.Opt.CosTarget)
@@ -2514,13 +2516,13 @@ local emoteNames = {}
 for _, entry in ipairs(Parity.Emotes()) do table.insert(emoteNames, entry.Name) end
 if #emoteNames == 0 then emoteNames = { "None" } end
 emoteSwapGroup:AddDropdown("EmotePlay", {
-Text = "When playing",
+Text = "Current Emote ",
 Values = emoteNames,
 Default = 1,
 Callback = function(value) State.Opt.EmotePlay = value end,
 })
 emoteSwapGroup:AddDropdown("EmoteShow", {
-Text = "Show instead",
+Text = "Select Emote ",
 Values = emoteNames,
 Default = 1,
 Callback = function(value) State.Opt.EmoteShow = value end,
@@ -2550,26 +2552,26 @@ end,
 })
 local botGroup = extraTab:AddRightGroupbox("Anti Nextbot", "shield-off")
 botGroup:AddToggle("AntiBot", {
-Text = "Enabled",
+Text = "Anti Nextbot Toggle",
 Default = false,
 Callback = function(on) State.Opt.AntiBot = on end,
 })
 botGroup:AddDropdown("AntiBotMode", {
-Text = "Escape to",
-Values = { "Spawn", "Players", "Distance" },
+Text = "Anti Nextbot Teleport Type",
+Values = { "Spawn", "Players" },
 Default = 1,
 Callback = function(value) State.Opt.AntiBotMode = value end,
 })
 botGroup:AddSlider("AntiBotRange", {
-Text = "Trigger Range",
-Min = 10,
+Text = "Anti Nextbot Distance",
+Min = 5,
 Max = 200,
-Default = 50,
+Default = 15,
 Rounding = 0,
 Callback = function(value) State.Opt.AntiBotRange = value end,
 })
 botGroup:AddToggle("InvisWalk", {
-Text = "Walk Through Invisible Walls",
+Text = "Remove Invisible Walls",
 Default = false,
 Callback = function(on)
 local touched = Parity.InvisParts(not on)
@@ -2655,23 +2657,23 @@ Alert("Button removed")
 end,
 })
 toolGroup2:AddToggle("Bounce", {
-Text = "Bounce (state driven)",
+Text = "Modify Bounce",
 Default = false,
 Callback = function(on) State.Opt.Bounce = on end,
 })
 toolGroup2:AddSlider("BounceDefault", {
-Text = "Bounce Speed",
+Text = "Player Bounce",
 Min = 0,
 Max = 200,
-Default = 30,
+Default = 80,
 Rounding = 0,
 Callback = function(value) State.Opt.BounceDefault = value end,
 })
 toolGroup2:AddSlider("BounceEmote", {
-Text = "Emote Bounce Speed",
+Text = "Emote Bounce",
 Min = 0,
 Max = 200,
-Default = 60,
+Default = 120,
 Rounding = 0,
 Callback = function(value) State.Opt.BounceEmote = value end,
 })
@@ -2702,15 +2704,15 @@ Default = false,
 Callback = function(on) State.Opt.InfSlide = on end,
 })
 leftoverGroup:AddSlider("SlideAcceleration", {
-Text = "Slide Acceleration",
-Min = 0,
-Max = 200,
-Default = 40,
+Text = "Slide Speed (Negative Only)",
+Min = -50,
+Max = 0,
+Default = -3,
 Rounding = 0,
 Callback = function(value) State.Opt.SlideAcceleration = value end,
 })
 leftoverGroup:AddDropdown("BhopMode", {
-Text = "Bhop Mode",
+Text = "BHOP Mode",
 Values = { "Acceleration", "Ground Acceleration", "No Acceleration" },
 Default = 1,
 Callback = function(value)
@@ -2719,12 +2721,12 @@ Parity.SetBhop(State.Opt.Bhop, State.Opt.BhopHold)
 end,
 })
 leftoverGroup:AddToggle("BhopFlag", {
-Text = "Bhop Flag",
+Text = "BHOP Toggle",
 Default = false,
 Callback = function(on) Parity.SetBhop(on, State.Opt.BhopHold) end,
 })
 leftoverGroup:AddToggle("BhopHold", {
-Text = "Bhop On Hold",
+Text = "BHOP Hold Jump",
 Default = false,
 Callback = function(on) Parity.SetBhop(State.Opt.Bhop, on) end,
 })
@@ -2738,17 +2740,21 @@ Alert(on and (ok and "Emote dash hooked" or "Movement module not found") or "Emo
 end,
 })
 leftoverGroup:AddSlider("EmoteDashSpeed", {
-Text = "Dash Speed",
+Text = "Aggressive Emote Speed",
 Min = 1,
 Max = 3000,
-Default = 1000,
+Default = 2000,
 Rounding = 0,
 Callback = function(value) State.Opt.EmoteDashSpeed = value end,
 })
-leftoverGroup:AddToggle("EmoteDashBlatant", {
-Text = "Blatant Multiplier",
-Default = false,
-Callback = function(on) State.Opt.EmoteDashBlatant = on end,
+leftoverGroup:AddDropdown("EmoteDashBlatant", {
+Text = "Aggressive Emote Type",
+Values = { "Legit", "Blatant" },
+Default = 2,
+Callback = function(value)
+State.Opt.EmoteDashBlatant = value == "Blatant"
+if State.Opt.EmoteDashAggressive then Parity.StartAggressiveEmote() end
+end,
 })
 leftoverGroup:AddButton({
 Text = "Clear Emote Map",
@@ -2764,29 +2770,28 @@ Default = false,
 Callback = function(on) State.Opt.AutoAdmin = on end,
 })
 autoAdminGroup:AddToggle("AutoMapOn", {
-Text = "Force Map",
+Text = "Auto Set Map",
 Default = false,
 Callback = function(on) State.Opt.AutoMap = on end,
 })
 autoAdminGroup:AddInput("AutoMapName", {
-Text = "Map Name",
-Placeholder = "map module name",
+Text = "Map Input",
+Placeholder = "DesertBus",
 Callback = function(text) State.Opt.AutoMapName = text end,
 })
 autoAdminGroup:AddToggle("AutoSpecialOn", {
-Text = "Force Special Round",
+Text = "Auto Set Special Round",
 Default = false,
 Callback = function(on) State.Opt.AutoSpecial = on end,
 })
 autoAdminGroup:AddInput("AutoSpecialName", {
-Text = "Round Name",
-Placeholder = "special round name",
+Text = "Special Round Input",
+Placeholder = "Plushie Hell",
 Callback = function(text) State.Opt.AutoSpecialName = text end,
 })
 autoAdminGroup:AddInput("AutoTimeInput", {
-Text = "Force Time",
-Numeric = true,
-Placeholder = "seconds",
+Text = "Timer Input",
+Placeholder = "180",
 Callback = function(text) State.Opt.AutoTime = tonumber(text) end,
 })
 local function RigsFolder()
@@ -3143,7 +3148,7 @@ if not on then Parity.ClearHighlight("ReichtTicketHL") end
 end,
 })
 local hudGroup = dragTab:AddRightGroupbox("On Screen Buttons", "pointer")
-local function ButtonToggle(id, label, key, text, sizeKey, onToggle)
+local function ButtonToggle(id, label, key, text, sizeKey, onToggle, sizeLabel)
 hudGroup:AddToggle(id, {
 Text = label,
 Default = false,
@@ -3162,7 +3167,7 @@ end)
 end,
 })
 hudGroup:AddInput(id .. "Size", {
-Text = label .. " Size (%)",
+Text = sizeLabel or (label .. " Gui Size"),
 Numeric = true,
 Placeholder = "0",
 Callback = function(value)
@@ -3172,37 +3177,44 @@ Parity.ButtonSize(id .. "Gui", State.Opt[sizeKey])
 end,
 })
 end
-ButtonToggle("RespawnBtn", "Respawn Button", "RespawnBtn", "Respawn", "RespawnSize", function()
+ButtonToggle("RespawnBtn", "Respawn (Button)", "RespawnBtn", "Respawn", "RespawnSize", function()
 Parity.SelfRevive()
 return "Respawn"
-end)
+end, "Respawn Gui Size")
+ButtonToggle("SelfReviveBtn", "Self Revive (Button)", "SelfReviveBtn", "Self Revive", "SelfReviveSize", function()
+local character = LocalPlayer.Character
+local tag = character and character:GetAttribute("Tag")
+if not tag then return "Self Revive" end
+ReviveTag(tag, true)
+return "Self Revive"
+end, "Self Revive Gui Size")
 ButtonToggle("SuperBounceBtn", "Super Bounce Button", "SuperBounceBtn", "Super Bounce", "SuperBounceSize", function()
 Parity.SuperBounce()
 return "Super Bounce"
 end)
-ButtonToggle("LagBtn", "Lag Switch Button", "LagBtn", "Start Lag", "LagSize", function()
+ButtonToggle("LagBtn", "Lag Switch (Button)", "LagBtn", "Start Lag", "LagSize", function()
 Parity.StartLag(State.Opt.LagMs or 200)
 return "Start Lag"
-end)
-ButtonToggle("SlideBtn", "Infinite Slide Button", "SlideBtn", "Infinite Slide: OFF", "SlideSize", function()
+end, "Lag Switch Gui Size")
+ButtonToggle("SlideBtn", "Infinite Slide (Button)", "SlideBtn", "Infinite Slide: OFF", "SlideSize", function()
 State.Opt.InfSlide = not State.Opt.InfSlide
 return State.Opt.InfSlide and "Infinite Slide: ON" or "Infinite Slide: OFF"
-end)
-ButtonToggle("BhopBtn", "BHOP Button", "BhopBtn", "BHOP: OFF", "BhopSize", function()
+end, "Infinite Slide Gui Size")
+ButtonToggle("BhopBtn", "Show BHOP Button", "BhopBtn", "BHOP: OFF", "BhopSize", function()
 State.Opt.Bhop = not State.Opt.Bhop
 return State.Opt.Bhop and "BHOP: ON" or "BHOP: OFF"
-end)
-ButtonToggle("CrouchBtn", "Auto Crouch Button", "CrouchBtn", "Auto Crouch: OFF", "CrouchSize", function()
+end, "BHOP Gui Size")
+ButtonToggle("CrouchBtn", "Auto Crouch (Button)", "CrouchBtn", "Auto Crouch: OFF", "CrouchSize", function()
 State.Opt.AutoCrouch = not State.Opt.AutoCrouch
 return State.Opt.AutoCrouch and "Auto Crouch: ON" or "Auto Crouch: OFF"
-end)
+end, "Auto Crouch Gui Size")
 ButtonToggle("GravityBtn", "Gravity Button", "GravityBtn", "Gravity: OFF", "GravitySize", function()
 State.Opt.GravityOn = not State.Opt.GravityOn
 return State.Opt.GravityOn and "Gravity: ON" or "Gravity: OFF"
-end)
+end, "Gravity Gui Size")
 local adjGroup = dragTab:AddLeftGroupbox("Player Adjustments", "gauge")
 adjGroup:AddSlider("AdjJumpHeight", {
-Text = "Jump Height",
+Text = "Player Jump",
 Min = 0,
 Max = 200,
 Default = 7,
@@ -3210,7 +3222,7 @@ Rounding = 1,
 Callback = function(value) SetAdjustment("JumpHeight", value) end,
 })
 adjGroup:AddSlider("AdjJumpAccel", {
-Text = "Jump Acceleration",
+Text = "Player Jump Acceleration",
 Min = 0,
 Max = 100,
 Default = 10,
@@ -3218,7 +3230,7 @@ Rounding = 1,
 Callback = function(value) SetAdjustment("JumpAcceleration", value) end,
 })
 adjGroup:AddSlider("AdjJumpCap", {
-Text = "Jump Cap",
+Text = "Player Jump Cap",
 Min = 0,
 Max = 500,
 Default = 80,
@@ -3278,9 +3290,9 @@ Alert(string.format("Stretch set to %s x %s", tostring(State.Opt.CamX or 1), tos
 end,
 })
 camGroup:AddInput("FovMult", {
-Text = "Player FOV (multiplier)",
+Text = "Player FOV",
 Numeric = true,
-Placeholder = "1",
+Placeholder = "Number (multiplier)",
 Callback = function(value)
 local mult = tonumber(value) or 1
 Alert(Parity.CameraFov(mult) and string.format("FOV x%s", tostring(mult)) or "Camera service not found")
@@ -3396,25 +3408,42 @@ Callback = function(on) State.Opt.EmoteCarry = on end,
 })
 autoGroup2:AddKeybind("LagKey", {
 Text = "Lag Switch Keybind",
-Default = "None",
-Mode = "Always",
+Default = "H",
+Mode = "Toggle",
+Callback = function()
+task.spawn(function() Parity.StartLag(State.Opt.LagMs or 200) end)
+end,
 ChangedCallback = function(name) State.Opt.LagKey = name end,
 })
 autoGroup2:AddKeybind("CrouchKey", {
-Text = "Crouch Keybind",
-Default = "None",
-Mode = "Always",
+Text = "Keybind to Auto Crouch (Hold)",
+Default = "RightControl",
+Mode = "Hold",
+Callback = function(down)
+State.Opt.CrouchHeld = down
+if not down then return end
+task.spawn(function()
+while State.Opt.CrouchHeld do
+Parity.CrouchFunction()
+task.wait(0.05)
+end
+end)
+end,
 ChangedCallback = function(name) State.Opt.CrouchKey = name end,
 })
 autoGroup2:AddKeybind("BhopKey", {
-Text = "BHOP Keybind",
-Default = "None",
-Mode = "Hold",
+Text = "Keybind to BHOP",
+Default = "B",
+Mode = "Toggle",
+Callback = function(down)
+State.Opt.Bhop = down and true or false
+Parity.SetBhop(State.Opt.Bhop)
+end,
 ChangedCallback = function(name) State.Opt.BhopKey = name end,
 })
 local farmGroup2 = dragTab:AddLeftGroupbox("Farm Extras", "seedling")
 farmGroup2:AddInput("TokenFarmOffset", {
-Text = "Token Farm Offset (X Y Z)",
+Text = "Token Farm Offset",
 Placeholder = "0 -8 0",
 Callback = function(text)
 local x, y, z = tostring(text):match("^%s*([%-%d%.]+)%s+([%-%d%.]+)%s+([%-%d%.]+)%s*$")
@@ -3424,9 +3453,9 @@ end
 end,
 })
 farmGroup2:AddDropdown("TimerRoundState", {
-Text = "Timer Round State",
-Values = { "Intermission", "Gameplay", "Any" },
-Default = 3,
+Text = "Auto Timer Round State",
+Values = { "Round Started", "Intermission", "All" },
+Default = 1,
 Callback = function(value) State.Opt.TimerRoundState = value end,
 })
 farmGroup2:AddInput("EmoteDashAccel", {
@@ -3440,54 +3469,257 @@ Text = "Gravity",
 Default = false,
 Callback = function(on)
 State.Opt.GravityOn = on
-local _, humanoid = Character()
-if not humanoid then return end
-humanoid.Gravity = on and (State.Opt.Gravity or 90) or 196.2
+Workspace.Gravity = on and (State.Opt.Gravity or 10) or State.NormalGravity
+end,
+})
+farmGroup2:AddInput("GravityAdjust", {
+Text = "Gravity Adjustment",
+Numeric = true,
+Placeholder = "10",
+Callback = function(value)
+State.Opt.Gravity = tonumber(value) or 10
+if State.Opt.GravityOn then Workspace.Gravity = State.Opt.Gravity end
 end,
 })
 local moreGroup = dragTab:AddRightGroupbox("Buttons & Keybinds", "keyboard")
-ButtonToggle("CarryBtn", "Auto Carry Button", "CarryBtn", "Auto Carry: OFF", "CarrySize", function()
+ButtonToggle("CarryBtn", "Auto Carry (Button)", "CarryBtn", "Auto Carry: OFF", "CarrySize", function()
 State.Opt.AutoCarry = not State.Opt.AutoCarry
 if State.Opt.AutoCarry then StartAutoCarry() else StopAutoCarry() end
 return State.Opt.AutoCarry and "Auto Carry: ON" or "Auto Carry: OFF"
-end)
-ButtonToggle("EmoteBtn", "Emote Dash Button", "EmoteBtn", "Start Emote", "EmoteSize", function()
+end, "Auto Carry Gui Size")
+ButtonToggle("EmoteBtn", "Auto Emote Dash Button", "EmoteBtn", "Start Emote", "EmoteSize", function()
 State.Opt.EmoteDashAggressive = not State.Opt.EmoteDashAggressive
 if State.Opt.EmoteDashAggressive then
 Parity.StartAggressiveEmote()
 end
 return State.Opt.EmoteDashAggressive and "Stop Emote" or "Start Emote"
-end)
+end, "Auto Emote Dash Gui Size")
 ButtonToggle("FlyBtn", "Fly Button", "FlyBtn", "Fly: OFF", "FlySize", function()
 State.Opt.Fly = not State.Opt.Fly
 return State.Opt.Fly and "Fly: ON" or "Fly: OFF"
 end)
 moreGroup:AddKeybind("CarryKey", {
 Text = "Keybind to Carry",
-Default = "None",
-Mode = "Always",
+Default = "Q",
+Mode = "Toggle",
+Callback = function(down)
+State.Opt.AutoCarry = down and true or false
+if State.Opt.AutoCarry then StartAutoCarry() else StopAutoCarry() end
+end,
 ChangedCallback = function(name) State.Opt.CarryKey = name end,
 })
 moreGroup:AddKeybind("EmoteKey", {
-Text = "Emote Dash Keybind",
-Default = "None",
-Mode = "Always",
+Text = "Keybind to Emote Dash",
+Default = "RightControl",
+Mode = "Toggle",
+Callback = function(down)
+State.Opt.EmoteDashAggressive = down and true or false
+if down then Parity.StartAggressiveEmote() end
+end,
 ChangedCallback = function(name) State.Opt.EmoteKey = name end,
 })
 moreGroup:AddKeybind("GravityKey", {
 Text = "Gravity Keybind",
-Default = "None",
-Mode = "Always",
+Default = "J",
+Mode = "Toggle",
+Callback = function(down)
+State.Opt.GravityOn = down and true or false
+Workspace.Gravity = State.Opt.GravityOn and (State.Opt.Gravity or 10) or State.NormalGravity
+end,
 ChangedCallback = function(name) State.Opt.GravityKey = name end,
 })
 State.Opt.TimerRoundState = State.Opt.TimerRoundState or "Any"
 State.Opt.TokenOffset = State.Opt.TokenOffset or Vector3.new(0, -8, 0)
+function Parity.ForceRespawn()
+local events = ReplicatedStorage:FindFirstChild("Events")
+local setMode = events and events:FindFirstChild("SetPlayerMode")
+if not setMode then return false end
+setMode:FireServer(true)
+return true
+end
+function Parity.OpenLeaderboard()
+SendKeybind("Leaderboard", true)
+task.delay(0.1, function() SendKeybind("Leaderboard", false) end)
+return true
+end
+Parity.FrontCamera = { On = false }
+function Parity.FrontCameraToggle()
+local character, humanoid = Character()
+local camera = Workspace.CurrentCamera
+if not character or not humanoid or not camera then return false end
+Parity.FrontCamera.On = not Parity.FrontCamera.On
+camera.CameraSubject = Parity.FrontCamera.On and character:FindFirstChild("Head") or humanoid
+return Parity.FrontCamera.On
+end
+local surfaceGroup = dragTab:AddLeftGroupbox("Game & Map Modification", "shield")
+surfaceGroup:AddToggle("DisableShake", {
+Text = "Disable Camera Shake",
+Default = false,
+Callback = function(on)
+if on then
+Alert(DisableCameraShake() and "Camera shake killed" or "Camera shake hook not found")
+end
+end,
+})
+surfaceGroup:AddToggle("DisableVignette", {
+Text = "Disable Vignette",
+Default = false,
+Callback = function(on)
+if on then
+Alert(DisableVignette() and "Nextbot vignette killed" or "Vignette not found")
+end
+end,
+})
+surfaceGroup:AddToggle("RemoveRewards", {
+Text = "Remove Reducing Rewards",
+Default = false,
+Callback = function(on)
+if on then
+Alert(string.format("Removed %d safe zone parts", RemoveSafeZones()))
+end
+end,
+})
+surfaceGroup:AddButton({
+Text = "Force Respawn",
+Func = function()
+Alert(Parity.ForceRespawn() and "SetPlayerMode fired" or "SetPlayerMode not found")
+end,
+})
+surfaceGroup:AddButton({
+Text = "Open Leaderboard",
+Func = function()
+Alert(Parity.OpenLeaderboard() and "Leaderboard keybind sent" or "KeybindService not found")
+end,
+})
+surfaceGroup:AddButton({
+Text = "Enable Front Camera",
+Func = function()
+Alert(Parity.FrontCameraToggle() and "Front camera on" or "Front camera off")
+end,
+})
+local cosmeticsGroup = dragTab:AddRightGroupbox("Cosmetics & Emote Changer", "shirt")
+cosmeticsGroup:AddButton({
+Text = "Reset Cosmetics",
+Func = function()
+local touched = Parity.RestoreCosmetics()
+Alert(string.format("Restored %d cosmetics", touched or 0))
+end,
+})
+cosmeticsGroup:AddButton({
+Text = "Apply Emote Mappings",
+Func = function()
+Parity.BuildEmoteMap(State.Opt.EmotePlay, State.Opt.EmoteShow)
+Parity.StartEmoteWatcher()
+Alert("Emote mapping applied, watcher running")
+end,
+})
+cosmeticsGroup:AddButton({
+Text = "Reset Emote Mappings",
+Func = function()
+Parity.ClearEmoteMap()
+Alert("Emote mappings cleared")
+end,
+})
+cosmeticsGroup:AddLabel("Warning: Do not use locked emotes from the emote changer or you may get banned easily")
+cosmeticsGroup:AddLabel("To change it back to the original, please rejoin.")
+local vipGroup = dragTab:AddLeftGroupbox("VIP Automations", "play")
+vipGroup:AddDropdown("MapSection", {
+Text = "Map Section",
+Values = { "Map 1", "Map 2", "Map 3", "Map 4" },
+Default = 1,
+Callback = function(value)
+State.Opt.VoteMap = tonumber(tostring(value):match("%d+")) or 1
+end,
+})
+vipGroup:AddDropdown("GamemodeSection", {
+Text = "Gamemode Section",
+Values = { "Mode 1", "Mode 2", "Mode 3", "Mode 4" },
+Default = 1,
+Callback = function(value)
+State.Opt.VoteMode = tonumber(tostring(value):match("%d+")) or 1
+end,
+})
+vipGroup:AddToggle("AutoSetTimer", {
+Text = "Auto Set Timer",
+Default = false,
+Callback = function(on)
+State.Opt.AutoTimeOn = on
+if on then State.Opt.LastTimerSet = State.Opt.LastTimerSet or os.clock() end
+end,
+})
+Connect(RunService.Heartbeat, function()
+if not State.Alive then return end
+if not (State.Opt.AutoMap or State.Opt.AutoSpecial or State.Opt.AutoTimeOn) then return end
+local now = os.clock()
+if now - (State.Opt.LastVipTick or 0) < 1 then return end
+State.Opt.LastVipTick = now
+local roundState = State.Opt.TimerRoundState or "All"
+local inRound = State.RoundState == "Round Started"
+if roundState == "Round Started" and not inRound then return end
+if roundState == "Intermission" and inRound then return end
+if State.Opt.AutoMap and State.Opt.AutoMapName then
+Parity.AutoAdmin("!Map " .. State.Opt.AutoMapName)
+end
+if State.Opt.AutoSpecial and State.Opt.AutoSpecialName then
+Parity.AutoAdmin("!SpecialRound " .. State.Opt.AutoSpecialName)
+end
+if State.Opt.AutoTimeOn and State.Opt.AutoTime then
+Parity.AutoAdmin("!Time " .. tostring(State.Opt.AutoTime))
+end
+end)
+local clientTools = dragTab:AddRightGroupbox("Client", "wrench")
+clientTools:AddButton({
+Text = "Remove FPS Counter",
+Func = function()
+local gui = LocalPlayer:FindFirstChild("PlayerGui")
+local counter = gui and (gui:FindFirstChild("FpsCounter") or gui:FindFirstChild("FPS"))
+if counter then
+counter:Destroy()
+Alert("FPS counter removed")
+else
+Alert("FPS counter not found")
+end
+end,
+})
+clientTools:AddButton({
+Text = "Load Extension",
+Func = function()
+local path = State.Opt.ExtensionPath
+if not path or path == "" then
+Alert("Set an extension path first")
+return
+end
+if not (readfile and loadstring) then
+Alert("Executor has no readfile; extension loading unavailable")
+return
+end
+local ok, body = pcall(readfile, path)
+if not ok or type(body) ~= "string" then
+Alert("Could not read " .. tostring(path))
+return
+end
+local chunk, err = loadstring(body)
+if not chunk then
+Alert("Extension failed to compile: " .. tostring(err))
+return
+end
+local ran, why = pcall(chunk)
+Alert(ran and "Extension loaded" or ("Extension error: " .. tostring(why)))
+end,
+})
+clientTools:AddInput("ExtensionPath", {
+Text = "Extension Path",
+Placeholder = "Reicht/ext.lua",
+Callback = function(text) State.Opt.ExtensionPath = text end,
+})
 State.Opt.RespawnType = State.Opt.RespawnType or "Spawnpoint"
 State.Opt.LagMode = State.Opt.LagMode or "Normal"
 State.Opt.JumpType = State.Opt.JumpType or "Simulation"
 State.Opt.CrouchDebounce = State.Opt.CrouchDebounce or 0.1
 State.Opt.BhopAcceleration = State.Opt.BhopAcceleration or -0.1
 State.Opt.CrouchType = State.Opt.CrouchType or "Rapid"
+State.NormalGravity = Workspace.Gravity
+State.Opt.Gravity = State.Opt.Gravity or 10
 Connect(Players.PlayerRemoving, function(player)
 local character = player.Character
 local highlight = character and character:FindFirstChild("ReichtEsp")

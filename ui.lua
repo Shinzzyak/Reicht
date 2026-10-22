@@ -5061,6 +5061,14 @@ function KeyPicker:Press(down)
 if self.Mode == "Always" then
 return
 end
+if self.Mode == "Press" then
+self.Held = down
+if not down then
+return
+end
+Util.Try(self.Callback, true)
+return
+end
 if self.Mode == "Hold" then
 self.Held = down
 if self.Linked then
@@ -5081,6 +5089,9 @@ end
 function KeyPicker:GetState()
 if self.Mode == "Always" then
 return true
+end
+if self.Mode == "Press" then
+return self.Held
 end
 if self.Mode == "Hold" then
 return self.Held
@@ -5112,7 +5123,7 @@ end
 function KeyPicker:OpenModeMenu()
 Popup.List({
 Anchor = self.Button,
-Values = { "Toggle", "Hold", "Always" },
+Values = { "Toggle", "Hold", "Press", "Always" },
 IsSelected = function(mode)
 return self.Mode == mode
 end,
