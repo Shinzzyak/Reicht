@@ -70,25 +70,107 @@ local function Unload()
     end)
 end
 
---[[ revive: the game exposes a single RemoteEvent that flips the player back into
-     play. The readable community script calls it with `true`; anything else is
-     ignored by the server, so keep the argument exactly as observed. ]]
-local function Revive()
-    local events = EventsFolder()
-    local remote = events and events:FindFirstChild("SetPlayerMode")
-    if not remote then return false end
-    local ok = pcall(function() remote:FireServer(true) end)
-    if not ok then Alert("Revive remote rejected the call.") end
-    return ok
+--[[ Remote layer, read out of the original Overhaul payload instead of guessed.
+       Events.Interact          ("Revive", tag[, true]) | ("Carry", tag) | ("Dynamic", tag)
+       Events.SetPlayerMode     (true)                     respawn
+       Events.Vote              (mapIndex) | (modeIndex, true)
+       Events.CharacterTask     ("Emote", emoteId)
+       Services.Client.KeybindService.SendKeybindEvent ({Down = bool, Key = "Crouching"})
+       Shared.UserData.Events.Requests.SetSetting ("NextbotVignette", false)
+     The `tag` every Interact call needs is the target model's Tag attribute, never its Name.
+     Player models live in workspace.Players, not under Workspace.Game. ]]
+
+local function Events()
+    return ReplicatedStorage:FindFirstChild("Events")
 end
 
---[[ vote: Events.Player.Vote takes a single positional map index. ]]
-local function Vote(index)
-    local events = EventsFolder()
-    local playerFolder = events and events:FindFirstChild("Player")
-    local remote = playerFolder and playerFolder:FindFirstChild("Vote")
-    if not remote or not remote:IsA("RemoteEvent") then return false end
-    return pcall(function() remote:FireServer(index) end)
+local function Event(name)
+    local events = Events()
+    local remote = events and events:FindFirstChild(name)
+    if remote and remote:IsA("RemoteEvent") then return remote end
+    return nil
+end
+
+local function TagOf(model)
+    if not model then return nil end
+    return model:GetAttribute("Tag")
+end
+
+--[[ respawn: the hub's "Force Respawn" and Self Revive / Spawnpoint path. ]]
+local function Respawn()
+    local remote = Event("SetPlayerMode")
+    if not remote then return false end
+    return pcall(function() remote:FireServer(true) end)
+end
+
+--[[ revive: revive a downed player by tag. The hub sends the bare form first and the
+     three-argument form right after; both are cheap, so send both. ]]
+local function ReviveTag(tag)
+    local remote = Event("Interact")
+    if not remote or not tag then return false end
+    return pcall(function()
+        remote:FireServer("Revive", tag)
+        remote:FireServer("Revive", tag, true)
+    end)
+end
+
+local function Interact(kind, tag)
+    local remote = Event("Interact")
+    if not remote or not tag then return false end
+    return pcall(function() remote:FireServer(kind, tag) end)
+end
+
+local function Vote(index, mode)
+    local remote = Event("Vote")
+    if remote then
+        return pcall(function()
+            if mode then remote:FireServer(index, true) else remote:FireServer(index) end
+        end)
+    end
+    local events = Events()
+    local folder = events and events:FindFirstChild("Player")
+    local legacy = folder and folder:FindFirstChild("Vote")
+    if not legacy then return false end
+    return pcall(function() legacy:FireServer(index) end)
+end
+
+--[[ token farm: the hub parks on a live player's root and revives them on a timer.
+     Target rules copied from the payload so we do not revive ourselves. ]]
+local function FarmTargets()
+    local folder = Workspace:FindFirstChild("Players")
+    local out = {}
+    if not folder then return out end
+    for _, model in ipairs(folder:GetChildren()) do
+        if model:IsA("Model")
+            and model ~= LocalPlayer.Character
+            and model:FindFirstChild("HumanoidRootPart")
+            and model:GetAttribute("Tag") ~= nil
+        then
+            table.insert(out, model)
+        end
+    end
+    return out
+end
+
+--[[ objectives: every objective instance exposes a WhenActivated child and a Tag. ]]
+local function Objectives()
+    local out = {}
+    local shared = ReplicatedStorage:FindFirstChild("Shared")
+    local data = shared and shared:FindFirstChild("Data")
+    local registry = data and data:FindFirstChild("Registry")
+    local objects = registry and registry:FindFirstChild("Objects")
+    local source = objects or Workspace
+    for _, item in ipairs(source:GetDescendants()) do
+        if item:FindFirstChild("WhenActivated") and item:GetAttribute("Tag") ~= nil then
+            table.insert(out, item)
+        end
+    end
+    return out
+end
+
+local function TicketsFolder()
+    local effects = Workspace:FindFirstChild("Effects")
+    return effects and effects:FindFirstChild("Tickets")
 end
 
 local function BotFolder()
@@ -125,12 +207,19 @@ local function EspPlayer(player)
     highlight.Parent = character
 end
 
+local function IsNextbot(model)
+    if not model:IsA("Model") then return false end
+    -- the hub's own test: Team attribute, not a child named Hitbox
+    if model:GetAttribute("Team") == "Nextbot" then return true end
+    return model:FindFirstChild("Hitbox") ~= nil
+end
+
 local function EspBots()
     local bots = BotFolder()
     if not bots then return 0 end
     local marked = 0
     for _, bot in ipairs(bots:GetChildren()) do
-        if bot:IsA("Model") and bot:FindFirstChild("Hitbox") and not bot:FindFirstChild("ReichtEsp") then
+        if IsNextbot(bot) and not bot:FindFirstChild("ReichtEsp") then
             local highlight = Instance.new("Highlight")
             highlight.Name = "ReichtEsp"
             highlight.Adornee = bot
@@ -287,17 +376,118 @@ physicsGroup:AddButton({
 local reviveGroup = autoTab:AddLeftGroupbox("Revive", "heart")
 
 reviveGroup:AddButton({
-    Text = "Revive Yourself",
+    Text = "Respawn",
     Func = function()
-        if Revive() then Alert("Revive sent.") end
+        if Respawn() then Alert("Respawn sent.") end
+    end,
+})
+
+reviveGroup:AddButton({
+    Text = "Revive Everyone",
+    Func = function()
+        local targets = FarmTargets()
+        local fired = 0
+        for _, model in ipairs(targets) do
+            local tag = TagOf(model)
+            if tag and ReviveTag(tag) then fired += 1 end
+        end
+        Alert(string.format("Revive fired %d / tracked %d", fired, #targets))
     end,
 })
 
 reviveGroup:AddToggle("AutoRevive", {
     Text = "Auto Revive",
     Default = false,
-    Description = "Fires the revive remote once you are down",
-    Callback = function(on) State.Opt.AutoRevive = on end,
+    Description = "Fires the revive remote on every tracked player",
+    Callback = function(on)
+        State.Opt.AutoRevive = on
+        if not on then return end
+        task.spawn(function()
+            while State.Alive and State.Opt.AutoRevive do
+                for _, model in ipairs(FarmTargets()) do
+                    local tag = TagOf(model)
+                    if tag then ReviveTag(tag) end
+                end
+                task.wait(1)
+            end
+        end)
+    end,
+})
+
+local farmTab = win:AddTab("Farm", "tractor", "Objectives, tickets, carry")
+local farmGroup = farmTab:AddLeftGroupbox("Automation", "tractor")
+
+farmGroup:AddToggle("AutoObjective", {
+    Text = "Auto Objective",
+    Default = false,
+    Description = "Interact Dynamic on every objective with a Tag",
+    Callback = function(on)
+        State.Opt.AutoObjective = on
+        if not on then return end
+        task.spawn(function()
+            while State.Alive and State.Opt.AutoObjective do
+                for _, item in ipairs(Objectives()) do
+                    Interact("Dynamic", TagOf(item))
+                end
+                task.wait(2)
+            end
+        end)
+    end,
+})
+
+farmGroup:AddToggle("AutoTickets", {
+    Text = "Auto Tickets",
+    Default = false,
+    Description = "Walks onto every ticket the game spawns",
+    Callback = function(on)
+        State.Opt.AutoTickets = on
+        if not on then return end
+        task.spawn(function()
+            while State.Alive and State.Opt.AutoTickets do
+                local folder = TicketsFolder()
+                local _, _, root = Character()
+                if folder and root then
+                    for _, ticket in ipairs(folder:GetChildren()) do
+                        local part = ticket:IsA("BasePart") and ticket or ticket:FindFirstChildWhichIsA("BasePart")
+                        if part then root.CFrame = CFrame.new(part.Position + Vector3.new(0, 3, 0)) end
+                    end
+                end
+                task.wait(0.4)
+            end
+        end)
+    end,
+})
+
+farmGroup:AddToggle("AutoCarry", {
+    Text = "Auto Carry",
+    Default = false,
+    Description = "Interact Carry on the nearest tracked player",
+    Callback = function(on)
+        State.Opt.AutoCarry = on
+        if not on then return end
+        task.spawn(function()
+            while State.Alive and State.Opt.AutoCarry do
+                local targets = FarmTargets()
+                if targets[1] then Interact("Carry", TagOf(targets[1])) end
+                task.wait(0.5)
+            end
+        end)
+    end,
+})
+
+farmGroup:AddToggle("NoVignette", {
+    Text = "Remove Nextbot Vignette",
+    Default = false,
+    Callback = function(on)
+        pcall(function()
+            local shared = ReplicatedStorage:FindFirstChild("Shared")
+            local userData = shared and shared:FindFirstChild("UserData")
+            local events = userData and userData:FindFirstChild("Events")
+            local requests = events and events:FindFirstChild("Requests")
+            local remote = requests and requests:FindFirstChild("SetSetting")
+            if remote then remote:FireServer("NextbotVignette", not on) end
+        end)
+    end,
 })
 
 local voteGroup = autoTab:AddRightGroupbox("Map Voting", "map")
@@ -455,7 +645,7 @@ task.spawn(function()
         if State.Opt.AutoRevive then
             local _, humanoid = Character()
             if humanoid and humanoid.Health <= 0 then
-                Revive()
+                Respawn()
                 task.wait(3)
             end
         end
