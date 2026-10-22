@@ -313,7 +313,7 @@ local function StartTokenFarm()
         if not target then return end
         local targetRoot = target:FindFirstChild("HumanoidRootPart")
         if not targetRoot then return end
-        root.CFrame = targetRoot.CFrame + Vector3.new(0, 1.5, 0)
+        root.CFrame = targetRoot.CFrame + (State.Opt.TokenOffset or Vector3.new(0, -8, 0))
         local tag = TagOf(target)
         if not tag then return end
         local now = tick()
@@ -3210,6 +3210,830 @@ autoAdminGroup:AddInput("AutoTimeInput", {
     Placeholder = "seconds",
     Callback = function(text) State.Opt.AutoTime = tonumber(text) end,
 })
+
+--[[ ══ Parity pass 2 ═══════════════════════════════════════════════════════════
+     Options the payload's own menu carries that the first port never surfaced.
+     Every block is named after the Draconic control it replaces, and the body is
+     the mechanism read out of vrai_payload.lua — not an approximation of it. ]]
+
+local function RigsFolder()
+    return Workspace:FindFirstChild("Rigs")
+end
+
+-- ── Highlight ESP (payload: Main → "Highlight ESP") ────────────────────────
+-- Payload colours: nextbot red, player white (green while downed), ticket peach.
+-- The visual rig lives in workspace.Rigs; the Team attribute lives on the model
+-- of the same name under workspace.Players.
+function Parity.DestroyHighlight(name, model)
+    local highlight = model and model:FindFirstChild(name)
+    if highlight and highlight:IsA("Highlight") then
+        highlight:Destroy()
+        return true
+    end
+    return false
+end
+
+function Parity.ClearHighlight(name)
+    for _, folder in ipairs({ RigsFolder(), PlayerModels(), TicketsFolder() }) do
+        if folder then
+            for _, model in ipairs(folder:GetChildren()) do
+                Parity.DestroyHighlight(name, model)
+                local root = model:FindFirstChild("HumanoidRootPart")
+                if root then Parity.DestroyHighlight(name, root) end
+            end
+        end
+    end
+end
+
+function Parity.HighlightTick()
+    local rigs = RigsFolder()
+    local folder = PlayerModels()
+    if State.Opt.HighlightBots and rigs then
+        for _, rig in ipairs(rigs:GetChildren()) do
+            local owner = folder and folder:FindFirstChild(rig.Name)
+            if owner and owner:GetAttribute("Team") == "Nextbot" then
+                Highlight("ReichtBotHL", rig, Color3.fromRGB(255, 0, 0), 0.5)
+            end
+        end
+    end
+    if State.Opt.HighlightPlayers and rigs then
+        for _, rig in ipairs(rigs:GetChildren()) do
+            if rig.Name ~= LocalPlayer.Name then
+                local owner = folder and folder:FindFirstChild(rig.Name)
+                local team = owner and owner:GetAttribute("Team")
+                if team ~= "Nextbot" then
+                    Highlight("ReichtPlayerHL", rig, Color3.fromRGB(255, 255, 255), 0.5)
+                    local player = Players:FindFirstChild(rig.Name)
+                    local downed = player and Parity.Status(player) == "DOWNED"
+                    local highlight = rig:FindFirstChild("ReichtPlayerHL")
+                    if highlight then
+                        highlight.FillColor = downed and Color3.fromRGB(0, 255, 0)
+                            or Color3.fromRGB(255, 255, 255)
+                    end
+                end
+            end
+        end
+    end
+    if State.Opt.HighlightTickets then
+        local tickets = TicketsFolder()
+        if tickets then
+            for _, item in ipairs(tickets:GetDescendants()) do
+                if item:IsA("BasePart") and item.Name == "HumanoidRootPart" then
+                    Highlight("ReichtTicketHL", item, Color3.fromRGB(255, 213, 128), 0.5)
+                end
+            end
+        end
+    end
+end
+
+-- ── On-screen buttons (payload: CreateButton / UpdateButton / DestroyButton) ─
+-- One floating, draggable button per automation, size driven by the payload's
+-- Settings.GuiScale entries (percent → 0.01 scale).
+Parity.Buttons = {}
+
+function Parity.DestroyButton(name)
+    Parity.Buttons[name] = nil
+    local gui = LocalPlayer:FindFirstChild("PlayerGui")
+    local screen = gui and gui:FindFirstChild(name)
+    if screen then screen:Destroy() end
+end
+
+function Parity.ButtonSize(name, scale)
+    local gui = LocalPlayer:FindFirstChild("PlayerGui")
+    local screen = gui and gui:FindFirstChild(name)
+    local button = screen and screen:FindFirstChild("Button")
+    if not button then return false end
+    local grow = (scale or 0) * 100
+    button.Size = UDim2.new(0, 130 + grow, 0, 34 + grow * 0.34)
+    return true
+end
+
+function Parity.CreateButton(name, text, scale, fn)
+    Parity.DestroyButton(name)
+    local gui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not gui then return nil end
+    local screen = Instance.new("ScreenGui")
+    screen.Name = name
+    screen.ResetOnSpawn = false
+    screen.DisplayOrder = 900
+    screen.Parent = gui
+    local button = Instance.new("TextButton")
+    button.Name = "Button"
+    button.Position = UDim2.new(0.02, 0, 0.22, 0)
+    button.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
+    button.BackgroundTransparency = 0.15
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.Font = Enum.Font.GothamMedium
+    button.TextSize = 14
+    button.Text = text
+    button.BorderSizePixel = 0
+    button.AutoButtonColor = true
+    button.Parent = screen
+    Parity.ButtonSize(name, scale)
+    local dragging, dragStart, startPos = false, nil, nil
+    button.InputBegan:Connect(function(input)
+        local kind = input.UserInputType
+        if kind == Enum.UserInputType.MouseButton1 or kind == Enum.UserInputType.Touch then
+            dragging, dragStart, startPos = true, input.Position, button.Position
+        end
+    end)
+    button.InputChanged:Connect(function(input)
+        local kind = input.UserInputType
+        if dragging and (kind == Enum.UserInputType.MouseMovement or kind == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            button.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
+                startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+    button.InputEnded:Connect(function(input)
+        local kind = input.UserInputType
+        if kind == Enum.UserInputType.MouseButton1 or kind == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+    button.Activated:Connect(function()
+        local ok, err = pcall(fn, button)
+        if not ok then Alert("button " .. name .. ": " .. tostring(err)) end
+    end)
+    Parity.Buttons[name] = button
+    return button
+end
+
+-- ── Super bounce (payload: DFunctions.SuperBounce) ─────────────────────────
+function Parity.SuperBounce()
+    local character, humanoid = Character()
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    if not root or not humanoid then return false end
+    local previous = character:FindFirstChild("R15Visual") and 0.75 or -1.25
+    root.CanCollide = false
+    humanoid.HipHeight = -100
+    task.delay(2, function()
+        if root and root.Parent then root.CanCollide = true end
+        if humanoid and humanoid.Parent then humanoid.HipHeight = previous end
+    end)
+    return true
+end
+
+-- ── Lag switch (payload: DFunctions.StartLag + Utilities.LagSwitch) ────────
+-- Modes are Normal / Demon / FastFlag. Only FastFlag is read by the original
+-- body (it sets MaxMissedWorldStepsRemembered); Demon is stored, not branched on.
+function Parity.StartLag(ms)
+    local _, _, root = Character()
+    if not root then return false end
+    local lag = (ms or 200) * 0.002
+    if root.AssemblyLinearVelocity.Magnitude < 1 then return false end
+    local mode = State.Opt.LagMode or "Normal"
+    local start = os.clock()
+    while os.clock() - start < lag do end
+    if (mode == "FastFlag" or lag < 0.2) and setfflag then
+        pcall(setfflag, "MaxMissedWorldStepsRemembered", "9999")
+    end
+    return true
+end
+
+-- ── Humanoid overrides (payload: Misc → Humanoids) ────────────────────────
+-- Two separate mechanisms: JumpPower writes the humanoid directly, Walkspeed
+-- translates the character along MoveDirection instead of touching WalkSpeed.
+function Parity.HumanoidTick()
+    local character, humanoid = Character()
+    if not character or not humanoid then return end
+    if State.Opt.JumpPowerOn then
+        humanoid.UseJumpPower = true
+        humanoid.JumpPower = State.Opt.JumpPower or 20
+    end
+    if State.Opt.WalkCfOn then
+        local direction = humanoid.MoveDirection
+        if direction.Magnitude > 0 then
+            character:TranslateBy(direction * (State.Opt.WalkCf or 5) * 0.1)
+        end
+    end
+end
+
+-- ── Camera adjustment (payload: Misc → Camera Adjustments) ────────────────
+function Parity.CameraStretch(x, y)
+    pcall(function()
+        LocalPlayer:SetAttribute("StretchX", x or 1)
+        LocalPlayer:SetAttribute("StretchY", y or 1)
+    end)
+    return true
+end
+
+function Parity.CameraFov(mult)
+    local service
+    for _, item in ipairs(ReplicatedStorage:GetDescendants()) do
+        if item:IsA("ModuleScript") and item.Name == "CameraService" then
+            local ok, module = pcall(require, item)
+            if ok and type(module) == "table" then
+                service = module
+                break
+            end
+        end
+    end
+    if service and service.AdjustFOV then
+        local ok = pcall(function() service:AdjustFOV("ReichtFov", mult or 1) end)
+        if ok then return true end
+    end
+    local camera = Workspace.CurrentCamera
+    if not camera then return false end
+    camera.FieldOfView = 70 * (mult or 1)
+    return true
+end
+
+-- ── Gun adjustment (payload: Misc → Gun Adjustments) ──────────────────────
+function Parity.InfiniteAmmo()
+    local tools = ReplicatedStorage:FindFirstChild("Tools")
+    if not tools then return 0 end
+    local touched = 0
+    for _, tool in ipairs(tools:GetChildren()) do
+        if tool:IsA("ModuleScript") then
+            local ok, data = pcall(require, tool)
+            if ok and type(data) == "table" and data.Tasks then
+                for _, entry in ipairs(data.Tasks) do
+                    local resource = entry.ResourceInfo
+                    if resource and resource.Type == "Clip" then
+                        resource.Reserve = 9999999999
+                        resource.Cap = 9999999999
+                        touched += 1
+                    end
+                end
+            end
+        end
+    end
+    return touched
+end
+
+-- ── Map modification (payload: Main → Remove Invisible Walls) ─────────────
+function Parity.InvisibleWalls(collide)
+    local map = GameChild("Map")
+    if not map then return 0 end
+    local invis = map:FindFirstChild("InvisParts") or map:FindFirstChild("MapLogic")
+    if not invis then return 0 end
+    local touched = 0
+    for _, part in ipairs(invis:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = collide and true or false
+            touched += 1
+        end
+    end
+    return touched
+end
+
+-- ── Self revive (payload: Main → Respawn Type) ────────────────────────────
+-- "Spawnpoint" fires SetPlayerMode; "Fake Revive" fires Interact on our own tag.
+function Parity.SelfRevive()
+    local method = State.Opt.RespawnType or "Spawnpoint"
+    if method == "Fake Revive" then
+        local character = LocalPlayer.Character
+        local tag = character and character:GetAttribute("Tag")
+        if not tag then return false end
+        return ReviveTag(tag)
+    end
+    return Respawn()
+end
+
+-- ── Auto crouch (payload: DFunctions.CrouchFunction) ──────────────────────
+-- Toggles the Crouching keybind on a debounce. The payload stores Crouch.Type
+-- (Rapid/Ground/Air/Normal) but the sampled body never branches on it, so the
+-- dropdown is carried as a stored preference only — same behaviour as original.
+Parity.Crouch = { Holding = false, Last = 0 }
+
+function Parity.CrouchFunction()
+    local now = os.clock()
+    local debounce = State.Opt.CrouchDebounce or 0.1
+    if now - Parity.Crouch.Last < debounce then return false end
+    Parity.Crouch.Holding = not Parity.Crouch.Holding
+    SendKeybind("Crouching", Parity.Crouch.Holding)
+    Parity.Crouch.Last = now
+    return true
+end
+
+-- ── BHOP engine (payload: MovementModule hook + updateBhopEnabled) ─────────
+-- The friction value is the whole trick: while airborne with bhop armed, push a
+-- negative friction through ModifyMovement, restore stock on the ground. Auto
+-- acceleration swaps the value by current speed; spider hop jumps off walls.
+Parity.Bhop = { LastFriction = nil }
+
+function Parity.BhopTick()
+    local character, humanoid = Character()
+    if not character or not humanoid then return end
+    local state = character:GetAttribute("State")
+    local airborne = humanoid.FloorMaterial == Enum.Material.Air
+    local mode = State.Opt.BhopMode or "Acceleration"
+    local active = State.Opt.Bhop or State.Opt.BhopHold
+    local desired
+    if State.Opt.InfSlide and (state == "Slide" or state == "EmotingSlide" or state == "CarrySlide") then
+        desired = State.Opt.SlideAcceleration or -8
+    elseif active and airborne and mode ~= "No Acceleration" then
+        if State.Opt.AutoAccel then
+            local root = character:FindFirstChild("HumanoidRootPart")
+            local speed = root and root.AssemblyLinearVelocity.Magnitude or 0
+            local maxSpeed = State.Opt.AutoAccelMaxSpeed or 70
+            if speed > maxSpeed then
+                desired = State.Opt.AutoAccelMaxAccel or 3
+            elseif speed < maxSpeed then
+                desired = State.Opt.AutoAccelMinAccel or -1
+            else
+                desired = State.Opt.BhopAcceleration or -0.1
+            end
+        else
+            desired = State.Opt.BhopAcceleration or -0.1
+        end
+    end
+    if desired ~= Parity.Bhop.LastFriction then
+        MovementValueSet("Friction", desired or 5)
+        Parity.Bhop.LastFriction = desired
+    end
+    if State.Opt.SpiderHop and (state == "WallrunRight" or state == "WallrunLeft") then
+        pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end)
+    end
+    if State.Opt.JumpType == "Realistic" and active and not airborne
+        and (not State.Opt.BhopHold or UserInputService:IsKeyDown(Enum.KeyCode.Space)) then
+        pcall(function() humanoid.Jump = true end)
+    end
+end
+
+-- ── Auto purchase (payload: AutoFarm → Purchase Automations) ───────────────
+-- Heartbeat connection in the original; the 4 s gate is the payload's own.
+Parity.Buy = { Last = 0 }
+
+function Parity.AutoBuyTick()
+    if not State.Opt.AutoBuy then return end
+    local now = os.clock()
+    if now - Parity.Buy.Last < 4 then return end
+    Parity.Buy.Last = now
+    local name = State.Opt.ShopItem
+    if not name then return end
+    local ok, bought = pcall(Parity.Purchase, name, State.Opt.ShopAmount or 1)
+    if not ok or not bought then return end
+end
+
+-- ── Carry while emoting (payload: Misc → Game Automation → Carry.WhileEmote) ─
+function Parity.EmoteCarryTick()
+    if not State.Opt.EmoteCarry then return end
+    local character = LocalPlayer.Character
+    if not character then return end
+    local state = character:GetAttribute("State")
+    if state ~= "Emoting" and state ~= "EmotingAir" and state ~= "EmotingSlide" then return end
+    local now = os.clock()
+    if now - (Parity.Buy.CarryLast or 0) < 0.5 then return end
+    Parity.Buy.CarryLast = now
+    local target = NearestDowned()
+    if target and target.Character then
+        Interact("Carry", TagOf(target.Character))
+    end
+end
+
+Connect(RunService.Heartbeat, function()
+    if not State.Alive then return end
+    if State.Opt.HighlightBots or State.Opt.HighlightPlayers or State.Opt.HighlightTickets then
+        Parity.HighlightTick()
+    end
+    if State.Opt.JumpPowerOn or State.Opt.WalkCfOn then Parity.HumanoidTick() end
+    if State.Opt.Bhop or State.Opt.BhopHold or State.Opt.SpiderHop or State.Opt.InfSlide then
+        Parity.BhopTick()
+    end
+    if State.Opt.AutoCrouch then Parity.CrouchFunction() end
+    Parity.AutoBuyTick()
+    Parity.EmoteCarryTick()
+end)
+
+-- ── Menu surface ──────────────────────────────────────────────────────────
+local dragTab = win:AddTab("Draconic", "flame", "Options the original Overhaul menu exposes")
+
+local hlGroup = dragTab:AddLeftGroupbox("Highlight ESP", "eye")
+
+hlGroup:AddToggle("HighlightBots", {
+    Text = "Highlight Nextbots",
+    Default = false,
+    Callback = function(on)
+        State.Opt.HighlightBots = on
+        if not on then Parity.ClearHighlight("ReichtBotHL") end
+    end,
+})
+
+hlGroup:AddToggle("HighlightPlayers", {
+    Text = "Highlight Players",
+    Default = false,
+    Callback = function(on)
+        State.Opt.HighlightPlayers = on
+        if not on then Parity.ClearHighlight("ReichtPlayerHL") end
+    end,
+})
+
+hlGroup:AddToggle("HighlightTickets", {
+    Text = "Highlight Tickets",
+    Default = false,
+    Callback = function(on)
+        State.Opt.HighlightTickets = on
+        if not on then Parity.ClearHighlight("ReichtTicketHL") end
+    end,
+})
+
+local hudGroup = dragTab:AddRightGroupbox("On Screen Buttons", "pointer")
+
+local function ButtonToggle(id, label, key, text, sizeKey, onToggle)
+    hudGroup:AddToggle(id, {
+        Text = label,
+        Default = false,
+        Callback = function(on)
+            if not on then
+                Parity.DestroyButton(id .. "Gui")
+                if onToggle then onToggle(false) end
+                return
+            end
+            Parity.CreateButton(id .. "Gui", text, State.Opt[sizeKey] or 0, function(button)
+                if onToggle then
+                    local label2 = onToggle(true)
+                    if label2 then button.Text = label2 end
+                end
+            end)
+        end,
+    })
+    hudGroup:AddInput(id .. "Size", {
+        Text = label .. " Size (%)",
+        Numeric = true,
+        Placeholder = "0",
+        Callback = function(value)
+            local percent = tonumber(value) or 0
+            State.Opt[sizeKey] = percent * 0.01
+            Parity.ButtonSize(id .. "Gui", State.Opt[sizeKey])
+        end,
+    })
+end
+
+ButtonToggle("RespawnBtn", "Respawn Button", "RespawnBtn", "Respawn", "RespawnSize", function()
+    Parity.SelfRevive()
+    return "Respawn"
+end)
+
+ButtonToggle("SuperBounceBtn", "Super Bounce Button", "SuperBounceBtn", "Super Bounce", "SuperBounceSize", function()
+    Parity.SuperBounce()
+    return "Super Bounce"
+end)
+
+ButtonToggle("LagBtn", "Lag Switch Button", "LagBtn", "Start Lag", "LagSize", function()
+    Parity.StartLag(State.Opt.LagMs or 200)
+    return "Start Lag"
+end)
+
+ButtonToggle("SlideBtn", "Infinite Slide Button", "SlideBtn", "Infinite Slide: OFF", "SlideSize", function()
+    State.Opt.InfSlide = not State.Opt.InfSlide
+    return State.Opt.InfSlide and "Infinite Slide: ON" or "Infinite Slide: OFF"
+end)
+
+ButtonToggle("BhopBtn", "BHOP Button", "BhopBtn", "BHOP: OFF", "BhopSize", function()
+    State.Opt.Bhop = not State.Opt.Bhop
+    return State.Opt.Bhop and "BHOP: ON" or "BHOP: OFF"
+end)
+
+ButtonToggle("CrouchBtn", "Auto Crouch Button", "CrouchBtn", "Auto Crouch: OFF", "CrouchSize", function()
+    State.Opt.AutoCrouch = not State.Opt.AutoCrouch
+    return State.Opt.AutoCrouch and "Auto Crouch: ON" or "Auto Crouch: OFF"
+end)
+
+ButtonToggle("GravityBtn", "Gravity Button", "GravityBtn", "Gravity: OFF", "GravitySize", function()
+    State.Opt.GravityOn = not State.Opt.GravityOn
+    return State.Opt.GravityOn and "Gravity: ON" or "Gravity: OFF"
+end)
+
+local adjGroup = dragTab:AddLeftGroupbox("Player Adjustments", "gauge")
+
+adjGroup:AddSlider("AdjJumpHeight", {
+    Text = "Jump Height",
+    Min = 0,
+    Max = 200,
+    Default = 7,
+    Rounding = 1,
+    Callback = function(value) SetAdjustment("JumpHeight", value) end,
+})
+
+adjGroup:AddSlider("AdjJumpAccel", {
+    Text = "Jump Acceleration",
+    Min = 0,
+    Max = 100,
+    Default = 10,
+    Rounding = 1,
+    Callback = function(value) SetAdjustment("JumpAcceleration", value) end,
+})
+
+adjGroup:AddSlider("AdjJumpCap", {
+    Text = "Jump Cap",
+    Min = 0,
+    Max = 500,
+    Default = 80,
+    Rounding = 0,
+    Callback = function(value) SetAdjustment("JumpCap", value) end,
+})
+
+adjGroup:AddSlider("AdjAirAccel", {
+    Text = "Air Acceleration",
+    Min = 0,
+    Max = 100,
+    Default = 3,
+    Rounding = 1,
+    Callback = function(value) SetAdjustment("AirAcceleration", value) end,
+})
+
+adjGroup:AddToggle("JumpPowerOn", {
+    Text = "Jump Power Toggle",
+    Default = false,
+    Callback = function(on) State.Opt.JumpPowerOn = on end,
+})
+
+adjGroup:AddInput("JumpPowerValue", {
+    Text = "Player Jump Power",
+    Numeric = true,
+    Placeholder = "20",
+    Callback = function(value) State.Opt.JumpPower = tonumber(value) or 20 end,
+})
+
+adjGroup:AddToggle("WalkCfOn", {
+    Text = "Walkspeed Toggle",
+    Default = false,
+    Callback = function(on)
+        State.Opt.WalkCfOn = on
+    end,
+})
+
+adjGroup:AddInput("WalkCfValue", {
+    Text = "Player Walkspeed",
+    Numeric = true,
+    Placeholder = "5",
+    Callback = function(value) State.Opt.WalkCf = tonumber(value) or 5 end,
+})
+
+local camGroup = dragTab:AddRightGroupbox("Camera & Gun", "camera")
+
+camGroup:AddInput("CamX", {
+    Text = "Stretch Horizontal",
+    Numeric = true,
+    Placeholder = "1",
+    Callback = function(value) State.Opt.CamX = tonumber(value) or 1 end,
+})
+
+camGroup:AddInput("CamY", {
+    Text = "Stretch Vertical",
+    Numeric = true,
+    Placeholder = "1",
+    Callback = function(value) State.Opt.CamY = tonumber(value) or 1 end,
+})
+
+camGroup:AddButton({
+    Text = "Set Camera Stretch",
+    Func = function()
+        Parity.CameraStretch(State.Opt.CamX or 1, State.Opt.CamY or 1)
+        Alert(string.format("Stretch set to %s x %s", tostring(State.Opt.CamX or 1), tostring(State.Opt.CamY or 1)))
+    end,
+})
+
+camGroup:AddInput("FovMult", {
+    Text = "Player FOV (multiplier)",
+    Numeric = true,
+    Placeholder = "1",
+    Callback = function(value)
+        local mult = tonumber(value) or 1
+        Alert(Parity.CameraFov(mult) and string.format("FOV x%s", tostring(mult)) or "Camera service not found")
+    end,
+})
+
+camGroup:AddButton({
+    Text = "Set to Infinite Ammo",
+    Func = function()
+        Alert(string.format("Ammo patched on %d clips", Parity.InfiniteAmmo()))
+    end,
+})
+
+camGroup:AddButton({
+    Text = "Remove Invisible Walls",
+    Func = function()
+        Alert(string.format("Disabled collision on %d parts", Parity.InvisibleWalls(false)))
+    end,
+})
+
+local moveGroup2 = dragTab:AddLeftGroupbox("Movement Modification", "wind")
+
+moveGroup2:AddDropdown("JumpType", {
+    Text = "Auto Jump Mode",
+    Values = { "Simulation", "Realistic" },
+    Default = 1,
+    Callback = function(value) State.Opt.JumpType = value end,
+})
+
+moveGroup2:AddToggle("BackwardBhop", {
+    Text = "BHOP Backwards",
+    Default = false,
+    Description = "Stored like the original; the payload body never reads it",
+    Callback = function(on) State.Opt.BackwardBhop = on end,
+})
+
+moveGroup2:AddToggle("SpiderHop", {
+    Text = "Spider Hop (Beta)",
+    Default = false,
+    Callback = function(on) State.Opt.SpiderHop = on end,
+})
+
+moveGroup2:AddInput("BhopAcceleration", {
+    Text = "BHOP Acceleration (negative only)",
+    Numeric = true,
+    Placeholder = "-0.1",
+    Callback = function(value) State.Opt.BhopAcceleration = tonumber(value) or -0.1 end,
+})
+
+moveGroup2:AddToggle("AutoAccel", {
+    Text = "Auto Acceleration (Legit)",
+    Default = false,
+    Callback = function(on) State.Opt.AutoAccel = on end,
+})
+
+moveGroup2:AddInput("AutoAccelMaxAccel", {
+    Text = "Max Acceleration",
+    Numeric = true,
+    Placeholder = "3",
+    Callback = function(value) State.Opt.AutoAccelMaxAccel = tonumber(value) or 3 end,
+})
+
+moveGroup2:AddInput("AutoAccelMinAccel", {
+    Text = "Min Acceleration",
+    Numeric = true,
+    Placeholder = "-1",
+    Callback = function(value) State.Opt.AutoAccelMinAccel = tonumber(value) or -1 end,
+})
+
+moveGroup2:AddInput("AutoAccelMaxSpeed", {
+    Text = "Max Speed",
+    Numeric = true,
+    Placeholder = "70",
+    Callback = function(value) State.Opt.AutoAccelMaxSpeed = tonumber(value) or 70 end,
+})
+
+moveGroup2:AddDropdown("CrouchType", {
+    Text = "Select Crouch Type",
+    Values = { "Rapid", "Ground", "Air", "Normal" },
+    Default = 1,
+    Callback = function(value) State.Opt.CrouchType = value end,
+})
+
+moveGroup2:AddInput("CrouchDebounce", {
+    Text = "Crouch Speed",
+    Numeric = true,
+    Placeholder = "0.1",
+    Callback = function(value) State.Opt.CrouchDebounce = tonumber(value) or 0.1 end,
+})
+
+moveGroup2:AddToggle("AutoCrouch", {
+    Text = "Auto Crouch",
+    Default = false,
+    Callback = function(on)
+        State.Opt.AutoCrouch = on
+        if not on and Parity.Crouch.Holding then
+            SendKeybind("Crouching", false)
+            Parity.Crouch.Holding = false
+        end
+    end,
+})
+
+local autoGroup2 = dragTab:AddRightGroupbox("Automation", "play")
+
+autoGroup2:AddDropdown("RespawnType", {
+    Text = "Respawn Type",
+    Values = { "Spawnpoint", "Fake Revive" },
+    Default = 1,
+    Callback = function(value) State.Opt.RespawnType = value end,
+})
+
+autoGroup2:AddDropdown("LagMode", {
+    Text = "Lag Mode",
+    Values = { "Normal", "Demon", "FastFlag" },
+    Default = 1,
+    Callback = function(value) State.Opt.LagMode = value end,
+})
+
+autoGroup2:AddToggle("AutoBuy", {
+    Text = "Auto Purchase Selected Item",
+    Default = false,
+    Callback = function(on)
+        State.Opt.AutoBuy = on
+        Parity.Buy.Last = os.clock()
+    end,
+})
+
+autoGroup2:AddToggle("EmoteCarry", {
+    Text = "Carry While Emote",
+    Default = false,
+    Callback = function(on) State.Opt.EmoteCarry = on end,
+})
+
+autoGroup2:AddKeybind("LagKey", {
+    Text = "Lag Switch Keybind",
+    Default = "None",
+    Mode = "Always",
+    ChangedCallback = function(name) State.Opt.LagKey = name end,
+})
+
+autoGroup2:AddKeybind("CrouchKey", {
+    Text = "Crouch Keybind",
+    Default = "None",
+    Mode = "Always",
+    ChangedCallback = function(name) State.Opt.CrouchKey = name end,
+})
+
+autoGroup2:AddKeybind("BhopKey", {
+    Text = "BHOP Keybind",
+    Default = "None",
+    Mode = "Hold",
+    ChangedCallback = function(name) State.Opt.BhopKey = name end,
+})
+
+-- ── Remaining payload controls (offsets, floating buttons, keybinds) ───────
+local farmGroup2 = dragTab:AddLeftGroupbox("Farm Extras", "seedling")
+
+farmGroup2:AddInput("TokenFarmOffset", {
+    Text = "Token Farm Offset (X Y Z)",
+    Placeholder = "0 -8 0",
+    Callback = function(text)
+        local x, y, z = tostring(text):match("^%s*([%-%d%.]+)%s+([%-%d%.]+)%s+([%-%d%.]+)%s*$")
+        if x and y and z then
+            State.Opt.TokenOffset = Vector3.new(tonumber(x), tonumber(y), tonumber(z))
+        end
+    end,
+})
+
+farmGroup2:AddDropdown("TimerRoundState", {
+    Text = "Timer Round State",
+    Values = { "Intermission", "Gameplay", "Any" },
+    Default = 3,
+    Callback = function(value) State.Opt.TimerRoundState = value end,
+})
+
+farmGroup2:AddInput("EmoteDashAccel", {
+    Text = "Aggressive Emote Acceleration (negative only)",
+    Numeric = true,
+    Placeholder = "-2",
+    Callback = function(value) State.Opt.EmoteDashAccel = tonumber(value) or -2 end,
+})
+
+farmGroup2:AddToggle("GravityToggle", {
+    Text = "Gravity",
+    Default = false,
+    Callback = function(on)
+        State.Opt.GravityOn = on
+        local _, humanoid = Character()
+        if not humanoid then return end
+        humanoid.Gravity = on and (State.Opt.Gravity or 90) or 196.2
+    end,
+})
+
+local moreGroup = dragTab:AddRightGroupbox("Buttons & Keybinds", "keyboard")
+
+ButtonToggle("CarryBtn", "Auto Carry Button", "CarryBtn", "Auto Carry: OFF", "CarrySize", function()
+    State.Opt.AutoCarry = not State.Opt.AutoCarry
+    if State.Opt.AutoCarry then StartAutoCarry() else StopAutoCarry() end
+    return State.Opt.AutoCarry and "Auto Carry: ON" or "Auto Carry: OFF"
+end)
+
+ButtonToggle("EmoteBtn", "Emote Dash Button", "EmoteBtn", "Start Emote", "EmoteSize", function()
+    State.Opt.EmoteDashAggressive = not State.Opt.EmoteDashAggressive
+    if State.Opt.EmoteDashAggressive then
+        Parity.StartAggressiveEmote()
+    end
+    return State.Opt.EmoteDashAggressive and "Stop Emote" or "Start Emote"
+end)
+
+ButtonToggle("FlyBtn", "Fly Button", "FlyBtn", "Fly: OFF", "FlySize", function()
+    State.Opt.Fly = not State.Opt.Fly
+    return State.Opt.Fly and "Fly: ON" or "Fly: OFF"
+end)
+
+moreGroup:AddKeybind("CarryKey", {
+    Text = "Keybind to Carry",
+    Default = "None",
+    Mode = "Always",
+    ChangedCallback = function(name) State.Opt.CarryKey = name end,
+})
+
+moreGroup:AddKeybind("EmoteKey", {
+    Text = "Emote Dash Keybind",
+    Default = "None",
+    Mode = "Always",
+    ChangedCallback = function(name) State.Opt.EmoteKey = name end,
+})
+
+moreGroup:AddKeybind("GravityKey", {
+    Text = "Gravity Keybind",
+    Default = "None",
+    Mode = "Always",
+    ChangedCallback = function(name) State.Opt.GravityKey = name end,
+})
+
+State.Opt.TimerRoundState = State.Opt.TimerRoundState or "Any"
+State.Opt.TokenOffset = State.Opt.TokenOffset or Vector3.new(0, -8, 0)
+
+State.Opt.RespawnType = State.Opt.RespawnType or "Spawnpoint"
+State.Opt.LagMode = State.Opt.LagMode or "Normal"
+State.Opt.JumpType = State.Opt.JumpType or "Simulation"
+State.Opt.CrouchDebounce = State.Opt.CrouchDebounce or 0.1
+State.Opt.BhopAcceleration = State.Opt.BhopAcceleration or -0.1
+State.Opt.CrouchType = State.Opt.CrouchType or "Rapid"
 
 Connect(Players.PlayerRemoving, function(player)
     local character = player.Character
