@@ -125,6 +125,10 @@ def build_loader(text, keep, extra=None):
                  required=False, flags=re.M)
 
     for old, new in (
+        # Upstream keys the table by universe id and looks it up with game.GameId.
+        # Accept the place id too, so a place-only id in extra/games.json still hits.
+        ("local name = GAMES[game.GameId]",
+         "local name = GAMES[game.GameId] or GAMES[game.PlaceId]"),
         ('Notify("This game is not supported yet. Join " .. DISCORD .. " for the list.")',
          'Notify("This game is not supported yet. Open the repo issues tab for the list.")'),
         ('Notify("Could not download " .. name .. ". Check your connection and try again, or ask in " .. DISCORD, why)',

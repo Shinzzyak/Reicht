@@ -3,7 +3,7 @@ game.Loaded:Wait()
 end
 local BASE = "https://raw.githubusercontent.com/Shinzzyak/Reicht/refs/heads/main/games/"
 local GAMES = {
-[9872472334] = "Evade",
+[3647333358] = "Evade",
 [10436530264] = "Build An Ant Empire",
 [10418224975] = "TNT Mining",
 [10684750879] = "Loot To Forge",
@@ -61,7 +61,7 @@ if attempt < 3 then task.wait(1) end
 end
 return nil, why
 end
-local name = GAMES[game.GameId]
+local name = GAMES[game.GameId] or GAMES[game.PlaceId]
 if not name then
 Notify("This game is not supported yet. Open the repo issues tab for the list.")
 return
