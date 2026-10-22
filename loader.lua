@@ -4,7 +4,6 @@ end
 
 local BASE = "https://raw.githubusercontent.com/Shinzzyak/Reicht/refs/heads/main/games/"
 
-
 local GAMES = {
     [10436530264] = "Build An Ant Empire",
     [10418224975] = "TNT Mining",

@@ -2117,8 +2117,10 @@ local function BuildInterface()
             Reicht.Util.Button(bossGroup, {
                 Text = T("Loot Boss Coins Now", "เก็บเหรียญบอสทันที"),
                 Func = function()
-                    Reicht.Boss.LootCoins()
-
+                    local fired = Reicht.Boss.LootCoins()
+                    local tracked = 0
+                    for _ in pairs(State.CoinPrompts or {}) do tracked += 1 end
+                    Library:Notify("Reicht", string.format("Coins fired %d / tracked %d", fired, tracked), 4, "Coin")
                 end,
             })
             local tpGroup = worldTab:AddLeftGroupbox(T("Teleports", "จุดวาร์ป"), "map-pin")
