@@ -54,11 +54,16 @@ def sub(text, old, new, where, required=True):
     return text.replace(old, new)
 
 
-def resub(text, pattern, repl, where, required=True, flags=0):
+def resub(text, pattern, repl, where, required=True, flags=0, quiet=False):
     new_text, count = re.subn(pattern, repl, text, flags=flags)
     if count == 0:
         if required:
             raise PatchMiss(f"{where}: /{pattern[:80]}/")
+        # A soft patch that silently misses is how a "fixed" feature quietly goes
+        # back to broken. Record it so the CI log shows the gap -- except for the
+        # patches that are meant to apply to some games only.
+        if not quiet:
+            warnings.append(f"soft patch missed: {where}")
         return text
     applied.append(f"{where}: /{pattern[:50]}/ x{count}")
     return new_text
@@ -156,10 +161,10 @@ def build_game(text, where):
     # budgets, and the numbers differ per game. Raise whatever is present.
     text = resub(text, r"RemoteTimeout = (\d+),",
                  lambda m: f"RemoteTimeout = {max(int(m.group(1)), 20)},",
-                 where + " RemoteTimeout", required=False)
+                 where + " RemoteTimeout", required=False, quiet=True)
     text = resub(text, r"LoadTimeout = (\d+),",
                  lambda m: f"LoadTimeout = {max(int(m.group(1)), 30)},",
-                 where + " LoadTimeout", required=False)
+                 where + " LoadTimeout", required=False, quiet=True)
 
     # Coin prompts: upstream only tracks a prompt whose name is exactly
     # "ActivityCoinPrompt", so a rename by the game silently empties the table and
@@ -170,6 +175,7 @@ def build_game(text, where):
         'instance:IsA("ProximityPrompt") and instance.Name:lower():find("coin")',
         where + " coin prompt filter",
         required=False,
+        quiet=True,
     )
 
     # fireproximityprompt on a HoldDuration prompt needs the hold time passed
@@ -181,6 +187,7 @@ def build_game(text, where):
         "pcall(fireproximityprompt, prompt, 0)",
         where + " fireproximityprompt hold arg",
         required=False,
+        quiet=True,
     )
 
     # The manual button discarded its return value, so "it does nothing" was
@@ -196,11 +203,113 @@ def build_game(text, where):
                    f"{m.group(1)}end,"),
         where + " loot button feedback",
         required=False,
+        quiet=True,
+    )
+
+    # ---------------------------------------------------------- colony replies ---
+    # These four only exist in the Build An Ant Empire script. On the ant file they
+    # are mandatory: a silent miss here is exactly how the claim loop went dead.
+    ant = "ClaimRolledAnt" in text
+
+    # Claim gate compared the offer currency against one hard-coded localised
+    # string. Any rename by the game made every claim return false with nothing
+    # logged, so rolled ants piled up and the toggle looked dead.
+    text = resub(
+        text,
+        r'if offer\.Currency and offer\.Currency ~= "[^"]*" then return false end',
+        'if offer.Currency and type(offer.Currency) == "string"\n'
+        '        and offer.Currency ~= "\u91d1\u5e01" and offer.Currency ~= "Gold" and offer.Currency ~= "gold" then\n'
+        "        return false\n"
+        "    end",
+        where + " claim currency tolerance",
+        required=ant,
+        quiet=not ant,
+    )
+
+    # A roll reply replaced the whole pending table, so an offer rolled one tick
+    # earlier was destroyed before the claim loop could reach it. Merge and age
+    # out instead: an offer stays claimable for 25s.
+    text = resub(
+        text,
+        r"( *)State\.PendingRolls = \{\}\n"
+        r"\s*State\.Metrics\.Rolls \+= 1\n"
+        r"\s*for _, offer in ipairs\(data\.Results or \{\}\) do\n"
+        r"\s*if type\(offer\) == \"table\" and type\(offer\.ClaimId\) == \"string\" then State\.PendingRolls\[offer\.ClaimId\] = offer end\n",
+        lambda m: (
+            f"{m.group(1)}State.Metrics.Rolls += 1\n"
+            f"{m.group(1)}State.RollFails = 0\n"
+            f"{m.group(1)}-- Merge, do not replace: an offer from the previous roll is still\n"
+            f"{m.group(1)}-- claimable, and wiping the table dropped it silently.\n"
+            f"{m.group(1)}local stamp = os.clock()\n"
+            f"{m.group(1)}for stale, seen in pairs(State.PendingRolls) do\n"
+            f"{m.group(1)}    if stamp - (seen._At or 0) > 25 then State.PendingRolls[stale] = nil end\n"
+            f"{m.group(1)}end\n"
+            f"{m.group(1)}for _, offer in ipairs(data.Results or {{}}) do\n"
+            f"{m.group(1)}    if type(offer) == \"table\" and type(offer.ClaimId) == \"string\" then\n"
+            f"{m.group(1)}        offer._At = stamp\n"
+            f"{m.group(1)}        State.PendingRolls[offer.ClaimId] = offer\n"
+            f"{m.group(1)}    end\n"
+        ),
+        where + " pending roll merge",
+        required=ant,
+        quiet=not ant,
+    )
+
+    # BuildEntry expects the live BackpackModel as self. A hand-built self can
+    # throw, and an unguarded throw took down the entire claim pass with it.
+    text = resub(
+        text,
+        r"( *)local entry = backpack and " + NS + r"\.GameLib\.Call\(backpack\.BuildEntry, backpack, \{\n"
+        r"\s*Ecs = \{ Context = " + NS + r"\.GameLib\.Apis\.Context \},\n"
+        r"\s*\}, \"Backpack\", offer\.V, 1, 0\)\n"
+        r"\s*offers\[#offers \+ 1\] = \{ Id = claimId, Offer = offer, Attack = entry and entry\.Attack or 0 \}\n",
+        lambda m: (
+            f"{m.group(1)}local built, entry = pcall({NS}.GameLib.Call, backpack and backpack.BuildEntry,\n"
+            f"{m.group(1)}    backpack, {{ Ecs = {{ Context = {NS}.GameLib.Apis.Context }} }}, \"Backpack\", offer.V, 1, 0)\n"
+            f"{m.group(1)}local attack = built and type(entry) == \"table\" and tonumber(entry.Attack)\n"
+            f"{m.group(1)}    or tonumber(offer.Attack) or 0\n"
+            f"{m.group(1)}offers[#offers + 1] = {{ Id = claimId, Offer = offer, Attack = attack }}\n"
+        ),
+        where + " claim sort guard",
+        required=ant,
+        quiet=not ant,
+    )
+
+    # Rolls were fired every 0.15s with no confirmation and no backoff. When the
+    # remote stops answering that is an unbounded spam loop with zero feedback.
+    text = resub(
+        text,
+        r"( *)return " + NS + r"\.Util\.FireEcs\(\"RollAnt\", \{ Source = \"RollModel\" \}\)\n",
+        lambda m: (
+            f"{m.group(1)}local sent = {NS}.Util.FireEcs(\"RollAnt\", {{ Source = \"RollModel\" }})\n"
+            f"{m.group(1)}if not sent then\n"
+            f"{m.group(1)}    State.RollFails = (State.RollFails or 0) + 1\n"
+            f"{m.group(1)}    State.NextRoll = now + 1\n"
+            f"{m.group(1)}    if State.RollFails == 12 then\n"
+            f"{m.group(1)}        {NS}.Util.Alert(\"Auto Roll\", \"Rolls are not going through. Close any open purchase prompt.\")\n"
+            f"{m.group(1)}    end\n"
+            f"{m.group(1)}end\n"
+            f"{m.group(1)}return sent\n"
+        ),
+        where + " roll backoff",
+        required=ant,
+        quiet=not ant,
     )
     return text
 
 
 # ------------------------------------------------------------------ build ----
+
+def shrink(minifier, path):
+    """Rewrite one staged Lua file with comments and layout removed. Returns bytes saved."""
+    before = os.path.getsize(path)
+    result = subprocess.run([sys.executable, minifier, path, "2"], capture_output=True)
+    if result.returncode != 0:
+        raise SystemExit(f"minify failed for {path}: {result.stderr.decode()[:300]}")
+    with open(path, "wb") as handle:
+        handle.write(result.stdout)
+    return before - len(result.stdout)
+
 
 def clear_generated(root):
     for name in GENERATED:
@@ -286,6 +395,22 @@ def main():
 
     shutil.copy(os.path.join(os.path.dirname(os.path.abspath(__file__)), "README.template.md"),
                 os.path.join(stage, "README.md"))
+
+    # Ship lean: comments, blank lines and indentation are ~15% of the payload and
+    # a 300 KB+ script on mobile data is the difference between loading and not.
+    # Patching happens above on the readable source, so nothing here is lossy for
+    # maintenance -- the source of truth is upstream plus this file.
+    minify = os.path.join(os.path.dirname(os.path.abspath(__file__)), "minify.py")
+    saved = 0
+    for name in GENERATED:
+        path = os.path.join(stage, name)
+        if os.path.isdir(path):
+            for entry in os.listdir(path):
+                if entry.endswith(".lua"):
+                    saved += shrink(minify, os.path.join(path, entry))
+        elif path.endswith(".lua") and os.path.isfile(path):
+            saved += shrink(minify, path)
+    print(f"minified: saved {saved} bytes")
 
     # Compile gate over the whole staged tree.
     targets = [os.path.join(stage, "loader.lua"), os.path.join(stage, "ui.lua")]
