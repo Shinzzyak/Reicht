@@ -63,7 +63,19 @@ local DEFAULTS = { Rotation = 0, Transparency = 0,
  AbsoluteContentSize = { X = 220, Y = 56 }, TextTransparency = 0, ImageTransparency = 0,
                    BackgroundTransparency = 0, TextSize = 14, Thickness = 1, Volume = 1,
                    ZIndex = 1, LayoutOrder = 0, Visible = true, Enabled = true,
-                   TextBounds = { X = 42, Y = 16 } }
+                   TextBounds = { X = 42, Y = 16 },
+                   Position = { X = { Scale = 0, Offset = 0 }, Y = { Scale = 0, Offset = 0 } },
+                   AnchorPoint = { X = 0, Y = 0 } }
+
+-- Remote traffic is the only proof that a feature reaches the game server: a
+-- callback that runs clean but fires nothing is a dead feature. Names carry their
+-- first argument so Interact("Revive") is distinguishable from Interact("Carry").
+TRACE = { fire = {}, made = {}, wrote = {} }
+local TRACE_CAP = 4000
+local function bump(bucket, key)
+    if #bucket > TRACE_CAP then return end
+    table.insert(bucket, key)
+end
 
 local newInstance
 local OBJ = {}
@@ -85,10 +97,13 @@ for _, name in ipairs({
 }) do SIGNAL_NAMES[name] = true end
 
 OBJ.__index = function(self, k)
-    local m = rawget(OBJ, "m_" .. k)
-    if m then return m end
+    -- An explicitly assigned field wins over the generic method stub: the harness
+    -- overrides e.g. Players.GetPlayers, and the old order silently returned the
+    -- stub's empty list instead (every carry/status feature then saw no players).
     local v = rawget(self, "_p")[k]
     if v ~= nil then return v end
+    local m = rawget(OBJ, "m_" .. k)
+    if m then return m end
     if SIGNAL_NAMES[k] then
         local s = newSignal()
         rawget(self, "_p")[k] = s
@@ -97,7 +112,24 @@ OBJ.__index = function(self, k)
     -- Dot-path module lookups (ReplicatedStorage.Objects.Game...) need a child
     -- that exists; only containers marked Permissive do this.
     local def = DEFAULTS[k]
-    if def ~= nil then return def end
+    if def ~= nil then
+        -- GuiObject defaults are value types in Roblox; hand back a copy so one
+        -- widget writing Position cannot leak into the next widget's read.
+        if type(def) == "table" then
+            local c = {}
+            for dk, dv in pairs(def) do
+                if type(dv) == "table" then
+                    local inner = {}
+                    for ik, iv in pairs(dv) do inner[ik] = iv end
+                    c[dk] = inner
+                else
+                    c[dk] = dv
+                end
+            end
+            return c
+        end
+        return def
+    end
     if rawget(self, "_p").Permissive then
         local o = newInstance("Folder", k)
         o._p.Parent = self
@@ -110,10 +142,43 @@ end
 -- Side-effect counter. A callback that runs clean but touches nothing is a dead
 -- feature, and pcall hides that; the audit needs a number to point at.
 EFFECTS = 0
-OBJ.__newindex = function(self, k, v) EFFECTS += 1 rawget(self, "_p")[k] = v end
+OBJ.__newindex = function(self, k, v)
+    EFFECTS += 1
+    local p = rawget(self, "_p")
+    -- Game state only: the menu rebuilds its own frames hundreds of times and
+    -- drowns the interesting writes (Workspace.Gravity, Humanoid.WalkSpeed,
+    -- BasePart.CanCollide) in UI noise.
+    local cls = tostring(p.ClassName)
+    if not cls:find("^UI") and not cls:find("Frame") and not cls:find("Label")
+        and not cls:find("Button") and not cls:find("Image") and not cls:find("Sprite")
+        and not cls:find("Gui") and not cls:find("Probe") and not cls:find("Canvas")
+        and not cls:find("Scrolling") and not cls:find("Stroke") and not cls:find("Padding")
+        and not cls:find("List") and not cls:find("Grid") and not cls:find("Corner")
+        and not cls:find("Gradient") and not cls:find("Aspect") and not cls:find("Scale") then
+        bump(TRACE.wrote, tostring(p.Name) .. "|" .. k)
+    end
+    -- Roblox parenting links both ways. Without this, anything the payload creates
+    -- with `Instance.new(...)` then parents is invisible to FindFirstChild and to
+    -- the harness's own descendant walk (floating buttons were lost this way).
+    if k == "Parent" then
+        local old = p.Parent
+        if old and old._p and old._p.Children then
+            for i = #old._p.Children, 1, -1 do
+                if old._p.Children[i] == self then table.remove(old._p.Children, i) end
+            end
+        end
+        if v and v._p and v._p.Children then
+            local present = false
+            for _, c in ipairs(v._p.Children) do if c == self then present = true break end end
+            if not present then table.insert(v._p.Children, self) end
+        end
+    end
+    p[k] = v
+end
 
 newInstance = function(class, name)
     EFFECTS += 1
+    bump(TRACE.made, class)
     local self = setmetatable({ _p = { ClassName = class, Name = name or class, Parent = nil, Children = {} } }, OBJ)
     return self
 end
@@ -163,7 +228,16 @@ OBJ.m_GetPropertyChangedSignal = function(self) return newSignal() end
 OBJ.m_GetDescendantsAsync = function(self) return self._p.Children end
 OBJ.m_TranslateBy = function(self) end
 OBJ.m_ChangeState = function(self) end
-OBJ.m_FireServer = function(self) self.Fired = (self.Fired or 0) + 1 end
+OBJ.m_FireServer = function(self, ...)
+    -- rawget: on a Permissive container `self.Fired` would auto-create a child
+    -- Folder and the counter becomes a table (arithmetic error, swallowed by the
+    -- payload's own pcall -- a silent dead feature).
+    local p = rawget(self, "_p")
+    p.Fired = (p.Fired or 0) + 1
+    local arg = select(1, ...)
+    local key = tostring(rawget(self, "_p").Name) .. "|" .. tostring(type(arg) == "string" and arg or type(arg))
+    bump(TRACE.fire, key)
+end
 OBJ.m_Invoke = function(self) return nil end
 OBJ.m_Play = function(self) end
 OBJ.m_Remove = function(self) end
@@ -204,7 +278,15 @@ local function anyModule()
     mt.__tostring = function() return "module" end
     return setmetatable(t, mt)
 end
-require = function() return anyModule() end
+-- A blanket truthy module makes every `if mod:Get("Downed") then` probe read as
+-- true, which silently disables anything filtering on a boolean (auto carry saw
+-- every candidate as ragdolled). CharacterService is deliberately unreachable so
+-- the payload falls back to the attribute-based path the harness can seed.
+require = function(mod)
+    local name = type(mod) == "table" and mod._p and mod._p.Name
+    if name == "CharacterService" then return nil end
+    return anyModule()
+end
 
 Instance = { new = function(class, parent)
     local o = newInstance(class)
@@ -642,6 +724,7 @@ end
 local char = newInstance("Model", "Tester")
 local hum = newInstance("Humanoid", "Humanoid")
 hum.WalkSpeed = 16; hum.JumpPower = 50; hum.JumpHeight = 7.2; hum.HipHeight = 2
+hum.Health = 100; hum.MaxHealth = 100
 hum.MoveDirection = Vector3.new(0, 0, 0)
 hum.GetState = function() return Enum.HumanoidStateType.Running end
 hum.ChangeState = function() end
@@ -668,14 +751,146 @@ vu.KeyPress = function() end
 vu.Move = function() end
 local cg = get("CoreGui")
 table.insert(ws._p.Children, char)
+-- Real players always have these; the payload compares attributes against
+-- DisplayName/UserId, and a nil DisplayName makes every candidate model match
+-- `attr == nil` and be rejected as "the local player".
+lp.DisplayName = lp.Name
+lp.UserId = 1
+lp.AccountAge = 1000
 
+-- Seed the slice of game state the payload actually reads. Without this every
+-- feature that needs a target (revive, carry, emote, token farm) bails on a nil
+-- check and looks dead, even though its code is fine.
+local function mkPlayerModel(folder, name, tag, team, status)
+    local m = newInstance("Model", name)
+    m._p.ClassName = "Model"
+    local root = mkPart("HumanoidRootPart")
+    local h = newInstance("Humanoid", "Humanoid")
+    h.Health = 100; h.MaxHealth = 100; h.WalkSpeed = 16; h.JumpPower = 50
+    h.MoveDirection = Vector3.new(0, 0, 1)
+    h.GetState = function() return Enum.HumanoidStateType.Running end
+    h.ChangeState = function() end
+    h.GetStateEnabled = function() return true end
+    h.SetStateEnabled = function() end
+    table.insert(m._p.Children, root); root._p.Parent = m
+    table.insert(m._p.Children, h); h._p.Parent = m
+    m.PrimaryPart = root
+    m.SetAttribute(m, "Tag", tag)
+    m.SetAttribute(m, "Team", team)
+    m.SetAttribute(m, "Status", status)
+    table.insert(folder._p.Children, m); m._p.Parent = folder
+    return m
+end
+local wsPlayers = newInstance("Folder", "Players")
+wsPlayers._p.ClassName = "Folder"
+table.insert(ws._p.Children, wsPlayers); wsPlayers._p.Parent = ws
+mkPlayerModel(wsPlayers, "Target1", "tgt1", "Survivors", "DOWNED")
+mkPlayerModel(wsPlayers, "Target2", "tgt2", "Survivors", "ALIVE")
+
+local gameFolder = newInstance("Folder", "Game")
+gameFolder._p.ClassName = "Folder"
+table.insert(ws._p.Children, gameFolder); gameFolder._p.Parent = ws
+local gamePlayers = newInstance("Folder", "Players")
+gamePlayers._p.ClassName = "Folder"
+table.insert(gameFolder._p.Children, gamePlayers); gamePlayers._p.Parent = gameFolder
+mkPlayerModel(gamePlayers, "NPC1", "npc1", "Killers", "ALIVE")
+local mapFolder = newInstance("Folder", "Map")
+mapFolder._p.ClassName = "Folder"
+table.insert(gameFolder._p.Children, mapFolder); mapFolder._p.Parent = gameFolder
+local mapParts = newInstance("Folder", "Parts")
+mapParts._p.ClassName = "Folder"
+table.insert(mapFolder._p.Children, mapParts); mapParts._p.Parent = mapFolder
+local objectives = newInstance("Folder", "Objectives")
+objectives._p.ClassName = "Folder"
+table.insert(mapParts._p.Children, objectives); objectives._p.Parent = mapParts
+local obj1 = mkPart("Objective1")
+obj1.SetAttribute(obj1, "Tag", "objtag")
+obj1.SetAttribute(obj1, "Completed", false)
+table.insert(objectives._p.Children, obj1); obj1._p.Parent = objectives
+local safeZones = newInstance("Folder", "SafeZones")
+safeZones._p.ClassName = "Folder"
+table.insert(mapFolder._p.Children, safeZones); safeZones._p.Parent = mapFolder
+local rigs = newInstance("Folder", "Rigs")
+rigs._p.ClassName = "Folder"
+table.insert(ws._p.Children, rigs); rigs._p.Parent = ws
+mkPlayerModel(rigs, "Rig1", "rig1", "Survivors", "ALIVE")
+
+
+-- Real games hand the payload RemoteEvents, not auto-created folders: Vote and
+-- Carry only fire when `IsA("RemoteEvent")` is true, so the remote tree has to be
+-- seeded explicitly or those features look dead.
+local function mkRemote(parent, name, class)
+    local r = newInstance(class or "RemoteEvent", name)
+    r._p.ClassName = class or "RemoteEvent"
+    table.insert(parent._p.Children, r); r._p.Parent = parent
+    return r
+end
+local rsEvents = newInstance("Folder", "Events")
+rsEvents._p.ClassName = "Folder"
+table.insert(rs._p.Children, rsEvents); rsEvents._p.Parent = rs
+mkRemote(rsEvents, "Interact")
+mkRemote(rsEvents, "CharacterTask")
+mkRemote(rsEvents, "Vote")
+mkRemote(rsEvents, "UpdateCharacterDataRegistry")
+mkRemote(rsEvents, "SetPlayerMode")
+local adminFolder = newInstance("Folder", "Admin")
+adminFolder._p.ClassName = "Folder"
+table.insert(rsEvents._p.Children, adminFolder); adminFolder._p.Parent = rsEvents
+mkRemote(adminFolder, "Command")
+local shared = newInstance("Folder", "Shared")
+shared._p.ClassName = "Folder"
+table.insert(rs._p.Children, shared); shared._p.Parent = rs
+local userData = newInstance("Folder", "UserData")
+userData._p.ClassName = "Folder"
+table.insert(shared._p.Children, userData); userData._p.Parent = shared
+local udEvents = newInstance("Folder", "Events")
+udEvents._p.ClassName = "Folder"
+table.insert(userData._p.Children, udEvents); udEvents._p.Parent = userData
+local requests = newInstance("Folder", "Requests")
+requests._p.ClassName = "Folder"
+table.insert(udEvents._p.Children, requests); requests._p.Parent = udEvents
+mkRemote(requests, "SetSetting")
+mkRemote(requests, "Purchase")
+
+-- A downed teammate: workspace.Players model with Downed=true, plus a Player
+-- object so Players:GetPlayers() can find it. Carry and revive target both.
+local downedModel = wsPlayers:FindFirstChild("Target1")
+if downedModel then
+    downedModel.SetAttribute(downedModel, "Downed", true)
+    downedModel.PrimaryPart.Anchored = false
+end
+local teammate = newInstance("Player", "Target1")
+teammate._p.ClassName = "Player"
+teammate.DisplayName = "Target1"
+teammate.UserId = 2
+teammate.Character = downedModel
+if downedModel then table.insert(downedModel._p.Children, teammate) end
+players.GetPlayers = function() return { lp, teammate } end
+
+-- Vote popup: the vote features refuse to fire while the popup is hidden.
+local pg = newInstance("Folder", "PlayerGui")
+pg._p.ClassName = "PlayerGui"
+table.insert(lp._p.Children, pg); pg._p.Parent = lp
+lp.PlayerGui = pg
+local guiShared = newInstance("Folder", "Shared")
+guiShared._p.ClassName = "Folder"
+table.insert(pg._p.Children, guiShared); guiShared._p.Parent = pg
+local popups = newInstance("Folder", "Popups")
+popups._p.ClassName = "Folder"
+table.insert(guiShared._p.Children, popups); popups._p.Parent = guiShared
+local voteActive = newInstance("Frame", "VoteActive")
+voteActive._p.ClassName = "Frame"
+voteActive.Visible = true
+table.insert(popups._p.Children, voteActive); voteActive._p.Parent = popups
+
+TRACE.fire, TRACE.made, TRACE.wrote = {}, {}, {}
 local errors = {}
 -- Callbacks may yield (task.wait inside a toggle handler); run each in its own
 -- coroutine and hand the survivors to the frame loop.
 local function try(label, fn)
     local co = coroutine.create(fn)
     local ok, err = coroutine.resume(co)
-    if not ok then table.insert(errors, label .. " -> " .. tostring(err)) end
+    if not ok then table.insert(errors, label .. " -> " .. tostring(err) .. "\n" .. debug.traceback(co)) end
     if coroutine.status(co) == "suspended" then table.insert(PENDING, co) end
 end
 
@@ -689,7 +904,7 @@ local function valueFor(kind, spec)
     if kind == "ColorPicker" then return { R = 1, G = 1, B = 1 } end
     return nil
 end
-local TRACE = rawget(_G, "SMOKE_TRACE")
+local TRACE_WIDGETS = rawget(_G, "SMOKE_TRACE")
 local fired = 0
 
 -- Real-library mode: drive every option the shipped ui.lua registered. The mock
@@ -716,6 +931,7 @@ if LIB and type(LIB.Options) == "table" then
             end
             local before = #errors
             local effectsBefore = EFFECTS
+            local fireBefore, madeBefore = #TRACE.fire, #TRACE.made
             if value ~= nil then
                 try("option " .. tostring(id), function() opt:SetValue(value) end)
                 if #errors == before then driven += 1 end
@@ -723,10 +939,14 @@ if LIB and type(LIB.Options) == "table" then
             local effectCount = EFFECTS - effectsBefore
             -- One line per option so the audit can tell "built but inert" (no
             -- callback, nothing wired) from "built and live".
-            _PRINT(string.format("OPT|%s|%s|%s|%s|%s|%d",
+            local fired, made = {}, {}
+            for i = fireBefore + 1, math.min(#TRACE.fire, fireBefore + 8) do table.insert(fired, TRACE.fire[i]) end
+            for i = madeBefore + 1, math.min(#TRACE.made, madeBefore + 8) do table.insert(made, TRACE.made[i]) end
+            _PRINT(string.format("OPT|%s|%s|%s|%s|%s|%d|%s|%s",
                 tostring(id), tostring(opt.Type or "?"), type(opt.Value),
                 tostring(type(opt.Callback) == "function" or #(opt.Changed or {}) > 0),
-                tostring(value ~= nil and #errors == before), effectCount))
+                tostring(value ~= nil and #errors == before), effectCount,
+                table.concat(fired, ","), table.concat(made, ",")))
         end
     end
     _PRINT("library: real ui.lua buttons=" .. type(LIB.Buttons) .. " tabs=" .. type(LIB.Tabs))
@@ -750,7 +970,7 @@ if LIB and type(LIB.Options) == "table" then
 end
 
 for _, w in ipairs(WIDGETS) do
-    if TRACE then _PRINT("drive " .. tostring(w.Kind) .. ":" .. tostring(w.Id) .. string.rep(" ", 600)) end
+    if TRACE_WIDGETS then _PRINT("drive " .. tostring(w.Kind) .. ":" .. tostring(w.Id)) end
     local value = valueFor(w.Kind, w.Spec)
     if w.Kind == "Button" then
         if w.Spec.Func then try("button " .. tostring(w.Spec.Text), w.Spec.Func); fired += 1 end
@@ -779,8 +999,25 @@ for name, svc in pairs(services) do
         if svc[sig] and #svc[sig].handlers > 0 then table.insert(signals, { name = name .. "." .. sig, sig = svc[sig] }) end
     end
 end
+local SRC_LINES = {}
+for l in (SCRIPT_SOURCE):gmatch("[^\n]*") do table.insert(SRC_LINES, l) end
 local frames = 0
-for round = 1, 3 do
+for name, svc in pairs(services) do
+    for _, sig in ipairs({ "Heartbeat", "RenderStepped", "Stepped", "PreSimulation", "PostSimulation" }) do
+        local s = svc[sig]
+        if s and #s.handlers > 0 then
+            local lines = {}
+            for _, fn in ipairs(s.handlers) do
+                local ok, l = pcall(function() return debug.info(fn, "l") end)
+                local txt = "?"
+                if ok and SRC_LINES and l and SRC_LINES[l] then txt = l .. ":" .. (SRC_LINES[l]:gsub("%s+", " "):sub(1, 40)) end
+                table.insert(lines, txt)
+            end
+            _PRINT(string.format("SIG|%s.%s|%d|%s", name, sig, #s.handlers, table.concat(lines, ",")))
+        end
+    end
+end
+for round = 1, 60 do
     if MAIN and coroutine.status(MAIN) == "suspended" then
         local ok, err = coroutine.resume(MAIN)
         if not ok then table.insert(errors, "main -> " .. tostring(err)); MAIN = nil end
@@ -801,7 +1038,139 @@ for round = 1, 3 do
         end
     end
 end
-_PRINT("frame handlers run: " .. tostring(frames))
+
+-- 3. click the floating buttons the payload built. Several features (auto carry,
+-- lag switch, superbounce) live behind these TextButtons instead of a toggle, so
+-- an option-only driver never reaches them.
+local function walk(node, out, depth)
+    if depth > 8 then return end
+    for _, child in ipairs(node:GetChildren()) do
+        local cls = child._p and child._p.ClassName
+        if cls == "TextButton" then table.insert(out, child) end
+        walk(child, out, depth + 1)
+    end
+end
+local buttons = {}
+walk(cg, buttons, 0)
+if lp.PlayerGui then walk(lp.PlayerGui, buttons, 0) end
+_PRINT("floating buttons found: " .. tostring(#buttons))
+-- GuiButtons signal a click through Activated; MouseButton1Click is the older
+-- path. Fire both, the way a real tap does.
+local clicked = 0
+for _, btn in ipairs(buttons) do
+    local total = 0
+    for _, key in ipairs({ "Activated", "MouseButton1Click" }) do
+        local sig = btn._p[key]
+        local handlers = sig and sig.handlers or {}
+        total += #handlers
+        for _, fn in ipairs(handlers) do
+            -- Real clicks hand the handler an InputObject; the library's drag code
+            -- reads input.Position.X.
+            try("fb:" .. tostring(btn._p.Name), function()
+                return fn({
+                    Position = Vector3.new(0, 0, 0),
+                    UserInputType = Enum.UserInputType.MouseButton1,
+                    UserInputState = Enum.UserInputState.Begin,
+                })
+            end)
+        end
+    end
+    if total > 0 then
+        clicked += 1
+        _PRINT(string.format("FBTN|%s|%s|%s|%d", tostring(btn._p.Name), tostring(btn._p.Text), tostring(btn._p.Parent and btn._p.Parent._p and btn._p.Parent._p.Name), total))
+    end
+end
+_PRINT("floating buttons clicked: " .. tostring(clicked))
+_PRINT("fires after click: " .. tostring(#TRACE.fire))
+do
+    local c = lp.Character
+    _PRINT("char after click: " .. tostring(c and c._p.Name)
+        .. " hrp=" .. tostring(c and c:FindFirstChild("HumanoidRootPart") ~= nil)
+        .. " players=" .. tostring(#game:GetService("Players"):GetPlayers()))
+    local tm = wsPlayers:FindFirstChild("Target1")
+    if tm then
+        _PRINT("  target1 Downed=" .. tostring(tm:GetAttribute("Downed"))
+            .. " anchored=" .. tostring(tm.PrimaryPart and tm.PrimaryPart.Anchored)
+            .. " ragdollFolder=" .. tostring(tm:FindFirstChild("RagdollConstraints") ~= nil)
+            .. " tag=" .. tostring(tm:GetAttribute("Tag"))
+            .. " hrpPos=" .. tostring(tm:FindFirstChild("HumanoidRootPart") and tm:FindFirstChild("HumanoidRootPart").Position))
+        local mine = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+        local theirs = tm:FindFirstChild("HumanoidRootPart")
+        _PRINT("  my hrp=" .. tostring(mine and mine.Position)
+            .. " dist=" .. tostring(mine and theirs and (mine.Position - theirs.Position).Magnitude))
+        local tmChar = tm
+        _PRINT("  tm FindFirstChildOfClass Humanoid=" .. tostring(tmChar:FindFirstChildOfClass("Humanoid") ~= nil)
+            .. " health=" .. tostring(tmChar:FindFirstChildOfClass("Humanoid") and tmChar:FindFirstChildOfClass("Humanoid").Health))
+    end
+end
+local hbAfter = services["RunService"] and services["RunService"].Heartbeat
+if hbAfter then
+    local ls = {}
+    for _, fn in ipairs(hbAfter.handlers) do
+        local ok, l = pcall(function() return debug.info(fn, "l") end)
+        table.insert(ls, tostring(ok and l or "?"))
+    end
+    _PRINT("heartbeat handlers after click: " .. #hbAfter.handlers .. " lines=" .. table.concat(ls, ","))
+    -- direct probe of the newest handler (auto carry)
+    local f0 = #TRACE.fire
+    local okp, errp = pcall(hbAfter.handlers[#hbAfter.handlers], 1 / 60)
+    _PRINT("direct carry probe: ok=" .. tostring(okp) .. " err=" .. tostring(errp) .. " fires=" .. (#TRACE.fire - f0))
+    local f1 = #TRACE.fire
+    for _ = 1, 60 do pcall(hbAfter.handlers[#hbAfter.handlers], 1 / 60) end
+    _PRINT("carry 60 calls fires=" .. (#TRACE.fire - f1))
+end
+for round = 1, 30 do
+    for i = #PENDING, 1, -1 do
+        local co = PENDING[i]
+        if coroutine.status(co) == "dead" then table.remove(PENDING, i)
+        else
+            local ok, err = coroutine.resume(co)
+            if not ok then table.insert(errors, "task2 -> " .. tostring(err)); table.remove(PENDING, i) end
+        end
+    end
+    for _, s in ipairs(signals) do
+        for _, fn in ipairs(s.sig.handlers) do
+            local ok, err = pcall(fn, 1 / 60)
+            if not ok then table.insert(errors, s.name .. " frame2 -> " .. tostring(err)) end
+        end
+    end
+end
+
+_PRINT("frame handlers run: " .. tostring(#PENDING))
+do
+    local seen, order = {}, {}
+    for _, k in ipairs(TRACE.fire) do
+        if not seen[k] then seen[k] = 0 table.insert(order, k) end
+        seen[k] += 1
+    end
+    table.sort(order)
+    for _, k in ipairs(order) do _PRINT(string.format("FIRE|%s|%d", k, seen[k])) end
+    _PRINT("trace fire total: " .. tostring(#TRACE.fire))
+    local wseen, worder = {}, {}
+    for _, k in ipairs(TRACE.wrote) do
+        if not wseen[k] then wseen[k] = 0 table.insert(worder, k) end
+        wseen[k] += 1
+    end
+    table.sort(worder, function(a, b)
+        if wseen[a] ~= wseen[b] then return wseen[a] > wseen[b] end
+        return a < b
+    end)
+    for i = 1, math.min(#worder, 45) do
+        _PRINT(string.format("WROTE|%s|%d", worder[i], wseen[worder[i]]))
+    end
+    local mseen, morder = {}, {}
+    for _, k in ipairs(TRACE.made) do
+        if not mseen[k] then mseen[k] = 0 table.insert(morder, k) end
+        mseen[k] += 1
+    end
+    table.sort(morder, function(a, b)
+        if mseen[a] ~= mseen[b] then return mseen[a] > mseen[b] end
+        return a < b
+    end)
+    for i = 1, math.min(#morder, 25) do
+        _PRINT(string.format("MADE|%s|%d", morder[i], mseen[morder[i]]))
+    end
+end
 _PRINT("main chunk: " .. tostring(MAIN and coroutine.status(MAIN) or "done"))
 _PRINT("errors: " .. tostring(#errors))
 local seen = {}
@@ -816,6 +1185,45 @@ def lua_long(text: str) -> str:
     while "]" + "=" * level + "]" in text:
         level += 1
     return "[" + "=" * level + "[" + text + "]" + "=" * level + "]"
+
+
+
+# One claim per feature, tied to evidence the harness actually observed. "fire" is
+# a remote call with its first argument, "write" is a property write on a game
+# object (UI churn is filtered out in the harness), "made" is an Instance.new.
+# A feature that merely runs without error does not satisfy any of these.
+FEATURE_PROOFS = {
+    "token farm fires Revive": ("fire", "Interact|Revive", 1),
+    "auto carry fires Carry": ("fire", "Interact|Carry", 1),
+    "emote fires CharacterTask": ("fire", "CharacterTask|Emote", 1),
+    "vignette off fires SetSetting": ("fire", "SetSetting|NextbotVignette", 1),
+    "speed writes Humanoid.WalkSpeed": ("write", "Humanoid|WalkSpeed", 1),
+    "jump power writes Humanoid.JumpPower": ("write", "Humanoid|JumpPower", 1),
+    "gravity writes Workspace.Gravity": ("write", "Workspace|Gravity", 1),
+    "ESP builds a Highlight": ("made", "Highlight", 1),
+    "player ESP paints FillColor": ("write", "PlayerHighlight_D|FillColor", 1),
+    "noclip writes CanCollide": ("write", "HumanoidRootPart|CanCollide", 1),
+}
+
+
+def check_proofs(out: str) -> tuple[int, int]:
+    """Report per-feature evidence. Returns (passed, failed)."""
+    seen = {"fire": {}, "write": {}, "made": {}}
+    prefixes = {"fire": "FIRE|", "write": "WROTE|", "made": "MADE|"}
+    for line in out.splitlines():
+        for kind, prefix in prefixes.items():
+            if line.startswith(prefix):
+                parts = line[len(prefix):].rsplit("|", 1)
+                if len(parts) == 2 and parts[1].isdigit():
+                    seen[kind][parts[0]] = int(parts[1])
+    passed = failed = 0
+    for label, (kind, key, need) in FEATURE_PROOFS.items():
+        got = seen[kind].get(key, 0)
+        ok = got >= need
+        passed += ok
+        failed += not ok
+        print(f"PROOF|{'PASS' if ok else 'FAIL'}|{label}|{got}/{need}")
+    return passed, failed
 
 
 def main() -> int:
@@ -845,9 +1253,15 @@ def main() -> int:
     if proc.stderr.strip():
         print("stderr: " + proc.stderr.strip()[:2000])
 
+    # The proof table describes Evade's features; other games still need their own
+    # mock before any of these claims can be made about them.
+    proofs_passed = proofs_failed = 0
+    if target.stem == "Evade" and "trace fire total" in out:
+        proofs_passed, proofs_failed = check_proofs(out)
     has_options = "options: " in out and "driven: 0" not in out
     has_widgets = "widgets: 0" not in out and "widgets wired: 0 / 0" not in out
-    bad = ("RUNTIME ERROR" in out) or ("errors: 0" not in out) or not (has_options or has_widgets)
+    bad = (("RUNTIME ERROR" in out) or ("errors: 0" not in out) or not (has_options or has_widgets)
+           or proofs_failed > 0)
     print("SMOKE " + ("FAIL " + str(target) if bad else "PASS " + str(target)))
     return 1 if bad else 0
 
