@@ -269,12 +269,15 @@ end
 setmetatable(__MOCK_LIBRARY, { __index = function() return function() return __MOCK_LIBRARY end end })
 Library = __MOCK_LIBRARY
 
-local ok, err = pcall(function()
-    local chunk, cerr = loadstring(SCRIPT_SOURCE, "evade")
-    if not chunk then error("COMPILE: " .. tostring(cerr), 0) end
-    chunk()
-end)
-if not ok then _PRINT("RUNTIME ERROR: " .. tostring(err)) end
+-- The chunk must run inside a coroutine: hub files call task.wait() in the main body, and
+-- yielding the main thread is a hard error in Luau.
+local chunk, cerr = loadstring(SCRIPT_SOURCE, "evade")
+if not chunk then _PRINT("RUNTIME ERROR: COMPILE: " .. tostring(cerr)) end
+MAIN = coroutine.create(chunk)
+do
+    local ok, err = coroutine.resume(MAIN)
+    if not ok then _PRINT("RUNTIME ERROR: " .. tostring(err)) end
+end
 
 _PRINT("kicked: " .. tostring(RECORD.kicked))
 _PRINT("tabs: " .. table.concat(RECORD.tabs, ", "))
@@ -392,6 +395,10 @@ for name, svc in pairs(services) do
 end
 local frames = 0
 for round = 1, 3 do
+    if MAIN and coroutine.status(MAIN) == "suspended" then
+        local ok, err = coroutine.resume(MAIN)
+        if not ok then table.insert(errors, "main -> " .. tostring(err)); MAIN = nil end
+    end
     for i = #PENDING, 1, -1 do
         local co = PENDING[i]
         if coroutine.status(co) == "dead" then table.remove(PENDING, i)
@@ -409,6 +416,7 @@ for round = 1, 3 do
     end
 end
 _PRINT("frame handlers run: " .. tostring(frames))
+_PRINT("main chunk: " .. tostring(MAIN and coroutine.status(MAIN) or "done"))
 _PRINT("errors: " .. tostring(#errors))
 local seen = {}
 for _, e in ipairs(errors) do
