@@ -37,9 +37,14 @@ local ProximityPromptService = game:GetService("ProximityPromptService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 if not game:IsLoaded() then game.Loaded:Wait() end
-if Players.LocalPlayer and Players.LocalPlayer.PlayerGui:FindFirstChild("LoadingUI") and Players.LocalPlayer.PlayerGui.LoadingUI.Enabled then
+if Players.LocalPlayer and Players.LocalPlayer.PlayerGui:FindFirstChild("LoadingUI") then
 print("[Lonely Hub] Waiting for game to load...")
-repeat task.wait() until not Players.LocalPlayer.PlayerGui:FindFirstChild("LoadingUI") and true or not Players.LocalPlayer.PlayerGui.LoadingUI.Enabled
+local deadline = tick() + 30
+while tick() < deadline do
+local loading = Players.LocalPlayer.PlayerGui:FindFirstChild("LoadingUI")
+if not loading or not loading.Enabled then break end
+task.wait()
+end
 end
 local Script = {
 Binded = {},
@@ -252,6 +257,7 @@ local HidingPlaceName = {
 ["Rooms"] = "Locker",
 ["Mines"] = "Locker"
 }
+setmetatable(HidingPlaceName, { __index = function() return "Hiding Spot" end })
 local CutsceneExclude = {
 "FigureHotelChase",
 "Elevator1",
@@ -336,32 +342,51 @@ local camera = workspace.CurrentCamera
 local localPlayer = Players.LocalPlayer
 local playerGui = localPlayer.PlayerGui
 local playerScripts = localPlayer.PlayerScripts
-local character = localPlayer.Character or localPlayer.CharacterAdded:Wait()
+local Missing = {}
+local function Inert(class, name)
+local placeholder = Instance.new(class)
+placeholder.Name = name
+Missing[#Missing + 1] = name
+return placeholder
+end
+local function WaitCharacter(deadline)
+local stop = tick() + deadline
+while tick() < stop do
+if localPlayer.Character then
+return localPlayer.Character
+end
+task.wait(0.1)
+end
+return nil
+end
+local character = localPlayer.Character or WaitCharacter(10)
 local alive = localPlayer:GetAttribute("Alive")
 local humanoid: Humanoid
 local rootPart: BasePart
 local collision
 local collisionClone
 local velocityLimiter
-local entityModules = ReplicatedStorage:WaitForChild("ClientModules"):WaitForChild("EntityModules")
-local gameData = ReplicatedStorage:WaitForChild("GameData")
-local floor = gameData:WaitForChild("Floor")
-local latestRoom = gameData:WaitForChild("LatestRoom")
-local liveModifiers = ReplicatedStorage:WaitForChild("LiveModifiers")
+local entityModules = ReplicatedStorage:WaitForChild("ClientModules", 3) or Inert("Folder", "ClientModules")
+entityModules = entityModules:WaitForChild("EntityModules", 3) or Inert("Folder", "EntityModules")
+local gameData = ReplicatedStorage:WaitForChild("GameData", 3) or Inert("Folder", "GameData")
+local floor = gameData:WaitForChild("Floor", 3) or Inert("StringValue", "Floor")
+local latestRoom = gameData:WaitForChild("LatestRoom", 3) or Inert("IntValue", "LatestRoom")
+local liveModifiers = ReplicatedStorage:WaitForChild("LiveModifiers", 3) or Inert("Folder", "LiveModifiers")
 local isMines = floor.Value == "Mines"
 local isRooms = floor.Value == "Rooms"
 local isHotel = floor.Value == "Hotel"
 local isBackdoor = floor.Value == "Backdoor"
 local isFools = floor.Value == "Fools"
 local isRetro = floor.Value == "Retro"
-local floorReplicated = if not isFools then ReplicatedStorage:WaitForChild("FloorReplicated") else nil
-local remotesFolder = if not isFools then ReplicatedStorage:WaitForChild("RemotesFolder") else ReplicatedStorage:WaitForChild("EntityInfo")
+local floorReplicated = if not isFools then ReplicatedStorage:WaitForChild("FloorReplicated", 3) or Inert("Folder", "FloorReplicated") else nil
+local remotesFolder = if not isFools then ReplicatedStorage:WaitForChild("RemotesFolder", 3) or Inert("Folder", "RemotesFolder") else ReplicatedStorage:WaitForChild("EntityInfo", 3) or Inert("Folder", "EntityInfo")
 local currentRoom = localPlayer:GetAttribute("CurrentRoom") or 0
 local nextRoom = currentRoom + 1
-local mainUI = playerGui:WaitForChild("MainUI")
-local mainGame = mainUI:WaitForChild("Initiator"):WaitForChild("Main_Game")
-local mainGameSrc = if ExecutorSupport["require"] then require(mainGame) else nil
-local controlModule = if ExecutorSupport["require"] then require(playerScripts:WaitForChild("PlayerModule"):WaitForChild("ControlModule")) else nil
+local mainUI = playerGui:WaitForChild("MainUI", 3) or Inert("Folder", "MainUI")
+local mainGame = mainUI:WaitForChild("Initiator", 3) or Inert("Folder", "Initiator")
+mainGame = mainGame:WaitForChild("Main_Game", 3) or Inert("ModuleScript", "Main_Game")
+local mainGameSrc = if ExecutorSupport["require"] and mainGame:IsA("ModuleScript") then require(mainGame) else nil
+local controlModule = if ExecutorSupport["require"] then require((playerScripts:WaitForChild("PlayerModule", 3) or Inert("Folder", "PlayerModule")):WaitForChild("ControlModule", 3) or Inert("ModuleScript", "ControlModule")) else nil
 local speedBypassing = false
 local lastSpeed = 0
 local bypassed = false
@@ -421,8 +446,33 @@ local ok, value = pcall(fn)
 if ok then return value end
 return nil
 end
+if #Missing > 0 then
+Alert("Missing game objects: " .. table.concat(Missing, ", ") .. " - menu still opens, features that need them stay off.")
+end
+local UI_URLS = {
+"https://raw.githubusercontent.com/Shinzzyak/Reicht/refs/heads/main/ui.lua",
+"https://cdn.jsdelivr.net/gh/Shinzzyak/Reicht@main/ui.lua",
+"https://raw.gitmirror.com/Shinzzyak/Reicht/main/ui.lua",
+}
+local UI_CACHE = "Reicht/ui.lua"
+local function LoadUiSource()
+for _, url in ipairs(UI_URLS) do
+local ok, src = pcall(game.HttpGet, game, url)
+if ok and type(src) == "string" and #src > 1024 then
+if writefile then pcall(writefile, UI_CACHE, src) end
+return src
+end
+end
+if isfile and readfile and isfile(UI_CACHE) then
+local ok, src = pcall(readfile, UI_CACHE)
+if ok and type(src) == "string" and #src > 1024 then
+return src
+end
+end
+return nil
+end
 local Library = Safe(function()
-local src = game:HttpGet(UI_URL)
+local src = LoadUiSource()
 if type(src) ~= "string" or #src < 1024 then return nil end
 local chunk = loadstring(src)
 if not chunk then return nil end

@@ -11,6 +11,7 @@ every tab built after it silently never appears - while compile and luau-analyze
 The mock surface is tuned for Evade (Drawing, Highlight, remotes, a fake character).
 Other games in games/ need their own mocks before their FAIL means anything.
 """
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -76,6 +77,18 @@ TRACE = { fire = {}, made = {}, wrote = {} }
 -- land past 4000 and a feature that ran looks dead. Keep it high; the entries are
 -- short strings and one run is one process.
 local TRACE_CAP = 200000
+-- Harness gap #13. The mock used to answer WaitForChild with a freshly fabricated
+-- Folder for any name, so a lookup that has no deadline in the live game always
+-- looked instant here. In Roblox an unresolved WaitForChild parks the thread
+-- forever: no menu, no error, nothing to read -- exactly the "script does not
+-- load" report this flag exists to reproduce. REICHT_STRICT_WFC=1 makes the mock
+-- honest: names that were never seeded do not exist.
+local STRICT_WFC = __STRICT_WFC__
+-- Names the live game may have renamed. REICHT_WFC_MISS="GameData,MainUI" makes
+-- those lookups fail here exactly as they would in game, so a fix for "the script
+-- does not load" can be proven against the build that had the bug.
+local WFC_MISS = __WFC_MISS__
+local HTTP_BLOCK = __HTTP_BLOCK__
 local function bump(bucket, key)
     if #bucket > TRACE_CAP then return end
     table.insert(bucket, key)
@@ -137,7 +150,7 @@ OBJ.__index = function(self, k)
         end
         return def
     end
-    if rawget(self, "_p").Permissive then
+    if rawget(self, "_p").Permissive and not STRICT_WFC then
         -- Detached on purpose: a real container does not grow a child just
         -- because someone read a dot. Caching here made repeated existence
         -- probes (`rs:FindFirstChild("Services")`) start returning true on the
@@ -221,8 +234,13 @@ OBJ.m_FindFirstChild = function(self, name, recursive)
     return nil
 end
 OBJ.m_WaitForChild = function(self, name)
+    if WFC_MISS[name] then return nil end
     local c = childOf(self, name)
     if c then return c end
+    -- Strict mode: an unseeded name stays missing, which is what the live game
+    -- does. Everything else keeps the permissive fabrication so the other 18
+    -- games' mocks stay valid.
+    if STRICT_WFC then return nil end
     local o = newInstance("Folder", name)
     o._p.Parent = self
     -- Nested paths (ReplicatedStorage.Remotes.HideMonster) must keep resolving;
@@ -919,6 +937,10 @@ UI_SOURCE = __UI_SOURCE__
 FBM_SOURCE = __FBM_SOURCE__
 game.HttpGet = function(_, url)
     url = tostring(url)
+    -- Simulate a dead route: REICHT_UI_BLOCK="raw.githubusercontent" makes that
+    -- host answer like a 404, which is how a mirror fallback gets proven instead
+    -- of assumed.
+    if HTTP_BLOCK ~= "" and url:find(HTTP_BLOCK, 1, true) then return "" end
     if url:find("ui%.lua") and type(UI_SOURCE) == "string" and #UI_SOURCE > 1024 then return UI_SOURCE end
     if url:find("FloatingButton") and type(FBM_SOURCE) == "string" and #FBM_SOURCE > 1024 then return FBM_SOURCE end
     return "return Library"
@@ -2238,6 +2260,10 @@ def main() -> int:
         r'Remote\(\s*"([A-Za-z0-9_]+)"\s*,\s*"([A-Za-z0-9_]+)"', src)))
     lua_pairs = "{" + ", ".join('{"%s", "%s"}' % (f, n) for f, n in pairs) + "}"
     script = script.replace("__REMOTE_PAIRS__", lua_pairs)
+    script = script.replace("__STRICT_WFC__", "true" if os.environ.get("REICHT_STRICT_WFC") == "1" else "false")
+    miss = [n.strip() for n in os.environ.get("REICHT_WFC_MISS", "").split(",") if n.strip()]
+    script = script.replace("__WFC_MISS__", "{" + ", ".join('["%s"] = true' % n for n in miss) + "}")
+    script = script.replace("__HTTP_BLOCK__", '"%s"' % os.environ.get("REICHT_UI_BLOCK", "").replace('"', ''))
     script = script.replace("__UI_SOURCE__", lua_long((ROOT / "ui.lua").read_text(encoding="utf-8")))
     fbm_path = ROOT / "FloatingButton.lua"
     fbm = fbm_path.read_text(encoding="utf-8") if fbm_path.exists() else ""
