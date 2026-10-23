@@ -431,6 +431,10 @@ lp.UserId = 1
 lp.GetAttribute = OBJ.m_GetAttribute
 lp.SetAttribute = OBJ.m_SetAttribute
 lp.Idled = newSignal()
+-- Ride A Pet's offline-reward claim is gated on this attribute being positive; a
+-- missing attribute reads nil, `tonumber(nil) or 0 <= 0` is true, and the feature
+-- returns before it ever reaches the remote.
+lp:SetAttribute("OfflineSeconds", 900)
 lp.PlayerGui = newInstance("PlayerGui", "PlayerGui")
 lp.PlayerScripts = newInstance("PlayerScripts", "PlayerScripts")
 players.LocalPlayer = lp
@@ -473,6 +477,25 @@ addRemote("UseEventModule", bricksFolder)
 local remotesFolder = addChild(rs, newInstance("Folder", "RemotesFolder"))
 remotesFolder.Permissive = true
 addRemote("DropItem", remotesFolder)
+
+-- Ride A Pet resolves every remote through GameLib.Remote, which walks
+-- ReplicatedStorage.Remotes.Game.<name>, then Remotes.Reusable.<name>, then
+-- packages.*.Net["RE/<name>"]. With none of those present every one of its 33 call
+-- sites gets nil and the game looks inert while still reporting errors: 0.
+local petRemotes = addChild(rs, newInstance("Folder", "Remotes"))
+local petGame = addChild(petRemotes, newInstance("Folder", "Game"))
+petGame.Permissive = true
+for _, name in ipairs({
+    "BasketDrop", "ConfirmRequest", "DoorKnocked", "EggPickup", "EggPlaced", "FeedPet",
+    "FusionAction", "FusionPetPlace", "GameMessage", "Hatch", "Mounting", "PetCollect",
+    "PetDismount", "PetFed", "PickupPet", "PlacePet", "RequestPlotEggs", "SellItems",
+    "UpdateSetting", "VolcanoDip", "VolcanoDipCancelled", "VolcanoDipResult",
+    "BuyHalloweenEgg", "BuyWithCash", "ClaimIndexReward", "CollectCandy", "GetCandyState",
+    "GetDoorState", "GetPumpkinState", "KnockDoor", "OfflineEarnings", "Rebirth",
+    "SearchPumpkin", "ShopStock",
+}) do
+    addRemote(name, petGame)
+end
 
 local entityInfoFolder = addChild(rs, newInstance("Folder", "EntityInfo"))
 entityInfoFolder.Permissive = true
@@ -1900,6 +1923,16 @@ AIRDROP_PROOFS = {
 }
 
 
+# Ride A Pet resolves all 33 of its remotes through GameLib.Remote, so these rows only
+# pass once Remotes.Game is seeded -- a bare remote name would prove the seed, not the
+# feature. Each pattern carries the argument shape the call site actually sends.
+PET_PROOFS = {
+    "offline reward claim reaches the server": ("fire", "OfflineEarnings|nil", 1),
+    "plot egg request carries a boolean": ("fire", "RequestPlotEggs|boolean", 1),
+    "pet view setting carries its verb": ("fire", "UpdateSetting|ViewOtherPets", 1),
+}
+
+
 def check_proofs(out: str, table: dict | None = None) -> tuple[int, int]:
     """Report per-feature evidence. Returns (passed, failed)."""
     table = FEATURE_PROOFS if table is None else table
@@ -1987,7 +2020,8 @@ def main() -> int:
               "Build An Ant Empire": ANT_PROOFS,
               "Stone Skipping": STONE_PROOFS,
               "Build the Pyramid": PYRAMID_PROOFS,
-              "AirDrop Arena": AIRDROP_PROOFS}.get(target.stem)
+              "AirDrop Arena": AIRDROP_PROOFS,
+              "Ride A Pet": PET_PROOFS}.get(target.stem)
     if proofs and "trace fire total" in out:
         proofs_passed, proofs_failed = check_proofs(out, proofs)
     has_options = "options: " in out and "driven: 0" not in out

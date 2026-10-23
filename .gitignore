@@ -1,2 +1,3 @@
 # Files the sync produces in the working tree but never commits.
 .stage/
+.build.lock

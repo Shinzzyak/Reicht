@@ -20,6 +20,7 @@ Usage:
 import os
 import json
 import re
+import fcntl
 import shutil
 import subprocess
 import sys
@@ -784,6 +785,16 @@ def main():
 
     # Build into a staging directory, then swap. A failed compile or a patch miss
     # leaves the repo exactly as it was, so the served files never go dark.
+    #
+    # The stage path is fixed, so two overlapping builds rmtree each other's tree and
+    # the loser still exits 0 with soft patches silently missing -- a green build with
+    # fewer patches than the run before it. Hold an exclusive lock for the whole build.
+    lock_handle = open(os.path.join(DST, ".build.lock"), "w")
+    try:
+        fcntl.flock(lock_handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        raise SystemExit("another build holds .build.lock; refusing to race it")
+
     stage = os.path.join(DST, ".stage")
     if os.path.isdir(stage):
         shutil.rmtree(stage)
