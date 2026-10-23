@@ -250,8 +250,215 @@ def build_loader(text, keep, extra=None):
 
 # ------------------------------------------------------------- game script ---
 
+VD_EXTRA = r"""
+-- Merge layer: the hub shipped without these, and every one of them is local-only.
+-- Nothing here invents a remote name, so a game update cannot turn these into
+-- silent no-ops the way a guessed remote does.
+Reicht.Extra = { FlyBody = nil, FreeCamAt = nil, WarnAt = 0 }
+Reicht.Extra.Defaults = {
+Fly = false, FlySpeed = 60,
+FreeCam = false, FreeCamSpeed = 40,
+FieldOfView = 70, JumpPower = 50,
+FpsBoost = false, KillerWarn = false, DangerDistance = 60,
+EspMaxDistance = 0, EspTextSize = 13,
+}
+function Reicht.Extra.Seed()
+for key, value in pairs(Reicht.Extra.Defaults) do
+if Reicht.Options[key] == nil then Reicht.Options[key] = value end
+end
+end
+function Reicht.Extra.Direction(look, right)
+local dx, dy, dz = 0, 0, 0
+local function add(vector, sign)
+dx = dx + vector.X * sign
+dy = dy + vector.Y * sign
+dz = dz + vector.Z * sign
+end
+local up = vector3New(0, 1, 0)
+if UserInputService:IsKeyDown(Enum.KeyCode.W) then add(look, 1) end
+if UserInputService:IsKeyDown(Enum.KeyCode.S) then add(look, -1) end
+if UserInputService:IsKeyDown(Enum.KeyCode.D) then add(right, 1) end
+if UserInputService:IsKeyDown(Enum.KeyCode.A) then add(right, -1) end
+if UserInputService:IsKeyDown(Enum.KeyCode.Space) then add(up, 1) end
+if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then add(up, -1) end
+local length = math.sqrt(dx * dx + dy * dy + dz * dz)
+if length > 0 then dx, dy, dz = dx / length, dy / length, dz / length end
+return vector3New(dx, dy, dz)
+end
+function Reicht.Extra.FlyRelease()
+local body = Reicht.Extra.FlyBody
+Reicht.Extra.FlyBody = nil
+if body then pcall(function() body:Destroy() end) end
+local humanoid = Reicht.Player.Humanoid
+if humanoid then pcall(function() humanoid.PlatformStand = false end) end
+end
+function Reicht.Extra.Fly()
+if not Reicht.Options.Fly then Reicht.Extra.FlyRelease() return end
+local hrp = Reicht.Player.Root
+if not hrp then return end
+local body = Reicht.Extra.FlyBody
+if not body or not body.Parent then
+body = Instance.new("BodyVelocity")
+body.Name = "ReichtFly"
+body.MaxForce = vector3New(mathHuge, mathHuge, mathHuge)
+body.Parent = hrp
+Reicht.Extra.FlyBody = body
+end
+local camera = Workspace.CurrentCamera
+local look = camera and camera.CFrame.LookVector or vectorZero
+local right = camera and camera.CFrame.RightVector or vectorZero
+local direction = Reicht.Extra.Direction(look, right)
+body.Velocity = direction * (Reicht.Options.FlySpeed or 60)
+local humanoid = Reicht.Player.Humanoid
+if humanoid then humanoid.PlatformStand = true end
+end
+function Reicht.Extra.FreeCam()
+local camera = Workspace.CurrentCamera
+if not camera then return end
+if not Reicht.Options.FreeCam then
+if Reicht.Extra.FreeCamAt then
+Reicht.Extra.FreeCamAt = nil
+pcall(function() camera.CameraType = Enum.CameraType.Custom end)
+end
+return
+end
+local current = camera.CFrame
+Reicht.Extra.FreeCamAt = Reicht.Extra.FreeCamAt or current
+pcall(function() camera.CameraType = Enum.CameraType.Scriptable end)
+local direction = Reicht.Extra.Direction(current.LookVector, current.RightVector)
+local speed = Reicht.Options.FreeCamSpeed or 40
+camera.CFrame = cframeNew(current.Position + direction * speed)
+end
+function Reicht.Extra.ApplyCamera()
+local camera = Workspace.CurrentCamera
+if camera then camera.FieldOfView = Reicht.Options.FieldOfView or 70 end
+end
+function Reicht.Extra.ApplyBody()
+local humanoid = Reicht.Player.Humanoid
+if not humanoid then return end
+pcall(function() humanoid.UseJumpPower = true end)
+humanoid.JumpPower = Reicht.Options.JumpPower or 50
+end
+function Reicht.Extra.ApplyGraphics()
+local on = Reicht.Options.FpsBoost and true or false
+Lighting.GlobalShadows = not on
+pcall(function() Lighting:SetAttribute("ReichtFpsBoost", on) end)
+if on then pcall(setfpscap, 60) end
+end
+function Reicht.Extra.Warn()
+if not Reicht.Options.KillerWarn then return end
+local killer = Reicht.Player.Killer()
+local hrp = Reicht.Player.Root
+local character = killer and killer.Character
+local target = character and character:FindFirstChild("HumanoidRootPart")
+if not hrp or not target then return end
+local distance = (target.Position - hrp.Position).Magnitude
+if distance > (Reicht.Options.DangerDistance or 60) then return end
+if osClock() - Reicht.Extra.WarnAt < 4 then return end
+Reicht.Extra.WarnAt = osClock()
+Library:Notify(T("Danger", "อันตราย"), (T("Killer %d studs away", "ฆาตกรห่าง %d สตัด")):format(math.floor(distance)), 3, "Warning")
+end
+function Reicht.Extra.EspLimits()
+local hrp = Reicht.Player.Root
+local maxDistance = Reicht.Options.EspMaxDistance or 0
+local size = Reicht.Options.EspTextSize or 13
+for _, mark in pairs(Reicht.Esp.Marks) do
+if mark.Text then mark.Text.TextSize = size end
+if mark.Board then
+local part = mark.Board.Adornee
+if maxDistance > 0 and hrp and part then
+mark.Board.Enabled = (part.Position - hrp.Position).Magnitude <= maxDistance
+else
+mark.Board.Enabled = true
+end
+end
+end
+end
+function Reicht.Extra.Step()
+Util.Try("extra fly", Reicht.Extra.Fly)
+Util.Try("extra freecam", Reicht.Extra.FreeCam)
+Util.Try("extra killer warning", Reicht.Extra.Warn)
+Util.Try("extra esp limits", Reicht.Extra.EspLimits)
+end
+function Reicht.UI.BuildExtra(window)
+Reicht.Extra.Seed()
+local tab = window:AddTab(T("Extra", "เพิ่มเติม"), "sparkles", T("Flight, camera and limits", "บิน กล้อง และขีดจำกัด"))
+local flight = tab:AddLeftGroupbox(T("Flight", "การบิน"), "zap")
+flight:AddToggle("Fly", { Text = T("Fly", "บิน"), Description = T("Camera-relative flight, Space up and Ctrl down", "บินตามทิศกล้อง Space ขึ้น Ctrl ลง"), Callback = function(value)
+Reicht.Options.Fly = value
+Reicht.Extra.Fly()
+end }):AddKeyPicker("FlyKey", { Default = "None", Mode = "Toggle" })
+flight:AddSlider("FlySpeed", { Text = T("Fly speed", "ความเร็วบิน"), Min = 20, Max = 200, Default = 60, Callback = function(value) Reicht.Options.FlySpeed = value end })
+local view = tab:AddLeftGroupbox(T("Camera", "กล้อง"), "eye")
+view:AddToggle("FreeCam", { Text = T("Free cam", "กล้องอิสระ"), Description = T("Detaches the camera from your body", "แยกกล้องออกจากตัว"), Callback = function(value)
+Reicht.Options.FreeCam = value
+Reicht.Extra.FreeCam()
+end })
+view:AddSlider("FreeCamSpeed", { Text = T("Free cam speed", "ความเร็วกล้อง"), Min = 10, Max = 120, Default = 40, Callback = function(value) Reicht.Options.FreeCamSpeed = value end })
+view:AddSlider("FieldOfView", { Text = T("Field of view", "องศามอง"), Min = 40, Max = 120, Default = 70, Callback = function(value)
+Reicht.Options.FieldOfView = value
+Reicht.Extra.ApplyCamera()
+end })
+local body = tab:AddRightGroupbox(T("Body", "ร่างกาย"), "user")
+body:AddSlider("JumpPower", { Text = T("Jump power", "พลังกระโดด"), Min = 50, Max = 300, Default = 50, Callback = function(value)
+Reicht.Options.JumpPower = value
+Reicht.Extra.ApplyBody()
+end })
+body:AddToggle("FpsBoost", { Text = T("FPS boost", "เพิ่ม FPS"), Description = T("Drops shadows and caps the frame rate", "ปิดเงาและจำกัดเฟรมเรต"), Callback = function(value)
+Reicht.Options.FpsBoost = value
+Reicht.Extra.ApplyGraphics()
+end })
+body:AddToggle("KillerWarn", { Text = T("Killer proximity warning", "เตือนเมื่อฆาตกรใกล้"), Callback = function(value)
+Reicht.Options.KillerWarn = value
+Reicht.Extra.Warn()
+end })
+body:AddSlider("DangerDistance", { Text = T("Warn distance", "ระยะเตือน"), Min = 10, Max = 200, Default = 60, Callback = function(value) Reicht.Options.DangerDistance = value end })
+local limits = tab:AddRightGroupbox(T("ESP limits", "ขีดจำกัด ESP"), "eye")
+limits:AddSlider("EspMaxDistance", { Text = T("ESP max distance", "ระยะ ESP สูงสุด"), Description = T("0 keeps every tag, any other value hides the far ones", "0 = แสดงทั้งหมด"), Min = 0, Max = 2000, Default = 0, Callback = function(value)
+Reicht.Options.EspMaxDistance = value
+Reicht.Extra.EspLimits()
+end })
+limits:AddSlider("EspTextSize", { Text = T("ESP text size", "ขนาดตัวอักษร ESP"), Min = 8, Max = 28, Default = 13, Callback = function(value)
+Reicht.Options.EspTextSize = value
+Reicht.Extra.EspLimits()
+end })
+limits:AddButton({ Text = T("Copy Job ID", "คัดลอก Job ID"), Func = Reicht.UI.Detach(function()
+if Util.Copy(game.JobId) then
+Library:Notify(T("Job ID", "Job ID"), T("Copied", "คัดลอกแล้ว"), 3, "Success")
+else
+Library:Notify(T("Job ID", "Job ID"), tostring(game.JobId), 6, "Info")
+end
+end) })
+end
+"""
+
+
+def violence_district_extra(text, where):
+    """Fold the features this repo adds on top of upstream Violence District.
+
+    Kept in build.py rather than in the upstream file: upstream stays authoritative
+    for everything it already ships, and this block is only ever additive.
+    """
+    text = sub(text, "function Reicht.UI.BuildMain(window)", VD_EXTRA + "\nfunction Reicht.UI.BuildMain(window)", where + " extra module")
+    text = sub(
+        text,
+        'for _, section in ipairs({ "BuildMain", "BuildSurvivor", "BuildKiller", "BuildPlayer", "BuildShop", "BuildVisuals" }) do',
+        'for _, section in ipairs({ "BuildMain", "BuildSurvivor", "BuildKiller", "BuildPlayer", "BuildShop", "BuildVisuals", "BuildExtra" }) do',
+        where + " extra tab",
+    )
+    text = sub(
+        text,
+        "Library:Every(Reicht.Config.StatusInterval, Reicht.UI.Pump)",
+        "Library:Every(Reicht.Config.StatusInterval, Reicht.UI.Pump)\nLibrary:Every(0.2, function() Util.Try(\"extra\", Reicht.Extra.Step) end)",
+        where + " extra loop",
+    )
+    return text
+
+
 def build_game(text, where):
     text = strip_attribution(text)
+    if where == "Violence District.lua":
+        text = violence_district_extra(text, where)
 
     # Upstream fetches ui.lua from the original repo on every launch, so a rename or
     # delete over there takes the whole hub down.

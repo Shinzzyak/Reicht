@@ -1861,6 +1861,16 @@ TONGUE_PROOFS = {
 }
 
 
+# Violence District: the merge layer added by build.py, one row per feature.
+VD_PROOFS = {
+    "fly spawns a BodyVelocity": ("made", "BodyVelocity", 1),
+    "field of view writes Camera": ("write", "Camera|FieldOfView", 1),
+    "jump power writes Humanoid": ("write", "Humanoid|JumpPower", 1),
+    "fps boost marks Lighting": ("write", "Lighting|SetAttribute|ReichtFpsBoost=true", 1),
+    "free cam detaches the camera": ("write", "Camera|CameraType", 1),
+}
+
+
 def check_proofs(out: str, table: dict | None = None) -> tuple[int, int]:
     """Report per-feature evidence. Returns (passed, failed)."""
     table = FEATURE_PROOFS if table is None else table
@@ -1942,7 +1952,8 @@ def main() -> int:
     # mock before any of these claims can be made about them.
     proofs_passed = proofs_failed = 0
     proofs = {"Evade": FEATURE_PROOFS, "Doors": DOORS_PROOFS,
-              "Tongue Escape": TONGUE_PROOFS}.get(target.stem)
+              "Tongue Escape": TONGUE_PROOFS,
+              "Violence District": VD_PROOFS}.get(target.stem)
     if proofs and "trace fire total" in out:
         proofs_passed, proofs_failed = check_proofs(out, proofs)
     has_options = "options: " in out and "driven: 0" not in out
