@@ -493,7 +493,7 @@ function t:AddLeftTabbox() return LinTabbox(tab, "left") end
 function t:AddRightTabbox() return LinTabbox(tab, "right") end
 return t
 end
-local ESPLibrary = { Instances = {}, Tracers = { Value = false }, Rainbow = { Value = false }, Distance = { Value = false } }
+local ESPLibrary = { Instances = {}, Tracers = { Value = false }, Rainbow = { Value = false }, Distance = { Value = false }, Thickness = { Value = 1 } }
 do
 local ESP = {}
 function ESP.Highlight(spec)
@@ -530,7 +530,7 @@ function instance:SetTracer(on)
 self.TracerOn = on
 if on and not self.Tracer and Drawing and Drawing.new then
 local tracer = Drawing.new("Line")
-tracer.Thickness = 1
+tracer.Thickness = ESPLibrary.Thickness.Value
 tracer.Color = highlight.FillColor
 tracer.Visible = true
 self.Tracer = tracer
@@ -538,6 +538,10 @@ elseif not on and self.Tracer then
 self.Tracer:Remove()
 self.Tracer = nil
 end
+end
+function instance:SetThickness(value)
+self.TracerThickness = value
+if self.Tracer then self.Tracer.Thickness = value end
 end
 function instance:SetRainbow(on) self.RainbowOn = on end
 function instance:SetDistance(on)
@@ -556,6 +560,7 @@ if fields.FillTransparency then highlight.FillTransparency = fields.FillTranspar
 if fields.OutlineTransparency then highlight.OutlineTransparency = fields.OutlineTransparency end
 if fields.FillColor then highlight.FillColor = fields.FillColor end
 if fields.TextSize then label.TextSize = fields.TextSize end
+if fields.Thickness then self:SetThickness(fields.Thickness) end
 end
 function instance:SetVisible(visible)
 self.Visible = visible ~= false
@@ -576,6 +581,7 @@ table.insert(ESPLibrary.Instances, instance)
 instance:SetTracer(ESPLibrary.Tracers.Value)
 instance:SetRainbow(ESPLibrary.Rainbow.Value)
 instance:SetDistance(ESPLibrary.Distance.Value)
+instance:SetThickness(ESPLibrary.Thickness.Value)
 return instance
 end
 ESPLibrary.ESP = ESP
@@ -590,6 +596,10 @@ end
 function ESPLibrary.Distance.Set(value)
 ESPLibrary.Distance.Value = value
 for _, instance in ipairs(ESPLibrary.Instances) do instance:SetDistance(value) end
+end
+function ESPLibrary.Thickness.Set(value)
+ESPLibrary.Thickness.Value = value
+for _, instance in ipairs(ESPLibrary.Instances) do instance:SetThickness(value) end
 end
 RunService.RenderStepped:Connect(function()
 if ESPLibrary.Rainbow.Value then
@@ -620,6 +630,31 @@ end
 end
 end
 end)
+end
+local EntityESPFilter = { Selected = {} }
+local ENTITY_FILTER_VALUES, ENTITY_DISPLAY = {}, {}
+for _, name in ipairs(EntityTable.Names) do
+local display = EntityTable.ShortNames[name] or name
+table.insert(ENTITY_FILTER_VALUES, display)
+ENTITY_DISPLAY[display] = name
+end
+for _, name in ipairs(EntityTable.SideNames) do
+table.insert(ENTITY_FILTER_VALUES, name)
+ENTITY_DISPLAY[name] = name
+end
+function EntityESPFilter.Allows(entity)
+if not entity then return true end
+local allowed = next(EntityESPFilter.Selected) == nil or EntityESPFilter.Selected[entity.Name] == true
+Safe(function() entity:SetAttribute("ReichtEntityESPFilter", allowed and "on" or "off") end)
+return allowed
+end
+function EntityESPFilter.Set(selection)
+EntityESPFilter.Selected = {}
+for key, entry in pairs(selection or {}) do
+local display = type(key) == "number" and entry or key
+local spawnName = ENTITY_DISPLAY[display]
+if spawnName then EntityESPFilter.Selected[spawnName] = true end
+end
 end
 local ThemeManager = {}
 function ThemeManager:SetLibrary() end
@@ -1074,6 +1109,7 @@ end
 end
 end
 function Script.Functions.EntityESP(entity)
+if not EntityESPFilter.Allows(entity) then return end
 Script.Functions.ESP({
 Type = "Entity",
 Object = entity,
@@ -1083,6 +1119,7 @@ IsEntity = entity.Name ~= "JeffTheKiller",
 })
 end
 function Script.Functions.SideEntityESP(entity)
+if not EntityESPFilter.Allows(entity) then return end
 if entity.Name == "Snare" and not entity:FindFirstChild("Hitbox") then return end
 Script.Functions.ESP({
 Type = "SideEntity",
@@ -2589,6 +2626,13 @@ Default = false,
 }):AddColorPicker("GuidingLightEspColor", {
 Default = Color3.new(0, 0.5, 1),
 })
+ESPTab:AddDropdown("EntityESPFilter", {
+AllowNull = false,
+Values = ENTITY_FILTER_VALUES,
+Default = ENTITY_FILTER_VALUES,
+Multi = true,
+Text = "Entity Filter",
+})
 end
 local ESPSettingsTab = ESPTabBox:AddTab("Settings") do
 ESPSettingsTab:AddToggle("ESPHighlight", {
@@ -2626,6 +2670,13 @@ Text = "Text Size",
 Default = 22,
 Min = 16,
 Max = 26,
+Rounding = 0
+})
+ESPSettingsTab:AddSlider("ESPTracerThickness", {
+Text = "Tracer Thickness",
+Default = 1,
+Min = 1,
+Max = 4,
 Rounding = 0
 })
 ESPSettingsTab:AddDropdown("ESPTracerStart", {
@@ -4336,6 +4387,21 @@ ESPLibrary.Rainbow.Set(value)
 end)
 Toggles.ESPDistance:OnChanged(function(value)
 ESPLibrary.Distance.Set(value)
+end)
+Options.ESPTracerThickness:OnChanged(function(value)
+ESPLibrary.Thickness.Set(value)
+end)
+Options.EntityESPFilter:OnChanged(function(selection)
+EntityESPFilter.Set(selection)
+for _, esp in pairs(Script.ESPTable.Entity or {}) do
+Safe(function() esp.Destroy() end)
+end
+Script.ESPTable.Entity = {}
+for _, model in ipairs(workspace:GetChildren()) do
+if table.find(EntityTable.Names, model.Name) then
+Safe(function() Script.Functions.EntityESP(model) end)
+end
+end
 end)
 Options.ESPFillTransparency:OnChanged(function(value)
 for _, espType in pairs(Script.ESPTable) do

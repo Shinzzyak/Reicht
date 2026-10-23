@@ -243,7 +243,13 @@ OBJ.m_IsA = function(self, class) return self._p.ClassName == class end
 OBJ.m_Destroy = function(self) self._p.Destroyed = true end
 OBJ.m_Clone = function(self) return newInstance(self._p.ClassName, self._p.Name) end
 OBJ.m_GetAttribute = function(self, k) return (self._p.Attrs or {})[k] end
-OBJ.m_SetAttribute = function(self, k, v) self._p.Attrs = self._p.Attrs or {}; self._p.Attrs[k] = v end
+OBJ.m_SetAttribute = function(self, k, v)
+    self._p.Attrs = self._p.Attrs or {}
+    self._p.Attrs[k] = v
+    -- A filter decision is invisible unless it leaves a mark; tracing the value
+    -- lets a proof assert "this entity was admitted / dropped", not just "ran".
+    bump(TRACE.wrote, tostring(self._p.Name or "obj") .. "|SetAttribute|" .. tostring(k) .. "=" .. tostring(v))
+end
 OBJ.m_GetPropertyChangedSignal = function(self) return newSignal() end
 OBJ.m_GetDescendantsAsync = function(self) return OBJ.m_GetDescendants(self) end
 OBJ.m_TranslateBy = function(self) end
@@ -562,6 +568,14 @@ for _, name in ipairs({ "KeyObtain", "LeverForGate", "LiveBreakerPolePickup", "L
 end
 local eyesModel = addChild(ws, newInstance("Model", "Eyes"))
 eyesModel.Permissive = true
+-- Entity ESP target. BackdoorRush is in the payload's own EntityTable, and the
+-- option driver narrows the entity dropdown to Values[1] == "BackdoorRush", so this
+-- is the model the scan must find. Eyes stays in the world as the negative: it is a
+-- real entity name but it is filtered out, and highlighting it would mean the
+-- filter is inert.
+local rushModel = addChild(ws, newInstance("Model", "BackdoorRush"))
+rushModel.Permissive = true
+addChild(rushModel, newInstance("Part", "Root"))
 
 game = newInstance("DataModel", "Game")
 game.Workspace = ws
@@ -853,6 +867,21 @@ Vector3 = { new = v3, zero = v3(0, 0, 0), one = v3(1, 1, 1),
 -- Camera/aim/ESP math divides ViewportSize; a nil here kills the whole render
 -- loop with "attempt to index nil with 'X'" while every option still reports ok.
 ws.CurrentCamera.ViewportSize = Vector2.new(1280, 720)
+-- Tracers project a world point every frame. The real camera returns
+-- (Vector3, onScreen); a missing method kills the whole RenderStepped loop, so it
+-- only surfaced once the ESP tracer toggle actually fired.
+-- Workspace really does raise ChildAdded; entity spawns arrive through it, so the
+-- mock needs the signal for any spawn-driven feature to be testable at all.
+if rawget(ws, "ChildAdded") == nil then
+    ws.ChildAdded = newSignal()
+    ws.ChildAdded.SignalName = "ChildAdded"
+end
+ws.CurrentCamera.WorldToViewportPoint = function(self, point)
+    return Vector3.new(640, 360, 1), true
+end
+ws.CurrentCamera.WorldToScreenPoint = function(self, point)
+    return Vector3.new(640, 360, 1), true
+end
 ws.GetServerTimeNow = function(self) return os.time() end
 OBJ.m_GetServerTimeNow = function(self) return os.time() end
 -- BindToRenderStep is how real hubs schedule per-frame work; route it onto the
@@ -918,7 +947,15 @@ Rect = { new = function() return {} end }
 BrickColor = { new = function() return {} end }
 Random = { new = function() return { NextInteger = function() return 1 end, NextNumber = function() return 0 end } end }
 Drawing = { new = function(kind)
-    return setmetatable({ Kind = kind, Remove = function() end, Visible = true }, { __index = function() return function() end end })
+    -- A drawing object never touches the world, so a property write on it is the
+    -- only evidence a visual feature ran. Trace them instead of dropping them.
+    return setmetatable({ Kind = kind, Remove = function() end, Visible = true }, {
+        __index = function() return function() end end,
+        __newindex = function(self, key, value)
+            rawset(self, key, value)
+            bump(TRACE.wrote, tostring(kind) .. "|" .. tostring(key))
+        end,
+    })
 end }
 setfflag = function() return true end
 firesignal = function(signal, ...)
@@ -1300,13 +1337,28 @@ if LIB and type(LIB.Options) == "table" then
             local value
             local kind = type(opt.Value)
             if type(opt.Values) == "table" and #opt.Values > 0 then
-                value = opt.Values[1]
+                -- A Multi dropdown turns SetValue into a set; handing it one string
+                -- yields an empty set, so the handler would never see a selection.
+                value = opt.Multi and opt.Values or opt.Values[1]
             elseif kind == "boolean" then
                 value = true
             elseif kind == "number" then
                 value = opt.Default or opt.Value
             elseif kind == "string" then
                 value = (type(opt.Default) == "string" and opt.Default ~= "") and opt.Default or "1"
+            end
+            -- The library ignores SetValue when the value is unchanged, so a widget
+            -- already sitting at its target would never run its handler and the run
+            -- would report "driven" for something inert. Nudge it off first.
+            if kind == "boolean" and value == true and opt.Value == true then
+                try("option " .. tostring(id) .. " pre-off", function() opt:SetValue(false) end)
+            elseif kind == "number" and value == opt.Value then
+                local max = tonumber(opt.Max)
+                local nudged = max and math.min(max, value + 1) or (value + 1)
+                if nudged == value then nudged = value - 1 end
+                try("option " .. tostring(id) .. " pre-nudge", function() opt:SetValue(nudged) end)
+            elseif type(opt.Values) == "table" and #opt.Values > 1 and opt.Value == value then
+                value = opt.Values[2]
             end
             local before = #errors
             local effectsBefore = EFFECTS
@@ -1330,6 +1382,15 @@ if LIB and type(LIB.Options) == "table" then
     end
     _PRINT("library: real ui.lua buttons=" .. type(LIB.Buttons) .. " tabs=" .. type(LIB.Tabs))
     _PRINT("options: " .. tostring(total) .. " driven: " .. tostring(driven))
+
+    -- Second pass on the entity filter: the driver selects everything, and the case
+    -- that matters is the filter actually dropping something already in the world.
+    local filterOpt = LIB.Options.EntityESPFilter
+    if type(filterOpt) == "table" and type(filterOpt.SetValue) == "function"
+        and type(filterOpt.Values) == "table" and #filterOpt.Values > 0 then
+        try("entity filter narrowed", function() filterOpt:SetValue({ filterOpt.Values[1] }) end)
+    end
+
     if type(LIB.Buttons) == "table" then
         local pressed = 0
         for _, button in ipairs(LIB.Buttons) do
@@ -1610,15 +1671,29 @@ DOORS_PROOFS = {
     "eyes invincibility fires MotorReplication": ("fire", "MotorReplication|number", 1),
     "god mode moves Collision": ("write", "Collision|Position", 1),
     "room ESP highlights KeyObtain": ("made", "Highlight", 1),
+    # Entity filter: the same seeded Snare is admitted while the dropdown holds
+    # every entry and dropped once the driver narrows it to one entity, so both
+    # branches of the guard are exercised in one run.
+    "entity filter admits a listed entity": ("write", "Eyes|SetAttribute|ReichtEntityESPFilter=on", 1),
+    "entity filter drops an unlisted entity": ("write", "Eyes|SetAttribute|ReichtEntityESPFilter=off", 1),
+    "tracer thickness reaches Drawing": ("write", "Line|Thickness", 2),
 }
 
 
 def check_proofs(out: str, table: dict | None = None) -> tuple[int, int]:
     """Report per-feature evidence. Returns (passed, failed)."""
     table = FEATURE_PROOFS if table is None else table
-    seen = {"fire": {}, "write": {}, "made": {}}
+    seen = {"fire": {}, "write": {}, "made": {}, "opt": {}}
     prefixes = {"fire": "FIRE|", "write": "WROTE|", "made": "MADE|"}
     for line in out.splitlines():
+        if line.startswith("OPT|"):
+            # OPT|<id>|<type>|<valueType>|<wired>|<driven>|<effects>|<fired>|<made>
+            parts = line.split("|")
+            if len(parts) >= 9:
+                for made_class in parts[8].split(","):
+                    if made_class:
+                        key = parts[1] + "|" + made_class
+                        seen["opt"][key] = seen["opt"].get(key, 0) + 1
         for kind, prefix in prefixes.items():
             if line.startswith(prefix):
                 parts = line[len(prefix):].rsplit("|", 1)
