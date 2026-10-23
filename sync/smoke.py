@@ -1871,6 +1871,35 @@ VD_PROOFS = {
 }
 
 
+# Games whose features are pure remote traffic: the proof is that the right remote
+# carried the right verb. No geometry needed, so these are cheap to keep honest.
+LOOT_PROOFS = {
+    "auto claim sends the daily tick": ("fire", "TryClaimDailyTicRE|nil", 1),
+    "auto quest claims the quest remote": ("fire", "TryClaimQuestRE|number", 1),
+    "auto upgrade claims the upgrade remote": ("fire", "TryClaimUPDRewardRE|number", 1),
+    "sell all fires the sell remote": ("fire", "TrySellAllRE|nil", 1),
+    "rebirth fires the rebirth remote": ("fire", "TryRebirthRE|nil", 1),
+    "offline reward is claimed": ("fire", "TryClaimOfflineRewardRE|nil", 1),
+}
+
+ANT_PROOFS = {
+    "gear shop request reaches the server": ("fire", "RemoteEvent|GearShopRequest", 1),
+    "ecs command reaches the server": ("fire", "RemoteEvent|ECS_COMMAND", 1),
+}
+
+STONE_PROOFS = {
+    "code redemption carries the verb": ("fire", "Request|RedeemCode", 1),
+}
+
+PYRAMID_PROOFS = {
+    "activity remote is fired": ("fire", "Activity|nil", 1),
+}
+
+AIRDROP_PROOFS = {
+    "main remote receives a payload": ("fire", "Main|table", 1),
+}
+
+
 def check_proofs(out: str, table: dict | None = None) -> tuple[int, int]:
     """Report per-feature evidence. Returns (passed, failed)."""
     table = FEATURE_PROOFS if table is None else table
@@ -1953,7 +1982,12 @@ def main() -> int:
     proofs_passed = proofs_failed = 0
     proofs = {"Evade": FEATURE_PROOFS, "Doors": DOORS_PROOFS,
               "Tongue Escape": TONGUE_PROOFS,
-              "Violence District": VD_PROOFS}.get(target.stem)
+              "Violence District": VD_PROOFS,
+              "Loot To Forge": LOOT_PROOFS,
+              "Build An Ant Empire": ANT_PROOFS,
+              "Stone Skipping": STONE_PROOFS,
+              "Build the Pyramid": PYRAMID_PROOFS,
+              "AirDrop Arena": AIRDROP_PROOFS}.get(target.stem)
     if proofs and "trace fire total" in out:
         proofs_passed, proofs_failed = check_proofs(out, proofs)
     has_options = "options: " in out and "driven: 0" not in out
