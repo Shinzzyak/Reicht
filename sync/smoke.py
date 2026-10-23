@@ -263,6 +263,13 @@ OBJ.m_SetAttribute = function(self, k, v)
     bump(TRACE.wrote, tostring(self._p.Name or "obj") .. "|SetAttribute|" .. tostring(k) .. "=" .. tostring(v))
 end
 OBJ.m_GetPropertyChangedSignal = function(self) return newSignal() end
+-- PivotTo/GetPivot are how every modern hub moves a character (teleports, finish
+-- pads, carry targets). They were missing, so those features silently took a
+-- fallback branch and the run never proved the character actually moved.
+OBJ.m_GetPivot = function(self) return CFrame.new(0, 0, 0) end
+OBJ.m_PivotTo = function(self, target)
+    bump(TRACE.wrote, tostring(rawget(self, "_p").Name or "obj") .. "|PivotTo")
+end
 OBJ.m_GetDescendantsAsync = function(self) return OBJ.m_GetDescendants(self) end
 OBJ.m_TranslateBy = function(self) end
 OBJ.m_ChangeState = function(self) end
@@ -367,6 +374,18 @@ end
 require = function(mod)
     local name = type(mod) == "table" and mod._p and mod._p.Name
     if name == "CharacterService" then return nil end
+    -- Game config modules carry real numbers, and a permissive stand-in turns them
+    -- into tables: `tonumber(reward.Minute)` reads nil and the feature looks dead
+    -- while the code is fine. Shape the two modules whose fields are read as numbers.
+    if name == "PlaytimeRewardsConfig" then
+        return { Rewards = { { Minute = 1 }, { Minute = 5 }, { Minute = 10 } } }
+    end
+    if name == "TrailConfigurations" then
+        return { Trails = {
+            { ID = 1, Name = "Classic", WinCost = 0, TongueBoost = 1 },
+            { ID = 2, Name = "Radiant", WinCost = 50, TongueBoost = 3 },
+        } }
+    end
     return anyModule()
 end
 
@@ -467,6 +486,66 @@ ws.Permissive = true
 ws.Gravity = 196.2
 ws.CurrentCamera = newInstance("Camera", "Camera")
 ws.CurrentCamera.FieldOfView = 70
+
+-- +1 Tongue Escape. Every feature in that script is a remote fire or a map read,
+-- so the surfaces have to exist before the menu builds or the run only proves the
+-- toggles flip. Shapes follow the game: Events carries the four remotes,
+-- Map.GiveWins.OneWin holds the finish pads, leaderstats carries the four numbers.
+local eventsFolder = addChild(rs, newInstance("Folder", "Events"))
+eventsFolder.Permissive = true
+addRemote("AddTongue", eventsFolder)
+addRemote("TrailAction", eventsFolder)
+addRemote("PlaytimeClaim", eventsFolder)
+local rebirthRemote = addChild(eventsFolder, newInstance("RemoteFunction", "RequestRebirth"))
+-- Instance-level so the global InvokeServer stays nil: DOORS relies on that nil to
+-- take its own fallback branch, and one game's mock must not reshape another's.
+-- Assigned into _p, not onto the instance: OBJ.__index reads _p first and would
+-- otherwise hand back the global stub that returns nil without a trace.
+rebirthRemote._p.InvokeServer = function(self)
+    bump(TRACE.fire, "RequestRebirth|invoke")
+    return true
+end
+local modulesFolder = addChild(rs, newInstance("Folder", "Modules"))
+modulesFolder.Permissive = true
+addChild(modulesFolder, newInstance("ModuleScript", "PlaytimeRewardsConfig"))
+addChild(modulesFolder, newInstance("ModuleScript", "TrailConfigurations"))
+addChild(rs, newInstance("ModuleScript", "TongueShared"))
+
+local stats = addChild(lp, newInstance("Folder", "leaderstats"))
+stats.Permissive = true
+local levelValue = addChild(stats, newInstance("IntValue", "Level"))
+levelValue.Value = 5000
+local rebirthValue = addChild(stats, newInstance("IntValue", "Rebirths"))
+rebirthValue.Value = 0
+local winsValue = addChild(stats, newInstance("IntValue", "Wins"))
+winsValue.Value = 1000
+local tongueValue = addChild(stats, newInstance("IntValue", "Tongue"))
+tongueValue.Value = 0
+local trailsFolder = addChild(lp, newInstance("Folder", "Trails"))
+trailsFolder.Permissive = true
+local equippedValue = addChild(trailsFolder, newInstance("StringValue", "Equipped"))
+equippedValue.Value = ""
+
+local mapFolder = addChild(ws, newInstance("Folder", "Map"))
+mapFolder.Permissive = true
+local giveWins = addChild(mapFolder, newInstance("Folder", "GiveWins"))
+giveWins.Permissive = true
+local oneWinRow = addChild(giveWins, newInstance("Folder", "OneWin"))
+oneWinRow.Permissive = true
+-- Two pads with different payouts: the scan is supposed to pick the bigger one, so
+-- the proof carries the number and a wrong pick fails instead of passing quietly.
+for _, spec in ipairs({ { Name = "WinPad25", Amount = 25 }, { Name = "WinPad100", Amount = 100 } }) do
+    local pad = addChild(oneWinRow, newInstance("Model", spec.Name))
+    pad:SetAttribute("WinAmount", spec.Amount)
+    addChild(pad, newInstance("Part", "Touch"))
+end
+local stagesFolder = addChild(mapFolder, newInstance("Folder", "Stages"))
+stagesFolder.Permissive = true
+for index = 1, 3 do
+    local stage = addChild(stagesFolder, newInstance("Folder", "Stage" .. index))
+    stage.Permissive = true
+    addChild(stage, newInstance("Part", "Portal"))
+end
 
 -- A live server ships the game's own framework tree (Knit Services/Controllers/
 -- Modules, per-game packages). Without it every module-gated feature bails
@@ -1770,6 +1849,18 @@ DOORS_PROOFS = {
 }
 
 
+# +1 Tongue Escape ships its own set: same rule, one evidence row per feature.
+TONGUE_PROOFS = {
+    "auto tongue fires AddTongue": ("fire", "AddTongue|nil", 1),
+    "auto rebirth invokes RequestRebirth": ("fire", "RequestRebirth|invoke", 1),
+    "auto wins marks the highest value pad": ("write", "Tester|SetAttribute|ReichtWinTarget=100", 1),
+    "auto wins moves the character onto the pad": ("write", "Tester|PivotTo", 1),
+    # The remote's first argument is a verb string, and the trace keys on string
+    # values, so this asserts the buy branch specifically -- not just "fired".
+    "auto trails buys a trail with wins": ("fire", "TrailAction|BuyWins", 1),
+}
+
+
 def check_proofs(out: str, table: dict | None = None) -> tuple[int, int]:
     """Report per-feature evidence. Returns (passed, failed)."""
     table = FEATURE_PROOFS if table is None else table
@@ -1850,7 +1941,8 @@ def main() -> int:
     # The proof table describes Evade's features; other games still need their own
     # mock before any of these claims can be made about them.
     proofs_passed = proofs_failed = 0
-    proofs = {"Evade": FEATURE_PROOFS, "Doors": DOORS_PROOFS}.get(target.stem)
+    proofs = {"Evade": FEATURE_PROOFS, "Doors": DOORS_PROOFS,
+              "Tongue Escape": TONGUE_PROOFS}.get(target.stem)
     if proofs and "trace fire total" in out:
         proofs_passed, proofs_failed = check_proofs(out, proofs)
     has_options = "options: " in out and "driven: 0" not in out

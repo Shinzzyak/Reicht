@@ -5,6 +5,7 @@ local BASE = "https://raw.githubusercontent.com/Shinzzyak/Reicht/refs/heads/main
 local GAMES = {
 [2440500124] = "Doors",
 [3647333358] = "Evade",
+[122245938604556] = "Tongue Escape",
 [10436530264] = "Build An Ant Empire",
 [10418224975] = "TNT Mining",
 [10684750879] = "Loot To Forge",
