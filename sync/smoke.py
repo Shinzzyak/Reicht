@@ -71,7 +71,11 @@ local DEFAULTS = { Rotation = 0, Transparency = 0,
 -- callback that runs clean but fires nothing is a dead feature. Names carry their
 -- first argument so Interact("Revive") is distinguishable from Interact("Carry").
 TRACE = { fire = {}, made = {}, wrote = {} }
-local TRACE_CAP = 4000
+-- The buckets are also the proof source, so a cap silently truncates evidence:
+-- once ESP name plates are traced alongside game state, the interesting writes
+-- land past 4000 and a feature that ran looks dead. Keep it high; the entries are
+-- short strings and one run is one process.
+local TRACE_CAP = 200000
 local function bump(bucket, key)
     if #bucket > TRACE_CAP then return end
     table.insert(bucket, key)
@@ -154,6 +158,12 @@ OBJ.__newindex = function(self, k, v)
     -- drowns the interesting writes (Workspace.Gravity, Humanoid.WalkSpeed,
     -- BasePart.CanCollide) in UI noise.
     local cls = tostring(p.ClassName)
+    -- ESP objects are billboards and labels, which the UI filter below would drop.
+    -- They carry the Reicht prefix, so name-based admission keeps the proof that a
+    -- visual switch actually reached the object instead of only running its handler.
+    if tostring(p.Name):find("^Reicht") then
+        bump(TRACE.wrote, tostring(p.Name) .. "|" .. k)
+    end
     if not cls:find("^UI") and not cls:find("Frame") and not cls:find("Label")
         and not cls:find("Button") and not cls:find("Image") and not cls:find("Sprite")
         and not cls:find("Gui") and not cls:find("Probe") and not cls:find("Canvas")
@@ -267,6 +277,15 @@ OBJ.m_FireServer = function(self, ...)
     bump(TRACE.fire, key)
 end
 OBJ.m_Invoke = function(self) return {} end
+-- Server functions answer with a table in the real game; leaving InvokeServer as a
+-- nil method made every profile read throw and a hub that guards on
+-- `type(profile) == "table"` then re-raised "profile unavailable". Shaped per remote
+-- name where the shape is actually read (Loot To Forge iterates Backpack.have).
+-- Server functions answer with a table in the real game, but a half-shaped profile
+-- is worse than none: Loot To Forge reads numbers off it (Eco.rebirth, goods Store)
+-- and the mock's permissive folders turn those reads into tables, so arithmetic
+-- crashes deeper in. Left nil until a run actually needs the shape.
+OBJ.m_InvokeServer = function(self) return nil end
 OBJ.m_QueryDescendants = function(self, class)
     -- Added to Roblox in 2025; hubs use it to find prompts/ImageLabels in one call.
     -- Without it the name is auto-created as a permissive child and the call is
@@ -1328,7 +1347,13 @@ local fired = 0
 local LIB = CAPTURED.Library
 if LIB and type(LIB.Options) == "table" then
     local total, driven = 0, 0
-    for id, opt in pairs(LIB.Options) do
+    -- Registration order, not a sorted or hashed one: hubs wire their auto-farms so
+    -- that a later widget assumes the earlier one ran (profile fetch, config load).
+    -- Sorting the ids drove them out of that order and surfaced mock gaps as crashes.
+    local ids = {}
+    for id in pairs(LIB.Options) do table.insert(ids, id) end
+    for _, id in ipairs(ids) do
+        local opt = LIB.Options[id]
         total += 1
         if type(opt) == "table" and type(opt.SetValue) ~= "function" then
             _PRINT("option without SetValue: " .. tostring(id) .. " (" .. type(opt) .. ")")
@@ -1604,8 +1629,11 @@ do
         if wseen[a] ~= wseen[b] then return wseen[a] > wseen[b] end
         return a < b
     end)
-    for i = 1, math.min(#worder, 45) do
-        _PRINT(string.format("WROTE|%s|%d", worder[i], wseen[worder[i]]))
+    -- Every distinct key, not a top-N window: the proofs are parsed out of this
+    -- list, so a window silently hides the evidence for whichever feature ranks
+    -- below it and the run reports a live feature as dead.
+    for _, key in ipairs(worder) do
+        _PRINT(string.format("WROTE|%s|%d", key, wseen[key]))
     end
     local mseen, morder = {}, {}
     for _, k in ipairs(TRACE.made) do
@@ -1616,8 +1644,8 @@ do
         if mseen[a] ~= mseen[b] then return mseen[a] > mseen[b] end
         return a < b
     end)
-    for i = 1, math.min(#morder, 25) do
-        _PRINT(string.format("MADE|%s|%d", morder[i], mseen[morder[i]]))
+    for _, key in ipairs(morder) do
+        _PRINT(string.format("MADE|%s|%d", key, mseen[key]))
     end
 end
 _PRINT("main chunk: " .. tostring(MAIN and coroutine.status(MAIN) or "done"))
@@ -1677,6 +1705,9 @@ DOORS_PROOFS = {
     "entity filter admits a listed entity": ("write", "Eyes|SetAttribute|ReichtEntityESPFilter=on", 1),
     "entity filter drops an unlisted entity": ("write", "Eyes|SetAttribute|ReichtEntityESPFilter=off", 1),
     "tracer thickness reaches Drawing": ("write", "Line|Thickness", 2),
+    # The name plate is a BillboardGui, so this only proves anything because ESP
+    # objects are admitted to the trace by name. Off then on again = two writes.
+    "entity text toggle hides the name plate": ("write", "ReichtESPName|Enabled", 2),
 }
 
 

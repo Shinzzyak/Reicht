@@ -493,7 +493,7 @@ function t:AddLeftTabbox() return LinTabbox(tab, "left") end
 function t:AddRightTabbox() return LinTabbox(tab, "right") end
 return t
 end
-local ESPLibrary = { Instances = {}, Tracers = { Value = false }, Rainbow = { Value = false }, Distance = { Value = false }, Thickness = { Value = 1 } }
+local ESPLibrary = { Instances = {}, Tracers = { Value = false }, Rainbow = { Value = false }, Distance = { Value = false }, Thickness = { Value = 1 }, Text = { Value = true } }
 do
 local ESP = {}
 function ESP.Highlight(spec)
@@ -544,6 +544,10 @@ self.TracerThickness = value
 if self.Tracer then self.Tracer.Thickness = value end
 end
 function instance:SetRainbow(on) self.RainbowOn = on end
+function instance:SetText(on)
+self.TextOn = on ~= false
+if billboard then billboard.Enabled = self.TextOn and self.Visible ~= false end
+end
 function instance:SetDistance(on)
 self.DistanceOn = on
 local base = tostring(spec.Name or "")
@@ -565,7 +569,7 @@ end
 function instance:SetVisible(visible)
 self.Visible = visible ~= false
 highlight.Enabled = self.Visible
-billboard.Enabled = self.Visible
+billboard.Enabled = self.Visible and self.TextOn ~= false
 if self.Tracer then self.Tracer.Visible = self.Visible end
 end
 function instance:Remove()
@@ -580,6 +584,7 @@ instance.Destroy = instance.Remove
 table.insert(ESPLibrary.Instances, instance)
 instance:SetTracer(ESPLibrary.Tracers.Value)
 instance:SetRainbow(ESPLibrary.Rainbow.Value)
+instance:SetText(ESPLibrary.Text.Value)
 instance:SetDistance(ESPLibrary.Distance.Value)
 instance:SetThickness(ESPLibrary.Thickness.Value)
 return instance
@@ -596,6 +601,10 @@ end
 function ESPLibrary.Distance.Set(value)
 ESPLibrary.Distance.Value = value
 for _, instance in ipairs(ESPLibrary.Instances) do instance:SetDistance(value) end
+end
+function ESPLibrary.Text.Set(value)
+ESPLibrary.Text.Value = value
+for _, instance in ipairs(ESPLibrary.Instances) do instance:SetText(value) end
 end
 function ESPLibrary.Thickness.Set(value)
 ESPLibrary.Thickness.Value = value
@@ -2651,6 +2660,10 @@ ESPSettingsTab:AddToggle("ESPDistance", {
 Text = "Show Distance",
 Default = true
 })
+ESPSettingsTab:AddToggle("ESPShowEntityText", {
+Text = "Show Entity Text",
+Default = true
+})
 ESPSettingsTab:AddSlider("ESPFillTransparency", {
 Text = "Fill Transparency",
 Default = 0.75,
@@ -4387,6 +4400,9 @@ ESPLibrary.Rainbow.Set(value)
 end)
 Toggles.ESPDistance:OnChanged(function(value)
 ESPLibrary.Distance.Set(value)
+end)
+Toggles.ESPShowEntityText:OnChanged(function(value)
+ESPLibrary.Text.Set(value)
 end)
 Options.ESPTracerThickness:OnChanged(function(value)
 ESPLibrary.Thickness.Set(value)

@@ -580,7 +580,7 @@ end
 -- MS-ESP is no longer served upstream (the URL 404s), so the small surface the
 -- body uses is implemented here: Highlight instances with the same spec keys,
 -- plus the three global toggles the Settings tab drives.
-local ESPLibrary = { Instances = {}, Tracers = { Value = false }, Rainbow = { Value = false }, Distance = { Value = false }, Thickness = { Value = 1 } }
+local ESPLibrary = { Instances = {}, Tracers = { Value = false }, Rainbow = { Value = false }, Distance = { Value = false }, Thickness = { Value = 1 }, Text = { Value = true } }
 do
     local ESP = {}
     function ESP.Highlight(spec)
@@ -631,6 +631,12 @@ do
             if self.Tracer then self.Tracer.Thickness = value end
         end
         function instance:SetRainbow(on) self.RainbowOn = on end
+        -- The decrypted hubs ship a "show entity text" switch (ESPShowEntityText);
+        -- the highlight stays, only the floating name goes away.
+        function instance:SetText(on)
+            self.TextOn = on ~= false
+            if billboard then billboard.Enabled = self.TextOn and self.Visible ~= false end
+        end
         function instance:SetDistance(on)
             self.DistanceOn = on
             local base = tostring(spec.Name or "")
@@ -652,7 +658,7 @@ do
         function instance:SetVisible(visible)
             self.Visible = visible ~= false
             highlight.Enabled = self.Visible
-            billboard.Enabled = self.Visible
+            billboard.Enabled = self.Visible and self.TextOn ~= false
             if self.Tracer then self.Tracer.Visible = self.Visible end
         end
         function instance:Remove()
@@ -667,6 +673,7 @@ do
         table.insert(ESPLibrary.Instances, instance)
         instance:SetTracer(ESPLibrary.Tracers.Value)
         instance:SetRainbow(ESPLibrary.Rainbow.Value)
+        instance:SetText(ESPLibrary.Text.Value)
         instance:SetDistance(ESPLibrary.Distance.Value)
         instance:SetThickness(ESPLibrary.Thickness.Value)
         return instance
@@ -683,6 +690,10 @@ do
     function ESPLibrary.Distance.Set(value)
         ESPLibrary.Distance.Value = value
         for _, instance in ipairs(ESPLibrary.Instances) do instance:SetDistance(value) end
+    end
+    function ESPLibrary.Text.Set(value)
+        ESPLibrary.Text.Value = value
+        for _, instance in ipairs(ESPLibrary.Instances) do instance:SetText(value) end
     end
     function ESPLibrary.Thickness.Set(value)
         ESPLibrary.Thickness.Value = value
@@ -3230,6 +3241,11 @@ local ESPTabBox = Tabs.Visuals:AddLeftTabbox() do
             Default = true
         })
     
+        ESPSettingsTab:AddToggle("ESPShowEntityText", {
+            Text = "Show Entity Text",
+            Default = true
+        })
+    
         ESPSettingsTab:AddSlider("ESPFillTransparency", {
             Text = "Fill Transparency",
             Default = 0.75,
@@ -5350,6 +5366,10 @@ Toggles.ESPDistance:OnChanged(function(value)
     ESPLibrary.Distance.Set(value)
 end)
 
+Toggles.ESPShowEntityText:OnChanged(function(value)
+    ESPLibrary.Text.Set(value)
+end)
+
 Options.ESPTracerThickness:OnChanged(function(value)
     ESPLibrary.Thickness.Set(value)
 end)
@@ -5367,6 +5387,7 @@ Options.EntityESPFilter:OnChanged(function(selection)
             Safe(function() Script.Functions.EntityESP(model) end)
         end
     end
+
 end)
 
 Options.ESPFillTransparency:OnChanged(function(value)
