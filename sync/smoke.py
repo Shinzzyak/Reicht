@@ -119,6 +119,9 @@ for _, name in ipairs({
     "DragStopped", "TouchTap", "TouchLongPress", "TouchPan", "TouchPinch",
     "TouchRotate", "TouchSwipe", "MouseWheelForward", "MouseWheelBackward",
     "DescendantRemoving", "ChildAdded", "Changed", "GetPropertyChangedSignal",
+    -- Sound.Played is a real event (Ended/Paused/Resumed/Stopped are its siblings); hubs hang
+    -- the "tear the ESP down when the lever opens" cleanup on it.
+    "Played", "Ended", "Paused", "Resumed", "Stopped",
 }) do SIGNAL_NAMES[name] = true end
 
 OBJ.__index = function(self, k)
@@ -563,6 +566,14 @@ end
 COLLECTION_SERVICE._added = newSignal()
 COLLECTION_SERVICE._removed = newSignal()
 function COLLECTION_SERVICE:GetInstanceAddedSignal() return self._added end
+
+-- Roblox exposes tags on the instance too, and hubs read `part:HasTag("X")` far more
+-- often than the service call. Without the instance side every handler that touches a
+-- tagged object dies on "missing method 'HasTag'".
+OBJ.m_HasTag = function(self, tag) return COLLECTION_SERVICE:HasTag(self, tag) end
+OBJ.m_AddTag = function(self, tag) COLLECTION_SERVICE:AddTag(self, tag) end
+OBJ.m_RemoveTag = function(self, tag) COLLECTION_SERVICE:RemoveTag(self, tag) end
+OBJ.m_GetTags = function(self) return COLLECTION_SERVICE:GetTags(self) end
 function COLLECTION_SERVICE:GetInstanceRemovedSignal() return self._removed end
 
 local function service(name)
@@ -585,8 +596,11 @@ end
 get("GuiService").IsTenFootInterface = function() return false end
 get("GuiService").TopbarInset = { Height = 36 }
 get("RunService").IsStudio = function() return false end
+-- TextBoxFocused / TextBoxFocusReleased are what a hub hangs its "am I typing" guard on;
+-- without them every `:Connect` on the pair is a nil index and the layer dies there.
 for _, n in ipairs({ "JumpRequest", "TouchTap", "TouchLongPress", "TouchPan", "TouchSwipe",
-        "TouchRotate", "TouchPinch", "WindowFocused", "WindowFocusReleased", "PointerAction" }) do
+        "TouchRotate", "TouchPinch", "WindowFocused", "WindowFocusReleased", "PointerAction",
+        "TextBoxFocused", "TextBoxFocusReleased" }) do
     local uis = get("UserInputService")
     local sig = newSignal(); sig.SignalName = n
     rawget(uis, "_p")[n] = sig
@@ -598,6 +612,18 @@ local players = get("Players")
 local lp = newInstance("Player", "Tester")
 lp.Character = nil
 lp.UserId = 1
+-- Player:DistanceFromCharacter is the API a hub uses to decide whether something is in
+-- reach; without it every reach-gated frame handler dies before it decides anything.
+lp.DistanceFromCharacter = function(self, point)
+    local char = self._p.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local origin = (root and root.Position) or v3(0, 0, 0)
+    local function axis(v, k) return tonumber(type(v) == "table" and v[k]) or 0 end
+    local dx = axis(point, "X") - axis(origin, "X")
+    local dy = axis(point, "Y") - axis(origin, "Y")
+    local dz = axis(point, "Z") - axis(origin, "Z")
+    return math.sqrt(dx * dx + dy * dy + dz * dz)
+end
 lp.GetAttribute = OBJ.m_GetAttribute
 lp.SetAttribute = OBJ.m_SetAttribute
 lp.Idled = newSignal()
@@ -1062,7 +1088,11 @@ task = {
     end,
     defer = function(fn, ...) return task.spawn(fn, ...) end,
     delay = function(_, fn, ...) return task.spawn(fn, ...) end,
-    wait = function(t) coroutine.yield() return 0 end,
+    wait = function(t)
+        WAIT_TRACE = debug.traceback("", 2)
+        coroutine.yield()
+        return 0
+    end,
     cancel = function() end,
 }
 PENDING_ERRORS = {}
@@ -1454,7 +1484,10 @@ do
     local raw = loadstring
     loadstring = function(src, name)
         local fn = raw(src, name)
-        if type(src) == "string" and src:find("return Library", 1, true) and type(fn) == "function" then
+        -- Only a real library source counts. A hub that probes the executor with
+        -- loadstring("return Library")() would otherwise capture the harness stand-in,
+        -- and the audit would drive mock widgets instead of the shipped ui.lua ones.
+        if type(src) == "string" and #src > 1024 and src:find("return Library", 1, true) and type(fn) == "function" then
             return function(...)
                 local lib = fn(...)
                 if type(lib) == "table" then CAPTURED.Library = lib end
@@ -1477,7 +1510,9 @@ end
 -- Builders yield on task.wait() between sections; keep resuming until the menu
 -- is fully built, or the chunk stops making progress.
 DRAIN_ERRORS = {}
-for _ = 1, 600 do
+-- A hub that gates its build on the world (waiting for a character or a room) burns one
+-- resume per wait; 600 was not enough once a layer added its own start-up gate.
+for _ = 1, 3000 do
     if coroutine.status(MAIN) ~= "suspended" then break end
     local ok, err = coroutine.resume(MAIN)
     if not ok then
@@ -1486,6 +1521,7 @@ for _ = 1, 600 do
     end
 end
 for _, e in ipairs(DRAIN_ERRORS) do _PRINT("BUILD ERROR " .. e) end
+_PRINT("LAST WAIT: " .. tostring(WAIT_TRACE))
 
 _PRINT("kicked: " .. tostring(RECORD.kicked))
 _PRINT("tabs: " .. table.concat(RECORD.tabs, ", "))
@@ -2021,7 +2057,13 @@ for round = 1, 60 do
     end
     for _, s in ipairs(signals) do
         for _, fn in ipairs(s.sig.handlers) do
-            local ok, err = pcall(fn, 1 / 60)
+            -- Own thread per handler, like Roblox. A frame handler that calls
+            -- task.wait() (a queue drain, a tween) cannot yield out of a plain
+            -- pcall: Luau aborts the run with "thread yielded unexpectedly" and
+            -- every later phase, the audit included, never executes.
+            local co = coroutine.create(fn)
+            local ok, err = coroutine.resume(co, 1 / 60)
+            if coroutine.status(co) == "suspended" then table.insert(PENDING, co) end
             frames += 1
             if not ok then table.insert(errors, s.name .. " frame -> " .. tostring(err)) end
         end
@@ -2071,52 +2113,6 @@ for _, btn in ipairs(buttons) do
 end
 _PRINT("floating buttons clicked: " .. tostring(clicked))
 _PRINT("fires after click: " .. tostring(#TRACE.fire))
-do
-    local c = lp.Character
-    _PRINT("char after click: " .. tostring(c and c._p.Name)
-        .. " hrp=" .. tostring(c and c:FindFirstChild("HumanoidRootPart") ~= nil)
-        .. " players=" .. tostring(#game:GetService("Players"):GetPlayers()))
-    local tm = wsPlayers:FindFirstChild("Target1")
-    if tm then
-        _PRINT("  target1 Downed=" .. tostring(tm:GetAttribute("Downed"))
-            .. " anchored=" .. tostring(tm.PrimaryPart and tm.PrimaryPart.Anchored)
-            .. " ragdollFolder=" .. tostring(tm:FindFirstChild("RagdollConstraints") ~= nil)
-            .. " tag=" .. tostring(tm:GetAttribute("Tag"))
-            .. " hrpPos=" .. tostring(tm:FindFirstChild("HumanoidRootPart") and tm:FindFirstChild("HumanoidRootPart").Position))
-        local mine = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
-        local theirs = tm:FindFirstChild("HumanoidRootPart")
-        _PRINT("  my hrp=" .. tostring(mine and mine.Position)
-            .. " dist=" .. tostring(mine and theirs and (mine.Position - theirs.Position).Magnitude))
-        local tmChar = tm
-        _PRINT("  tm FindFirstChildOfClass Humanoid=" .. tostring(tmChar:FindFirstChildOfClass("Humanoid") ~= nil)
-            .. " health=" .. tostring(tmChar:FindFirstChildOfClass("Humanoid") and tmChar:FindFirstChildOfClass("Humanoid").Health))
-    end
-end
-local hbAfter = services["RunService"] and services["RunService"].Heartbeat
-do
-    local t = LIB.Toggles.AutoInteract
-    local r = LIB.Options.PromptReachMultiplier
-    _PRINT("autoInteract state=" .. tostring(t and t.Value)
-        .. " reach=" .. tostring(r and r.Value)
-        .. " fires=" .. tostring(#TRACE.fire)
-        .. " pendingErrors=" .. tostring(#PENDING_ERRORS)
-        .. " first=" .. tostring(PENDING_ERRORS[1]))
-end
-if hbAfter then
-    local ls = {}
-    for _, fn in ipairs(hbAfter.handlers) do
-        local ok, l = pcall(function() return debug.info(fn, "l") end)
-        table.insert(ls, tostring(ok and l or "?"))
-    end
-    _PRINT("heartbeat handlers after click: " .. #hbAfter.handlers .. " lines=" .. table.concat(ls, ","))
-    -- direct probe of the newest handler (auto carry)
-    local f0 = #TRACE.fire
-    local okp, errp = pcall(hbAfter.handlers[#hbAfter.handlers], 1 / 60)
-    _PRINT("direct carry probe: ok=" .. tostring(okp) .. " err=" .. tostring(errp) .. " fires=" .. (#TRACE.fire - f0))
-    local f1 = #TRACE.fire
-    for _ = 1, 60 do pcall(hbAfter.handlers[#hbAfter.handlers], 1 / 60) end
-    _PRINT("carry 60 calls fires=" .. (#TRACE.fire - f1))
-end
 for round = 1, 30 do
     for i = #PENDING, 1, -1 do
         local co = PENDING[i]
@@ -2128,7 +2124,14 @@ for round = 1, 30 do
     end
     for _, s in ipairs(signals) do
         for _, fn in ipairs(s.sig.handlers) do
-            local ok, err = pcall(fn, 1 / 60)
+            -- Own thread per handler, like Roblox. A frame handler that calls
+            -- task.wait() (a queue drain, a tween) cannot yield out of a plain
+            -- pcall: Luau aborts the run with "thread yielded unexpectedly" and
+            -- every later phase, the audit included, never executes.
+            local co = coroutine.create(fn)
+            local ok, err = coroutine.resume(co, 1 / 60)
+            if coroutine.status(co) == "suspended" then table.insert(PENDING, co) end
+            frames += 1
             if not ok then table.insert(errors, s.name .. " frame2 -> " .. tostring(err)) end
         end
     end
