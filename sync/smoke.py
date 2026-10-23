@@ -89,6 +89,8 @@ for _, name in ipairs({
     "CharacterAdded", "CharacterRemoving", "Died", "StateChanged", "Running", "Heartbeat",
     "RenderStepped", "Stepped", "PlayerAdded", "PlayerRemoving", "OnClientEvent",
     "OnServerEvent", "Completed", "PromptButtonHoldBegan", "Triggered", "TriggerEnded",
+    "PromptTriggered", "PromptButtonHoldEnded", "PromptShown", "PromptHidden", "OnTeleport",
+    "PromptButtonHoldBegan", "PromptButtonHoldEnded", "Activated", "StateChanged",
     "MouseEnter", "MouseLeave", "MouseMoved", "Deactivated", "DragBegin", "DragEnd",
     "MouseButton1Down", "MouseButton1Up", "MouseButton2Down", "MouseButton2Up",
     "DragStopped", "TouchTap", "TouchLongPress", "TouchPan", "TouchPinch",
@@ -196,6 +198,9 @@ OBJ.m_WaitForChild = function(self, name)
     if c then return c end
     local o = newInstance("Folder", name)
     o._p.Parent = self
+    -- Nested paths (ReplicatedStorage.Remotes.HideMonster) must keep resolving;
+    -- a child created under a permissive parent inherits the flag.
+    if rawget(self, "_p").Permissive then o._p.Permissive = true end
     table.insert(self._p.Children, o)
     return o
 end
@@ -251,12 +256,18 @@ function newSignal()
     function s:Connect(fn) table.insert(self.handlers, fn); return { Disconnect = function() end } end
     function s:Wait()
     -- Roblox's :Wait() suspends the calling thread; returning immediately turns
-    -- `while flag do Signal:Wait() end` into a busy loop that never ends.
+    -- `while flag do Signal:Wait() end` into a busy loop that never ends. The
+    -- value handed back must be the fired arguments or nil -- a made-up number
+    -- became `character` in game code that does CharacterAdded:Wait().
     coroutine.yield()
+    if self.lastArgs then return table.unpack(self.lastArgs) end
     return 1 / 60
 end
     function s:Once(fn) table.insert(self.handlers, fn) end
-    s.Fire = function(self, ...) for _, fn in ipairs(self.handlers) do pcall(fn, ...) end end
+    s.Fire = function(self, ...)
+        self.lastArgs = table.pack(...)
+        for _, fn in ipairs(self.handlers) do pcall(fn, ...) end
+    end
     return s
 end
 
@@ -333,7 +344,24 @@ players.GetUserIdFromNameAsync = function() return 1 end
 
 local rs = get("ReplicatedStorage")
 rs.Permissive = true
+-- DOORS derives its whole menu from ReplicatedStorage.GameData: the floor name
+-- picks widget labels ("Auto " .. HidingPlaceName[floor.Value]), so an empty
+-- GameData aborts the build instead of exercising it.
+local function addChild(parent, child)
+    child._p.Parent = parent
+    table.insert(rawget(parent, "_p").Children, child)
+    return child
+end
+local gameData = addChild(rs, newInstance("Folder", "GameData"))
+gameData.Permissive = true
+local floorValue = addChild(gameData, newInstance("StringValue", "Floor"))
+floorValue.Value = "Hotel"
+local latestRoom = addChild(gameData, newInstance("IntValue", "LatestRoom"))
+latestRoom.Value = 0
 local ws = get("Workspace")
+-- Game code walks Workspace.CurrentRooms / .Map / .Generation by name; without
+-- Permissive those reads are nil and every feature that touches the map bails.
+ws.Permissive = true
 ws.Gravity = 196.2
 ws.CurrentCamera = newInstance("Camera", "Camera")
 ws.CurrentCamera.FieldOfView = 70
@@ -395,11 +423,20 @@ local TELEPORT_SERVICE = {}
 function TELEPORT_SERVICE:TeleportToPlaceInstance() end
 function TELEPORT_SERVICE:Teleport() end
 function TELEPORT_SERVICE:TeleportAsync() end
+-- Games that talk in chat go through TextChatService.TextChannels.RBXGeneral;
+-- a nil channel is a harness gap, not a game bug.
+local TEXT_CHANNEL = newInstance("TextChannel", "RBXGeneral")
+TEXT_CHANNEL.DisplayName = "RBXGeneral"
+function TEXT_CHANNEL:SendAsync() end
+local TEXTCHAT_SERVICE = newInstance("TextChatService", "TextChatService")
+TEXTCHAT_SERVICE.TextChannels = { RBXGeneral = TEXT_CHANNEL }
+TEXTCHAT_SERVICE.ChatVersion = "TextChatService"
 local _getService = function(_, name) return get(name) end
 game.GetService = function(self, name)
     if name == "TweenService" then return TWEEN_SERVICE end
     if name == "HttpService" then return HTTPSERVICE end
     if name == "TeleportService" then return TELEPORT_SERVICE end
+    if name == "TextChatService" then return TEXTCHAT_SERVICE end
     return _getService(self, name)
 end
 -- Real menu source, inlined by the runner: exercising the shipped ui.lua beats a
@@ -454,8 +491,36 @@ local function c3(r, g, b) return setmetatable({ R = r or 0, G = g or 0, B = b o
 C3.Lerp = function(a, b, t)
     return c3(a.R + (b.R - a.R) * t, a.G + (b.G - a.G) * t, a.B + (b.B - a.B) * t)
 end
+-- Rainbow ESPs call ToHSV/fromHSV every frame; a stub that returns nothing makes
+-- the colour path throw and takes the whole menu down with it.
+C3.ToHSV = function(c)
+    local hi = math.max(c.R, c.G, c.B)
+    local lo = math.min(c.R, c.G, c.B)
+    local delta = hi - lo
+    local h = 0
+    if delta > 0 then
+        if hi == c.R then h = ((c.G - c.B) / delta) % 6
+        elseif hi == c.G then h = (c.B - c.R) / delta + 2
+        else h = (c.R - c.G) / delta + 4 end
+        h = h / 6
+    end
+    return h, (hi == 0 and 0 or delta / hi), hi
+end
+local function fromHSV(h, s, v)
+    h, s, v = h or 0, s or 0, v or 0
+    local i = math.floor(h * 6)
+    local f = h * 6 - i
+    local p, q, t = v * (1 - s), v * (1 - f * s), v * (1 - (1 - f) * s)
+    local m = i % 6
+    if m == 0 then return c3(v, t, p) end
+    if m == 1 then return c3(q, v, p) end
+    if m == 2 then return c3(p, v, t) end
+    if m == 3 then return c3(p, q, v) end
+    if m == 4 then return c3(t, p, v) end
+    return c3(v, p, q)
+end
 Color3 = { fromRGB = function(r, g, b) return c3((r or 0) / 255, (g or 0) / 255, (b or 0) / 255) end,
-           new = function(r, g, b) return c3(r, g, b) end, fromHSV = function() return c3() end }
+           new = function(r, g, b) return c3(r, g, b) end, fromHSV = fromHSV }
 ColorSequence = { new = function() return {} end }
 ColorSequenceKeypoint = { new = function(t, c) return { Time = t, Value = c } end }
 NumberSequence = { new = function() return {} end }
@@ -544,8 +609,47 @@ end
 V3.__div = function(a, b) return v3(a.X / b, a.Y / b, a.Z / b) end
 V3.__eq = function(a, b) return a.X == b.X and a.Y == b.Y and a.Z == b.Z end
 Vector3 = { new = v3, zero = v3(0, 0, 0), one = v3(1, 1, 1) }
-CFrame = { new = function(...) return { Position = Vector3.new(0, 0, 0), LookVector = Vector3.new(0, 0, 0) } end,
-           Angles = function() return {} end, fromEulerAnglesXYZ = function() return {} end }
+-- Camera code multiplies CFrames every frame (`camera.CFrame * CFrame.new(0,1,0)`),
+-- so the mock needs the operator, not just the constructor.
+local CF = {}
+CF.__index = CF
+local function cf(pos)
+    return setmetatable({
+        Position = pos or v3(0, 0, 0),
+        LookVector = v3(0, 0, -1),
+        RightVector = v3(1, 0, 0),
+        UpVector = v3(0, 1, 0),
+    }, CF)
+end
+local function isCF(b) return type(b) == "table" and getmetatable(b) == CF end
+CF.__mul = function(a, b)
+    if type(b) == "number" then return a end
+    if isCF(b) then return cf(a.Position + b.Position) end
+    if isVec3(b) then return a.Position + b end
+    return a
+end
+CF.__add = function(a, b) if isVec3(b) then return cf(a.Position + b) end return a end
+CF.__sub = function(a, b) if isVec3(b) then return cf(a.Position - b) end return a end
+CF.__eq = function(a, b) return a.Position == b.Position end
+CF.__tostring = function() return "CFrame" end
+function CF.Inverse(a) return cf(v3(-a.Position.X, -a.Position.Y, -a.Position.Z)) end
+function CF.Lerp(a, b) return b end
+function CF.ToObjectSpace(a, b) return b end
+function CF.ToWorldSpace(a, b) return b end
+function CF.PointToObjectSpace(a, b) return b end
+function CF.PointToWorldSpace(a, b) return b end
+function CF.ToEulerAnglesXYZ() return 0, 0, 0 end
+function CF.ToOrientation() return 0, 0, 0 end
+function CF.ToWorldUp() return v3(0, 1, 0) end
+local function cframeNew(x, y, z)
+    if isVec3(x) then return cf(x) end
+    if isCF(x) then return cf(x.Position) end
+    return cf(v3(x or 0, y or 0, z or 0))
+end
+CFrame = { new = cframeNew, identity = cf(), Angles = function() return cf() end,
+           fromEulerAnglesXYZ = function() return cf() end, fromOrientation = function() return cf() end,
+           fromMatrix = function() return cf() end, lookAt = function() return cf() end,
+           fromAxisAngle = function() return cf() end }
 
 RaycastParams = { new = function()
     return setmetatable({}, { __index = function() return nil end, __newindex = function(t, k, v) rawset(t, k, v) end })
@@ -714,6 +818,7 @@ local function mkPart(name)
     local p = newInstance("Part", name)
     p.Position = Vector3.new(0, 5, 0)
     p.CFrame = CFrame.new()
+    ws.CurrentCamera.CFrame = CFrame.new()
     p.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
     p.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
     p.CanCollide = true
@@ -738,7 +843,12 @@ table.insert(char._p.Children, hum); hum._p.Parent = char
 table.insert(char._p.Children, hrp); hrp._p.Parent = char
 table.insert(char._p.Children, head); head._p.Parent = char
 char._p.Parent = ws
+-- Game code reads character.Head / character.Humanoid by name.
+char.Permissive = true
 lp.Character = char
+-- Game code resolves the character with CharacterAdded:Wait() when .Character is
+-- still nil; replay the spawn so that call gets the rig instead of nothing.
+lp.CharacterAdded.Fire(lp.CharacterAdded, char)
 table.insert(lp._p.Children, char)
 
 local uis = get("UserInputService")
@@ -1219,8 +1329,20 @@ FEATURE_PROOFS = {
 }
 
 
-def check_proofs(out: str) -> tuple[int, int]:
+# DOORS ships its own set: the same rule applies, one evidence row per feature.
+DOORS_PROOFS = {
+    "crouch keybind fires Crouch": ("fire", "Crouch|boolean", 1),
+    "noclip writes Collision.CanCollide": ("write", "Collision|CanCollide", 1),
+    "fly writes BodyVelocity.Velocity": ("write", "BodyVelocity|Velocity", 1),
+    "fullbright writes Lighting.Ambient": ("write", "Lighting|Ambient", 1),
+    "third person writes Head transparency": ("write", "Head|LocalTransparencyModifier", 1),
+    "FOV slider writes Camera.FieldOfView": ("write", "Camera|FieldOfView", 1),
+}
+
+
+def check_proofs(out: str, table: dict | None = None) -> tuple[int, int]:
     """Report per-feature evidence. Returns (passed, failed)."""
+    table = FEATURE_PROOFS if table is None else table
     seen = {"fire": {}, "write": {}, "made": {}}
     prefixes = {"fire": "FIRE|", "write": "WROTE|", "made": "MADE|"}
     for line in out.splitlines():
@@ -1230,7 +1352,7 @@ def check_proofs(out: str) -> tuple[int, int]:
                 if len(parts) == 2 and parts[1].isdigit():
                     seen[kind][parts[0]] = int(parts[1])
     passed = failed = 0
-    for label, (kind, key, need) in FEATURE_PROOFS.items():
+    for label, (kind, key, need) in table.items():
         got = seen[kind].get(key, 0)
         ok = got >= need
         passed += ok
@@ -1250,6 +1372,10 @@ def main() -> int:
     # Feed the harness the id the file's own guard expects, so the guard does not kick us.
     import re
     guard = re.search(r"game\.(?:GameId|PlaceId) ~= (\d+)", src)
+    if not guard:
+        # Guards written against named constants (`local UNIVERSE_ID = 123`) carry
+        # the id in the declaration instead of the comparison.
+        guard = re.search(r"local\s+UNIVERSE_ID\s*=\s*(\d+)", src)
     game_id = guard.group(1) if guard else "3647333358"
     script = HARNESS.replace("SCRIPT_SOURCE", "[" + "=" * level + "[" + src + "]" + "=" * level + "]")
     script = script.replace("GAME_ID", game_id)
@@ -1269,8 +1395,9 @@ def main() -> int:
     # The proof table describes Evade's features; other games still need their own
     # mock before any of these claims can be made about them.
     proofs_passed = proofs_failed = 0
-    if target.stem == "Evade" and "trace fire total" in out:
-        proofs_passed, proofs_failed = check_proofs(out)
+    proofs = {"Evade": FEATURE_PROOFS, "Doors": DOORS_PROOFS}.get(target.stem)
+    if proofs and "trace fire total" in out:
+        proofs_passed, proofs_failed = check_proofs(out, proofs)
     has_options = "options: " in out and "driven: 0" not in out
     has_widgets = "widgets: 0" not in out and "widgets wired: 0 / 0" not in out
     bad = (("RUNTIME ERROR" in out) or ("errors: 0" not in out) or not (has_options or has_widgets)
