@@ -744,6 +744,10 @@ table.insert(lp._p.Children, char)
 local uis = get("UserInputService")
 uis.IsKeyDown = function() return false end
 uis.GetFocusedTextBox = function() return nil end
+-- Dragging a floating button reads the cursor; without this the click handler
+-- throws and the button looks dead.
+uis.GetMouseLocation = function() return v2(0, 0) end
+uis.GetMouseDelta = function() return v2(0, 0) end
 local vu = get("VirtualUser")
 vu.CaptureController = function() end
 vu.ClickButton2 = function() end
@@ -966,7 +970,16 @@ if LIB and type(LIB.Options) == "table" then
                 tostring(type(info.Func or info.Callback) == "function")))
         end
     end
-    if type(LIB.Tabs) == "table" then _PRINT("tabs: " .. tostring(#LIB.Tabs)) end
+    local wtabs = (type(LIB.Tabs) == "table" and LIB.Tabs)
+        or (LIB.Window and type(LIB.Window.Tabs) == "table" and LIB.Window.Tabs)
+    if wtabs then
+        _PRINT("tabs: " .. tostring(#wtabs))
+        -- Tab order is part of the product: it must match the upstream menu.
+        for i, tab in ipairs(wtabs) do
+            local t = rawget(tab, "_p") or tab
+            _PRINT(string.format("TAB|%d|%s|%s", i, tostring(t.Name), tostring(t.Icon or "")))
+        end
+    end
 end
 
 for _, w in ipairs(WIDGETS) do

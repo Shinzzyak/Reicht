@@ -93,6 +93,9 @@ local win = Library:CreateWindow({
     ConfigFolder = SAVE_FOLDER,
     Language = "Auto",
     Theme = "Overworld",
+    -- The payload opened at 580x460; matching it keeps every widget's laid-out
+    -- position identical instead of reflowing in a differently sized frame.
+    Size = Vector2.new(580, 460),
 })
 
 -- Floating buttons read their gradient from getgenv(); the payload seeded this
@@ -108,12 +111,21 @@ getgenv().ButtonGradients = getgenv().ButtonGradients or {
     }),
 }
 
--- The payload's epilog handed a Settings tab to Fluent's SaveManager; the hub
--- ships the same panel (language, theme, scale, configs, unload), so one call
--- replaces that whole block without a second library.
-win:AddSettingsTab()
-
-local dragTab = win:AddTab("Draconic", "flame", "Draconic Overhaul V2.9.2, feature for feature")
+-- Tab order, titles and icons are lifted verbatim from the payload's own
+-- CreateWindow, so the menu sits exactly where Draconic users expect it and every
+-- widget keeps its original position. Only the chrome is Reicht's.
+-- "Configuration" is the hub's own settings panel (the payload used Fluent's
+-- SaveManager there); it is created at the same index so nothing shifts.
+local TAB_ORDER = {
+    { "Main", "Main", "rbxassetid://7733960981" },
+    { "AutoFarm", "Auto Farms", "rbxassetid://10709811110" },
+    { "Combat", "Combat", "rbxassetid://10734975692" },
+    { "Misc", "Misc", "rbxassetid://7734068321" },
+    { "Visual", "Visual", "rbxassetid://10709819149" },
+    { "Info", "Info", "rbxassetid://10723415903" },
+    { "Settings", "Configuration", "rbxassetid://7734052335" },
+    { "Extension", "Extension", "rbxassetid://10734930886" },
+}
 
 -- Fluent-shaped facade. The payload's own menu code calls
 -- Tabs.X:AddToggle("id", { Title = ... }) and expects a Fluent library; this
@@ -181,15 +193,23 @@ local function FacadeTab(groupbox)
     return tab
 end
 
-local Tabs = {
-    Main = FacadeTab(dragTab:AddLeftGroupbox("Main", "user")),
-    AutoFarm = FacadeTab(dragTab:AddLeftGroupbox("Auto Farms", "tractor")),
-    Combat = FacadeTab(dragTab:AddLeftGroupbox("Combat", "repeat")),
-    Misc = FacadeTab(dragTab:AddLeftGroupbox("Misc", "settings")),
-    Visual = FacadeTab(dragTab:AddLeftGroupbox("Visual", "eye")),
-    Info = FacadeTab(dragTab:AddLeftGroupbox("Info", "package")),
-    Settings = FacadeTab(dragTab:AddRightGroupbox("Configuration", "flame")),
-}
+local Tabs = {}
+local RealTabs = {}
+for _, spec in ipairs(TAB_ORDER) do
+    local key, title, icon = spec[1], spec[2], spec[3]
+    local tab
+    if key == "Settings" then
+        tab = win:AddSettingsTab()
+        -- The hub's settings panel is titled by the language table; the payload
+        -- calls this tab "Configuration" and so must the sidebar.
+        tab.Name = title
+        if tab.Label then tab.Label.Text = title end
+    else
+        tab = win:AddTab(title, icon)
+    end
+    RealTabs[key] = tab
+    Tabs[key] = FacadeTab(tab:AddLeftGroupbox(title, icon))
+end
 
 local function Run()
 local Workspace = game:GetService("Workspace")
@@ -4571,6 +4591,26 @@ Tabs.Settings:AddButton({
         if fpsCounter then
             fpsCounter:Destroy()
         end
+    end
+})
+-- Payload epilog, restored: it was dropped when the body was spliced in, which
+-- left the Extension tab empty and the window on whatever tab it opened with.
+Window:SelectTab(RealTabs.Main)
+local ExtensionLoaded = false
+Tabs.Extension:AddButton({
+    Title = "Load Extension",
+    Description = "Not all the scripts here are ours. Some are recommendations from this tab.",
+    Callback = function()
+        Window:Dialog({
+            Title = "WARNING",
+            Content = "Extension loading is currently unavailable.",
+            Buttons = {
+                {
+                    Title = "OK",
+                    Callback = function() end
+                },
+            },
+        })
     end
 })
 local tadaSound = Instance.new("Sound")

@@ -74,6 +74,7 @@ MenuKey = Enum.KeyCode.LeftControl,
 ConfigFolder = SAVE_FOLDER,
 Language = "Auto",
 Theme = "Overworld",
+Size = Vector2.new(580, 460),
 })
 getgenv().ButtonGradients = getgenv().ButtonGradients or {
 Background = ColorSequence.new({
@@ -85,8 +86,16 @@ ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
 ColorSequenceKeypoint.new(1, Color3.fromRGB(80, 180, 255)),
 }),
 }
-win:AddSettingsTab()
-local dragTab = win:AddTab("Draconic", "flame", "Draconic Overhaul V2.9.2, feature for feature")
+local TAB_ORDER = {
+{ "Main", "Main", "rbxassetid://7733960981" },
+{ "AutoFarm", "Auto Farms", "rbxassetid://10709811110" },
+{ "Combat", "Combat", "rbxassetid://10734975692" },
+{ "Misc", "Misc", "rbxassetid://7734068321" },
+{ "Visual", "Visual", "rbxassetid://10709819149" },
+{ "Info", "Info", "rbxassetid://10723415903" },
+{ "Settings", "Configuration", "rbxassetid://7734052335" },
+{ "Extension", "Extension", "rbxassetid://10734930886" },
+}
 local Fluent = {
 Options = Library.Options,
 Notify = function(_, spec)
@@ -147,15 +156,21 @@ return groupbox:AddDivider()
 end
 return tab
 end
-local Tabs = {
-Main = FacadeTab(dragTab:AddLeftGroupbox("Main", "user")),
-AutoFarm = FacadeTab(dragTab:AddLeftGroupbox("Auto Farms", "tractor")),
-Combat = FacadeTab(dragTab:AddLeftGroupbox("Combat", "repeat")),
-Misc = FacadeTab(dragTab:AddLeftGroupbox("Misc", "settings")),
-Visual = FacadeTab(dragTab:AddLeftGroupbox("Visual", "eye")),
-Info = FacadeTab(dragTab:AddLeftGroupbox("Info", "package")),
-Settings = FacadeTab(dragTab:AddRightGroupbox("Configuration", "flame")),
-}
+local Tabs = {}
+local RealTabs = {}
+for _, spec in ipairs(TAB_ORDER) do
+local key, title, icon = spec[1], spec[2], spec[3]
+local tab
+if key == "Settings" then
+tab = win:AddSettingsTab()
+tab.Name = title
+if tab.Label then tab.Label.Text = title end
+else
+tab = win:AddTab(title, icon)
+end
+RealTabs[key] = tab
+Tabs[key] = FacadeTab(tab:AddLeftGroupbox(title, icon))
+end
 local function Run()
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
@@ -4533,6 +4548,24 @@ Callback = function()
 if fpsCounter then
 fpsCounter:Destroy()
 end
+end
+})
+Window:SelectTab(RealTabs.Main)
+local ExtensionLoaded = false
+Tabs.Extension:AddButton({
+Title = "Load Extension",
+Description = "Not all the scripts here are ours. Some are recommendations from this tab.",
+Callback = function()
+Window:Dialog({
+Title = "WARNING",
+Content = "Extension loading is currently unavailable.",
+Buttons = {
+{
+Title = "OK",
+Callback = function() end
+},
+},
+})
 end
 })
 local tadaSound = Instance.new("Sound")
