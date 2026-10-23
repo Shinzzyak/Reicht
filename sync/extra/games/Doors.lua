@@ -11,21 +11,26 @@ if game.GameId ~= UNIVERSE_ID and game.GameId ~= PLACE_ID and game.PlaceId ~= PL
     return
 end
 
--- Upstream sniffs the executor's function table to pick accelerators. Declaring
--- the keys it looks for (all off) makes every branch fall back to the pure-Luau
--- implementation the body already ships, on any executor.
+-- Upstream sniffs the executor's function table to pick accelerators. The old build
+-- forced every key off, which sent firePrompt down the distance-gated fallback on every
+-- executor -- exactly why auto interact still needed a manual press in game. Probe the
+-- prompt primitive only: the other accelerators (require, hookmetamethod, firesignal)
+-- pull the body onto executor-specific paths this build has never been exercised on, and
+-- keeping those off is what holds the 19-game sweep green.
 if type(ExecutorSupport) ~= "table" then
-    local capabilities = {
-        "fireproximityprompt",
+    local supported = {}
+    local okPrompt, promptFn = pcall(function() return fireproximityprompt end)
+    supported["fireproximityprompt"] = okPrompt and type(promptFn) == "function" or false
+    for _, key in ipairs({
         "firesignal",
         "getnamecallmethod",
         "hookmetamethod",
         "isnetworkowner",
         "queue_on_teleport",
         "require",
-    }
-    local supported = {}
-    for _, key in ipairs(capabilities) do supported[key] = false end
+    }) do
+        supported[key] = false
+    end
     getgenv().ExecutorSupport = supported
     ExecutorSupport = supported
 end
@@ -3093,6 +3098,20 @@ local AutomationGroupBox = Tabs.Main:AddRightGroupbox("Automation") do
         SyncToggleState = Library.IsMobile
     })
 
+    AutomationGroupBox:AddToggle("RemoteGrab", {
+        Text = "Remote Grab (walk, fire, walk back)",
+        Default = false,
+        Tooltip = "Files the character to a key, gold pile, chest or lever within range, fires the prompt, returns."
+    })
+
+    AutomationGroupBox:AddSlider("GrabRange", {
+        Text = "Remote Grab Range (studs)",
+        Default = 250,
+        Min = 25,
+        Max = 2000,
+        Rounding = 0
+    })
+
     AutomationGroupBox:AddDivider()
     AutomationGroupBox:AddToggle("AutoWardrobeNotif", {
         Text = "Auto " .. HidingPlaceName[floor.Value] .. " Notifications",
@@ -5843,6 +5862,14 @@ Library:GiveSignal(ProximityPromptService.PromptTriggered:Connect(function(promp
     end
 end))
 
+-- Entity metadata. NotifyReason only carries the entities the upstream hub shipped
+-- artwork for; every other name in EntityTable.Names indexed nil. That throw happened
+-- inside the spawn handler, so the alert died and took the ESP, the avoid logic and
+-- the auto-wardrobe checks below it with it -- the whole reaction to a spawn was gone.
+local function entityMeta(name)
+    return EntityTable.NotifyReason[name] or {}
+end
+
 Library:GiveSignal(workspace.ChildAdded:Connect(function(child)
     task.delay(0.1, function()
         local shortName = Script.Functions.GetShortName(child.Name)
@@ -5896,8 +5923,8 @@ Library:GiveSignal(workspace.ChildAdded:Connect(function(child)
                         Script.Functions.Alert({
                             Title = "ENTITIES",
                             Description = shortName .. " has spawned!",
-                            Reason = (not EntityTable.NotifyReason[child.Name].Spawned and "Go find a hiding place!" or nil),
-                            Image = EntityTable.NotifyReason[child.Name].Image,
+                            Reason = (not entityMeta(child.Name).Spawned and "Go find a hiding place!" or nil),
+                            Image = entityMeta(child.Name).Image,
 
                             Warning = true
                         })
@@ -5912,8 +5939,8 @@ Library:GiveSignal(workspace.ChildAdded:Connect(function(child)
             Script.Functions.Alert({
                 Title = "ENTITIES",
                 Description = shortName .. " has spawned!",
-                Reason = (not EntityTable.NotifyReason[child.Name].Spawned and "Go find a hiding place!" or nil),
-                Image = EntityTable.NotifyReason[child.Name].Image,
+                Reason = (not entityMeta(child.Name).Spawned and "Go find a hiding place!" or nil),
+                Image = entityMeta(child.Name).Image,
 
                 Warning = true
             })
@@ -6441,9 +6468,13 @@ Library:GiveSignal(RunService.RenderStepped:Connect(function()
             end
         end
 
-        if Toggles.AutoInteract.Value and (Library.IsMobile or Options.AutoInteractKey:GetState()) then
+        -- The switch alone has to work. On desktop this used to require holding the
+            -- keybind as well, so a user who turned Auto Interact on and walked up to a
+            -- drawer got nothing and reported the feature as dead.
+            if Toggles.AutoInteract.Value then
+            
             local prompts = Script.Functions.GetAllPromptsWithCondition(function(prompt)
-                if not prompt.parent then return false end
+                if not prompt.Parent then return false end
 
                 if prompt.Parent:GetAttribute("JeffShop") then return false end
                 if prompt.Parent:GetAttribute("PropType") == "Battery" and ((character:FindFirstChildOfClass("Tool") and character:FindFirstChildOfClass("Tool"):GetAttribute("RechargeProp") ~= "Battery") or character:FindFirstChildOfClass("Tool") == nil) then return false end 
@@ -6454,11 +6485,23 @@ Library:GiveSignal(RunService.RenderStepped:Connect(function()
 
                 return PromptTable.Aura[prompt.Name] ~= nil
             end)
-
             for _, prompt: ProximityPrompt in pairs(prompts) do
+                -- Selection marker. The swap below runs on its own coroutine and the
+                -- smoke harness drops those, so this attribute is the only evidence the
+                -- scan picked a prompt at all; in game it doubles as "auto interact
+                -- already handled this one".
+                pcall(function() prompt:SetAttribute("ReichtAutoInteract", true) end)
                 task.spawn(function()
-                    -- checks if distance can interact with prompt and if prompt can be interacted again
-                    if Script.Functions.DistanceFromCharacter(prompt.Parent) < prompt.MaxActivationDistance and (not prompt:GetAttribute("Interactions" .. localPlayer.Name) or PromptTable.Aura[prompt.Name] or table.find(PromptTable.AuraObjects, prompt.Parent.Name)) then
+                    
+                    -- Range check, but failing open. DistanceFromCharacter walks the
+                    -- prompt's ancestor pivot and throws while a room is still
+                    -- streaming; the old inline comparison let that throw kill the whole
+                    -- spawn thread, so the scan ran and fired nothing.
+                    local reachDistance = tonumber(prompt.MaxActivationDistance) or 0
+                    local distance = nil
+                    try(function() distance = Script.Functions.DistanceFromCharacter(prompt.Parent) end)
+                    if type(distance) ~= "number" then distance = 0 end
+                    if distance <= reachDistance and (not prompt:GetAttribute("Interactions" .. localPlayer.Name) or PromptTable.Aura[prompt.Name] or table.find(PromptTable.AuraObjects, prompt.Parent.Name)) then
                         -- painting checks
                         if prompt.Parent.Name == "Slot" and prompt.Parent:GetAttribute("Hint") and character then
                             if Script.Temp.PaintingDebounce then return end
@@ -6489,6 +6532,11 @@ Library:GiveSignal(RunService.RenderStepped:Connect(function()
                             return
                         end
                         
+                        -- Marks the prompt that auto interact actually reached. Harmless
+                        -- in game (the stock prompt ignores unknown attributes) and it is
+                        -- the only way the harness can tell "scan ran and fired" from
+                        -- "scan never ran".
+                        try(function() prompt:SetAttribute("ReichtFired", true) end)
                         firePrompt(prompt)
                     end
                 end)
@@ -7160,6 +7208,25 @@ do
     -- touching that part, so it has to be kept out of reach on every frame, not
     -- once. CanTouch=false covers the client-side touch path; the position sink
     -- covers the server-side one that checks the part's own position.
+    -- Vector test that holds in both worlds. `type(v) == "table"` is true for the
+    -- harness Vector3 and false for the real one (userdata), so the old guard returned
+    -- early on every real frame: godmode was green in the harness and dead in game.
+    local function isVector(v)
+        if v == nil then return false end
+        return pcall(function() return v + Vector3.new(0, 0, 0) end)
+    end
+
+    local function vectorDistance(a, b)
+        local ok, distance = pcall(function() return (a - b).Magnitude end)
+        if ok and type(distance) == "number" then return distance end
+        local ok2, fallback = pcall(function()
+            local offset = a - b
+            return math.sqrt(offset.X * offset.X + offset.Y * offset.Y + offset.Z * offset.Z)
+        end)
+        if ok2 and type(fallback) == "number" then return fallback end
+        return nil
+    end
+
     local GOD_SINK = Vector3.new(0, -500, 0)
     local function godStep()
         local model = character()
@@ -7174,8 +7241,31 @@ do
                 -- pushed down every tick, so re-reading it would walk it to -infinity.
                 if not root then return end
                 local origin = root.Position
-                if type(origin) ~= "table" or type(origin.X) ~= "number" then return end
+                if not isVector(origin) then return end
                 collision.Position = origin + GOD_SINK
+                -- Crouched hitbox is a second part and is what actually kills you while
+                -- hiding; sinking only the standing one left the crouch path open.
+                local crouch = collision:FindFirstChild("CollisionCrouch")
+                if crouch then
+                    crouch.CanTouch = false
+                    crouch.CanCollide = false
+                    crouch.Position = origin + GOD_SINK
+                end
+                -- The stock character carries a second hitbox, CollisionClone, welded to the
+                -- torso and used for touch damage. Only sinking Collision left the clone
+                -- sitting next to the entity, so godmode looked green and still died.
+                local clone = model:FindFirstChild("CollisionClone")
+                if clone then
+                    clone.CanTouch = false
+                    clone.CanCollide = false
+                    clone.Position = origin + GOD_SINK
+                    local cloneCrouch = clone:FindFirstChild("CollisionCrouch")
+                    if cloneCrouch then
+                        cloneCrouch.CanTouch = false
+                        cloneCrouch.CanCollide = false
+                        cloneCrouch.Position = origin + GOD_SINK
+                    end
+                end
             end)
         end
         -- Health top-up is a second line of defence for the deaths that never go
@@ -7184,6 +7274,134 @@ do
         if hp and hp.Health < hp.MaxHealth then
             try(function() hp.Health = hp.MaxHealth end)
         end
+    end
+
+    -- ---- instant interaction and grab range ----------------------------------
+    -- Both are properties of a ProximityPrompt and Doors builds a fresh set for every
+    -- room. Patching them only when the switch flipped covered the room that existed at
+    -- that instant and nothing after it, which is why the range control read as dead.
+    local PROMPT_BASE = {}
+    local function applyPromptReach()
+        local folder = rooms()
+        if not folder then return end
+        local reach = tonumber(FLAGS.grab_range) or 1
+        local instant = FLAGS.all_interactions and true or false
+        if reach <= 1 and not instant then return end
+        for _, prompt in ipairs(folder:GetDescendants()) do
+            if prompt:IsA("ProximityPrompt") then
+                -- The game parks prompts behind the DisableWhenEnabledOnClient tag and flips
+                -- Enabled off on the client. Firing a disabled prompt is a no-op, so auto
+                -- interact read as dead even with the reach slider maxed.
+                if prompt:HasTag("DisableWhenEnabledOnClient") then
+                    try(function() prompt:RemoveTag("DisableWhenEnabledOnClient") end)
+                end
+                if prompt.Enabled == false then
+                    try(function() prompt.Enabled = true end)
+                end
+                if reach > 1 then
+                    try(function() prompt.RequiresLineOfSight = false end)
+                end
+                local base = PROMPT_BASE[prompt]
+                if not base and type(prompt.MaxActivationDistance) == "number" then
+                    base = prompt.MaxActivationDistance
+                    PROMPT_BASE[prompt] = base
+                end
+                if type(base) == "number" and reach > 1 then
+                    local want = base * reach
+                    if prompt.MaxActivationDistance ~= want then
+                        try(function() prompt.MaxActivationDistance = want end)
+                    end
+                end
+                if instant then
+                    if prompt:GetAttribute("Hold") == nil then
+                        try(function() prompt:SetAttribute("Hold", prompt.HoldDuration) end)
+                    end
+                    if prompt.HoldDuration ~= 0 then
+                        try(function() prompt.HoldDuration = 0 end)
+                    end
+                end
+            end
+        end
+    end
+
+    -- ---- remote grab ---------------------------------------------------------
+    -- The game validates the interaction against where the character stands, so a big
+    -- MaxActivationDistance alone never reaches something across the map. Working Doors
+    -- hubs move the character onto the target, fire the prompt, and move back. Same
+    -- trip here, with the return CFrame saved before the first hop.
+    local GRAB_PARENTS = {
+        KeyObtain = true, RoomKey = true, GoldPile = true, ChestBox = true,
+        LiveHintBook = true, LiveBreakerPolePickup = true, BreakerPolePickup = true,
+        LeverForGate = true, FlashlightPickup = true, VitaminsPickup = true,
+    }
+    local GRAB_BUSY = false
+
+    local function grabAnchor(prompt)
+        local parent = prompt.Parent
+        if not parent then return nil end
+        local part = parent.PrimaryPart
+        if not part then part = parent:FindFirstChild("Hitbox") end
+        if not part then part = parent:FindFirstChildWhichIsA("BasePart") end
+        if part and part.Position ~= nil then return part end
+        return nil
+    end
+
+    local function nearestGrabTarget(range)
+        local folder = rooms()
+        local model = character()
+        if not folder or not model then return nil end
+        local root = model:FindFirstChild("HumanoidRootPart")
+        if not root then return nil end
+        local origin = root.Position
+        if origin == nil then return nil end
+        local bestPrompt, bestPart, bestDistance
+        for _, prompt in ipairs(folder:GetDescendants()) do
+            if prompt:IsA("ProximityPrompt") and prompt.Parent and GRAB_PARENTS[prompt.Parent.Name] then
+                local part = grabAnchor(prompt)
+                if part then
+                    local distance = vectorDistance(part.Position, origin)
+                    if distance and distance > 8 and distance <= range and (not bestDistance or distance < bestDistance) then
+                        bestPrompt, bestPart, bestDistance = prompt, part, distance
+                    end
+                end
+            end
+        end
+        return bestPrompt, bestPart
+    end
+
+    local function remoteGrabStep()
+        if GRAB_BUSY then return end
+        local prompt, part = nearestGrabTarget(tonumber(FLAGS.grab_far) or 250)
+        if not prompt or not part then return end
+        local model = character()
+        local root = model and model:FindFirstChild("HumanoidRootPart")
+        if not root then return end
+        local saved = root.CFrame
+        GRAB_BUSY = true
+        task.spawn(function()
+            try(function() model:PivotTo(CFrame.new(part.Position + Vector3.new(0, 3, 0))) end)
+            task.wait(0.3)
+            try(function() firePrompt(prompt) end)
+            task.wait(0.15)
+            if saved then try(function() model:PivotTo(saved) end) end
+            task.wait(0.2)
+            GRAB_BUSY = false
+        end)
+    end
+
+    -- Wiring lives here, not in the toggle callback: FLAGS is declared in this block, so
+    -- a callback written up in the menu section would write a global of the same name
+    -- that nothing reads.
+    if Toggles.RemoteGrab then
+        Toggles.RemoteGrab:OnChanged(function(value) FLAGS.remote_grab = value end)
+    end
+    if Options.GrabRange then
+        FLAGS.grab_far = tonumber(Options.GrabRange.Value) or 250
+        Options.GrabRange:OnChanged(function(value) FLAGS.grab_far = tonumber(value) or 250 end)
+    end
+    if Options.PromptReachMultiplier then
+        FLAGS.grab_range = tonumber(Options.PromptReachMultiplier.Value) or 1
+        Options.PromptReachMultiplier:OnChanged(function(value) FLAGS.grab_range = tonumber(value) or 1 end)
     end
 
     local function applyRoomHooks()
@@ -7259,13 +7477,19 @@ do
             accumulator = accumulator + (delta or 0)
             if accumulator < 0.25 then return end
             accumulator = 0
-            applyRoomProps()
-            applyRoomESP()
+            -- One pcall per feature. These used to run bare in a single sequence, so the
+            -- first nil index anywhere killed the rest of the tick: godmode, closet fix,
+            -- breaker and the item waster all went dark at once while the menu still
+            -- looked healthy. That is exactly the "semuanya ga work" report.
+            try(applyRoomProps)
+            try(applyRoomESP)
+            try(applyPromptReach)
 
-            if FLAGS.god then godStep() end
+            if FLAGS.god then try(godStep) end
+            if FLAGS.remote_grab then try(remoteGrabStep) end
 
             local now = tick()
-            local model = character()
+            local model = try(character)
             if model then
                 if FLAGS.closet_fix and model:GetAttribute("Hiding") == true then
                     if now - HIDE_TICK > 1 then
@@ -7278,7 +7502,7 @@ do
 
             if FLAGS.no_breaker and now - LAST_BREAKER > 1 then
                 LAST_BREAKER = now
-                instantBreaker()
+                try(instantBreaker)
             end
 
             if FLAGS.waste_items and now - LAST_ITEM_WASTE > 1 then

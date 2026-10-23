@@ -6,17 +6,19 @@ game:GetService("Players").LocalPlayer:Kick("Reicht: this script is for DOORS on
 return
 end
 if type(ExecutorSupport) ~= "table" then
-local capabilities = {
-"fireproximityprompt",
+local supported = {}
+local okPrompt, promptFn = pcall(function() return fireproximityprompt end)
+supported["fireproximityprompt"] = okPrompt and type(promptFn) == "function" or false
+for _, key in ipairs({
 "firesignal",
 "getnamecallmethod",
 "hookmetamethod",
 "isnetworkowner",
 "queue_on_teleport",
 "require",
-}
-local supported = {}
-for _, key in ipairs(capabilities) do supported[key] = false end
+}) do
+supported[key] = false
+end
 getgenv().ExecutorSupport = supported
 ExecutorSupport = supported
 end
@@ -2512,6 +2514,18 @@ Default = "R",
 Text = "Auto Interact",
 SyncToggleState = Library.IsMobile
 })
+AutomationGroupBox:AddToggle("RemoteGrab", {
+Text = "Remote Grab (walk, fire, walk back)",
+Default = false,
+Tooltip = "Files the character to a key, gold pile, chest or lever within range, fires the prompt, returns."
+})
+AutomationGroupBox:AddSlider("GrabRange", {
+Text = "Remote Grab Range (studs)",
+Default = 250,
+Min = 25,
+Max = 2000,
+Rounding = 0
+})
 AutomationGroupBox:AddDivider()
 AutomationGroupBox:AddToggle("AutoWardrobeNotif", {
 Text = "Auto " .. HidingPlaceName[floor.Value] .. " Notifications",
@@ -4764,6 +4778,9 @@ end)
 end
 end
 end))
+local function entityMeta(name)
+return EntityTable.NotifyReason[name] or {}
+end
 Library:GiveSignal(workspace.ChildAdded:Connect(function(child)
 task.delay(0.1, function()
 local shortName = Script.Functions.GetShortName(child.Name)
@@ -4807,8 +4824,8 @@ if Options.NotifyEntity.Value[shortName] then
 Script.Functions.Alert({
 Title = "ENTITIES",
 Description = shortName .. " has spawned!",
-Reason = (not EntityTable.NotifyReason[child.Name].Spawned and "Go find a hiding place!" or nil),
-Image = EntityTable.NotifyReason[child.Name].Image,
+Reason = (not entityMeta(child.Name).Spawned and "Go find a hiding place!" or nil),
+Image = entityMeta(child.Name).Image,
 Warning = true
 })
 if Toggles.NotifyChat.Value then
@@ -4821,8 +4838,8 @@ elseif EntityTable.NotifyMessage[child.Name] and Options.NotifyEntity.Value[shor
 Script.Functions.Alert({
 Title = "ENTITIES",
 Description = shortName .. " has spawned!",
-Reason = (not EntityTable.NotifyReason[child.Name].Spawned and "Go find a hiding place!" or nil),
-Image = EntityTable.NotifyReason[child.Name].Image,
+Reason = (not entityMeta(child.Name).Spawned and "Go find a hiding place!" or nil),
+Image = entityMeta(child.Name).Image,
 Warning = true
 })
 if Toggles.NotifyChat.Value then
@@ -5237,9 +5254,9 @@ if door and door:FindFirstChild("ClientOpen") then
 door.ClientOpen:FireServer()
 end
 end
-if Toggles.AutoInteract.Value and (Library.IsMobile or Options.AutoInteractKey:GetState()) then
+if Toggles.AutoInteract.Value then
 local prompts = Script.Functions.GetAllPromptsWithCondition(function(prompt)
-if not prompt.parent then return false end
+if not prompt.Parent then return false end
 if prompt.Parent:GetAttribute("JeffShop") then return false end
 if prompt.Parent:GetAttribute("PropType") == "Battery" and ((character:FindFirstChildOfClass("Tool") and character:FindFirstChildOfClass("Tool"):GetAttribute("RechargeProp") ~= "Battery") or character:FindFirstChildOfClass("Tool") == nil) then return false end
 if prompt.Parent:GetAttribute("PropType") == "Heal" and humanoid and humanoid.Health == humanoid.MaxHealth then return false end
@@ -5248,8 +5265,13 @@ if isRetro and prompt.Parent.Parent.Name == "RetroWardrobe" then return false en
 return PromptTable.Aura[prompt.Name] ~= nil
 end)
 for _, prompt: ProximityPrompt in pairs(prompts) do
+pcall(function() prompt:SetAttribute("ReichtAutoInteract", true) end)
 task.spawn(function()
-if Script.Functions.DistanceFromCharacter(prompt.Parent) < prompt.MaxActivationDistance and (not prompt:GetAttribute("Interactions" .. localPlayer.Name) or PromptTable.Aura[prompt.Name] or table.find(PromptTable.AuraObjects, prompt.Parent.Name)) then
+local reachDistance = tonumber(prompt.MaxActivationDistance) or 0
+local distance = nil
+try(function() distance = Script.Functions.DistanceFromCharacter(prompt.Parent) end)
+if type(distance) ~= "number" then distance = 0 end
+if distance <= reachDistance and (not prompt:GetAttribute("Interactions" .. localPlayer.Name) or PromptTable.Aura[prompt.Name] or table.find(PromptTable.AuraObjects, prompt.Parent.Name)) then
 if prompt.Parent.Name == "Slot" and prompt.Parent:GetAttribute("Hint") and character then
 if Script.Temp.PaintingDebounce then return end
 local currentPainting = character:FindFirstChild("Prop")
@@ -5272,6 +5294,7 @@ Script.Temp.PaintingDebounce = false
 end
 return
 end
+try(function() prompt:SetAttribute("ReichtFired", true) end)
 firePrompt(prompt)
 end
 end)
@@ -5818,6 +5841,20 @@ end
 end
 end
 end
+local function isVector(v)
+if v == nil then return false end
+return pcall(function() return v + Vector3.new(0, 0, 0) end)
+end
+local function vectorDistance(a, b)
+local ok, distance = pcall(function() return (a - b).Magnitude end)
+if ok and type(distance) == "number" then return distance end
+local ok2, fallback = pcall(function()
+local offset = a - b
+return math.sqrt(offset.X * offset.X + offset.Y * offset.Y + offset.Z * offset.Z)
+end)
+if ok2 and type(fallback) == "number" then return fallback end
+return nil
+end
 local GOD_SINK = Vector3.new(0, -500, 0)
 local function godStep()
 local model = character()
@@ -5830,14 +5867,139 @@ collision.CanCollide = false
 local root = model:FindFirstChild("HumanoidRootPart")
 if not root then return end
 local origin = root.Position
-if type(origin) ~= "table" or type(origin.X) ~= "number" then return end
+if not isVector(origin) then return end
 collision.Position = origin + GOD_SINK
+local crouch = collision:FindFirstChild("CollisionCrouch")
+if crouch then
+crouch.CanTouch = false
+crouch.CanCollide = false
+crouch.Position = origin + GOD_SINK
+end
+local clone = model:FindFirstChild("CollisionClone")
+if clone then
+clone.CanTouch = false
+clone.CanCollide = false
+clone.Position = origin + GOD_SINK
+local cloneCrouch = clone:FindFirstChild("CollisionCrouch")
+if cloneCrouch then
+cloneCrouch.CanTouch = false
+cloneCrouch.CanCollide = false
+cloneCrouch.Position = origin + GOD_SINK
+end
+end
 end)
 end
 local hp = model:FindFirstChildOfClass("Humanoid")
 if hp and hp.Health < hp.MaxHealth then
 try(function() hp.Health = hp.MaxHealth end)
 end
+end
+local PROMPT_BASE = {}
+local function applyPromptReach()
+local folder = rooms()
+if not folder then return end
+local reach = tonumber(FLAGS.grab_range) or 1
+local instant = FLAGS.all_interactions and true or false
+if reach <= 1 and not instant then return end
+for _, prompt in ipairs(folder:GetDescendants()) do
+if prompt:IsA("ProximityPrompt") then
+if prompt:HasTag("DisableWhenEnabledOnClient") then
+try(function() prompt:RemoveTag("DisableWhenEnabledOnClient") end)
+end
+if prompt.Enabled == false then
+try(function() prompt.Enabled = true end)
+end
+if reach > 1 then
+try(function() prompt.RequiresLineOfSight = false end)
+end
+local base = PROMPT_BASE[prompt]
+if not base and type(prompt.MaxActivationDistance) == "number" then
+base = prompt.MaxActivationDistance
+PROMPT_BASE[prompt] = base
+end
+if type(base) == "number" and reach > 1 then
+local want = base * reach
+if prompt.MaxActivationDistance ~= want then
+try(function() prompt.MaxActivationDistance = want end)
+end
+end
+if instant then
+if prompt:GetAttribute("Hold") == nil then
+try(function() prompt:SetAttribute("Hold", prompt.HoldDuration) end)
+end
+if prompt.HoldDuration ~= 0 then
+try(function() prompt.HoldDuration = 0 end)
+end
+end
+end
+end
+end
+local GRAB_PARENTS = {
+KeyObtain = true, RoomKey = true, GoldPile = true, ChestBox = true,
+LiveHintBook = true, LiveBreakerPolePickup = true, BreakerPolePickup = true,
+LeverForGate = true, FlashlightPickup = true, VitaminsPickup = true,
+}
+local GRAB_BUSY = false
+local function grabAnchor(prompt)
+local parent = prompt.Parent
+if not parent then return nil end
+local part = parent.PrimaryPart
+if not part then part = parent:FindFirstChild("Hitbox") end
+if not part then part = parent:FindFirstChildWhichIsA("BasePart") end
+if part and part.Position ~= nil then return part end
+return nil
+end
+local function nearestGrabTarget(range)
+local folder = rooms()
+local model = character()
+if not folder or not model then return nil end
+local root = model:FindFirstChild("HumanoidRootPart")
+if not root then return nil end
+local origin = root.Position
+if origin == nil then return nil end
+local bestPrompt, bestPart, bestDistance
+for _, prompt in ipairs(folder:GetDescendants()) do
+if prompt:IsA("ProximityPrompt") and prompt.Parent and GRAB_PARENTS[prompt.Parent.Name] then
+local part = grabAnchor(prompt)
+if part then
+local distance = vectorDistance(part.Position, origin)
+if distance and distance > 8 and distance <= range and (not bestDistance or distance < bestDistance) then
+bestPrompt, bestPart, bestDistance = prompt, part, distance
+end
+end
+end
+end
+return bestPrompt, bestPart
+end
+local function remoteGrabStep()
+if GRAB_BUSY then return end
+local prompt, part = nearestGrabTarget(tonumber(FLAGS.grab_far) or 250)
+if not prompt or not part then return end
+local model = character()
+local root = model and model:FindFirstChild("HumanoidRootPart")
+if not root then return end
+local saved = root.CFrame
+GRAB_BUSY = true
+task.spawn(function()
+try(function() model:PivotTo(CFrame.new(part.Position + Vector3.new(0, 3, 0))) end)
+task.wait(0.3)
+try(function() firePrompt(prompt) end)
+task.wait(0.15)
+if saved then try(function() model:PivotTo(saved) end) end
+task.wait(0.2)
+GRAB_BUSY = false
+end)
+end
+if Toggles.RemoteGrab then
+Toggles.RemoteGrab:OnChanged(function(value) FLAGS.remote_grab = value end)
+end
+if Options.GrabRange then
+FLAGS.grab_far = tonumber(Options.GrabRange.Value) or 250
+Options.GrabRange:OnChanged(function(value) FLAGS.grab_far = tonumber(value) or 250 end)
+end
+if Options.PromptReachMultiplier then
+FLAGS.grab_range = tonumber(Options.PromptReachMultiplier.Value) or 1
+Options.PromptReachMultiplier:OnChanged(function(value) FLAGS.grab_range = tonumber(value) or 1 end)
 end
 local function applyRoomHooks()
 local room = roomAt(latestRoom())
@@ -5899,11 +6061,13 @@ RunS.Heartbeat:Connect(function(delta)
 accumulator = accumulator + (delta or 0)
 if accumulator < 0.25 then return end
 accumulator = 0
-applyRoomProps()
-applyRoomESP()
-if FLAGS.god then godStep() end
+try(applyRoomProps)
+try(applyRoomESP)
+try(applyPromptReach)
+if FLAGS.god then try(godStep) end
+if FLAGS.remote_grab then try(remoteGrabStep) end
 local now = tick()
-local model = character()
+local model = try(character)
 if model then
 if FLAGS.closet_fix and model:GetAttribute("Hiding") == true then
 if now - HIDE_TICK > 1 then
@@ -5915,7 +6079,7 @@ if model:GetAttribute("Hiding") == true then HIDE_TICK = now end
 end
 if FLAGS.no_breaker and now - LAST_BREAKER > 1 then
 LAST_BREAKER = now
-instantBreaker()
+try(instantBreaker)
 end
 if FLAGS.waste_items and now - LAST_ITEM_WASTE > 1 then
 LAST_ITEM_WASTE = now

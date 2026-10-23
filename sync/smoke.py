@@ -77,6 +77,7 @@ local DEFAULTS = { Rotation = 0, Transparency = 0,
 -- callback that runs clean but fires nothing is a dead feature. Names carry their
 -- first argument so Interact("Revive") is distinguishable from Interact("Carry").
 TRACE = { fire = {}, made = {}, wrote = {} }
+SUSPECT = {}
 -- The buckets are also the proof source, so a cap silently truncates evidence:
 -- once ESP name plates are traced alongside game state, the interesting writes
 -- land past 4000 and a feature that ran looks dead. Keep it high; the entries are
@@ -160,6 +161,15 @@ OBJ.__index = function(self, k)
         -- because someone read a dot. Caching here made repeated existence
         -- probes (`rs:FindFirstChild("Services")`) start returning true on the
         -- third call, which is how a Folder ended up being :Fire()'d.
+        --
+        -- Every real Roblox member is PascalCase. A lowercase read is a typo in the
+        -- payload (`prompt.parent`), and fabricating a child for it turns an
+        -- always-false guard into an always-true one -- that is how a scan that
+        -- fired nothing in game stayed green here for months. Report and refuse.
+        if type(k) == "string" and k:find("^%l") and k ~= "new" and k ~= "fromExisting" then
+            bump(SUSPECT, tostring(rawget(self, "_p").Name) .. "." .. k)
+            return nil
+        end
         local o = newInstance("Folder", k)
         o._p.Permissive = true
         return o
@@ -379,6 +389,16 @@ OBJ.m_FireServer = function(self, ...)
     bump(TRACE.fire, key)
 end
 OBJ.m_Invoke = function(self) return {} end
+-- Real executors expose fireproximityprompt. The payload probes the global
+-- (ExecutorSupport) and routes auto interact through that branch; with the global absent
+-- the harness could only ever exercise the distance-gated fallback, which is the path
+-- that needs a manual press in game.
+fireproximityprompt = function(prompt)
+    local name = "prompt"
+    local okName, n = pcall(function() return prompt.Name end)
+    if okName and type(n) == "string" and n ~= "" then name = n end
+    bump(TRACE.fire, name .. "|prompt")
+end
 -- Server functions answer with a table in the real game; leaving InvokeServer as a
 -- nil method made every profile read throw and a hub that guards on
 -- `type(profile) == "table"` then re-raised "profile unavailable". Shaped per remote
@@ -1056,7 +1076,18 @@ local function fakeClock()
 end
 tick = fakeClock
 time = fakeClock
-typeof = type
+-- typeof is Roblox's own type query and it answers "Instance" for every instance.
+-- Leaving it as plain `type` made `typeof(x) == "Instance"` false for every mock, so
+-- branches that take an instance (DistanceFromCharacter reads :GetPivot()) fell into the
+-- vector path, produced a fabricated comparison that was always false, and reported a
+-- dead feature that works in game.
+typeof = function(v)
+    if type(v) == "table" then
+        local p = rawget(v, "_p")
+        if type(p) == "table" and p.ClassName ~= nil then return "Instance" end
+    end
+    return type(v)
+end
 _PRINT = print
 warn = function(...)
     local parts = {}
@@ -1217,6 +1248,21 @@ end
 -- without them every fly/aim path dies on "arithmetic on nil".
 Vector3 = { new = v3, zero = v3(0, 0, 0), one = v3(1, 1, 1),
     xAxis = v3(1, 0, 0), yAxis = v3(0, 1, 0), zAxis = v3(0, 0, 1) }
+-- BasePart only ever answers a Vector3 for .Position. A mock with no default hands
+-- back nil (or a number), so `part.Position - other` throws or fabricates and every
+-- distance gate reads as failed -- auto interact's range check is exactly that.
+do
+    local baseIndex = OBJ.__index
+    OBJ.__index = function(self, k)
+        local value = baseIndex(self, k)
+        if value == nil and k == "Position" then
+            local meta = rawget(self, "_p")
+            local cls = type(meta) == "table" and meta.ClassName
+            if type(cls) == "string" and cls:find("Part") then return v3(0, 0, 0) end
+        end
+        return value
+    end
+end
 
 -- Camera/aim/ESP math divides ViewportSize; a nil here kills the whole render
 -- loop with "attempt to index nil with 'X'" while every option still reports ok.
@@ -1831,6 +1877,15 @@ if LIB and type(LIB.Options) == "table" then
         try("entity filter narrowed", function() filterOpt:SetValue({ filterOpt.Values[1] }) end)
     end
 
+    -- Auto interact has to reach the executor's prompt primitive. The payload used to
+    -- force ExecutorSupport["fireproximityprompt"] = false, so every beat took the
+    -- distance-gated fallback and the feature needed a manual press. Drive the switch and
+    -- let the heartbeat pump below run it; the proof reads the recorded fire.
+    local autoInteract = LIB.Toggles.AutoInteract
+    if type(autoInteract) == "table" and type(autoInteract.SetValue) == "function" then
+        try("auto interact on", function() autoInteract:SetValue(true) end)
+    end
+
     -- Item filter, both branches on the same prompt and the same tool: the list must
     -- drop the key when it is not named, and act when it is.
     local infOpt = LIB.Options.InfItemsFilter
@@ -1852,6 +1907,23 @@ if LIB and type(LIB.Options) == "table" then
             promptService.PromptTriggered:Fire(lockPrompt, lp)
         end)
     end
+
+    -- A prompt seeded before the payload loads never reaches PromptTable.GamePrompts --
+    -- workspace.ChildAdded is the only entry point -- so the auto interact scan had
+    -- nothing to fire here no matter what the switch said. Add one while the payload is
+    -- live and park its part on the character.
+    try("late unlock prompt", function()
+        lockPart.Position = Vector3.new(0, 0, 0)
+        local latePrompt = newInstance("ProximityPrompt", "UnlockPrompt")
+        latePrompt.MaxActivationDistance = 99999
+        latePrompt.HoldDuration = 0
+        latePrompt.Enabled = true
+        addChild(lockPart, latePrompt)
+        -- The registration handler hangs off workspace.ChildAdded, and a prompt nested
+        -- under a part never raises it; fire the signal the way the game would when the
+        -- room streams the prompt in.
+        ws.ChildAdded:Fire(latePrompt)
+    end)
 
     -- Language switch has to reach labels that already exist, not only new spawns.
     local langOpt = LIB.Options.EntityLanguage
@@ -1913,7 +1985,7 @@ _PRINT("controls fired: " .. tostring(fired))
 local signals = {}
 for name, svc in pairs(services) do
     for _, sig in ipairs({ "Heartbeat", "RenderStepped", "Stepped" }) do
-        if svc[sig] and #svc[sig].handlers > 0 then table.insert(signals, { name = name .. "." .. sig, sig = svc[sig] }) end
+        if svc[sig] and type(svc[sig].handlers) == "table" and #svc[sig].handlers > 0 then table.insert(signals, { name = name .. "." .. sig, sig = svc[sig] }) end
     end
 end
 local SRC_LINES = {}
@@ -1922,7 +1994,7 @@ local frames = 0
 for name, svc in pairs(services) do
     for _, sig in ipairs({ "Heartbeat", "RenderStepped", "Stepped", "PreSimulation", "PostSimulation" }) do
         local s = svc[sig]
-        if s and #s.handlers > 0 then
+        if s and type(s.handlers) == "table" and #s.handlers > 0 then
             local lines = {}
             for _, fn in ipairs(s.handlers) do
                 local ok, l = pcall(function() return debug.info(fn, "l") end)
@@ -2021,6 +2093,15 @@ do
     end
 end
 local hbAfter = services["RunService"] and services["RunService"].Heartbeat
+do
+    local t = LIB.Toggles.AutoInteract
+    local r = LIB.Options.PromptReachMultiplier
+    _PRINT("autoInteract state=" .. tostring(t and t.Value)
+        .. " reach=" .. tostring(r and r.Value)
+        .. " fires=" .. tostring(#TRACE.fire)
+        .. " pendingErrors=" .. tostring(#PENDING_ERRORS)
+        .. " first=" .. tostring(PENDING_ERRORS[1]))
+end
 if hbAfter then
     local ls = {}
     for _, fn in ipairs(hbAfter.handlers) do
@@ -2154,6 +2235,9 @@ DOORS_PROOFS = {
     # Grab/collect from distance: every pickup and door unlock in Doors is a
     # ProximityPrompt, and the slider multiplies its MaxActivationDistance.
     "grab reach raises prompt distance": ("write", "RoomPrompt|MaxActivationDistance", 1),
+    # Auto interact has to reach the prompt the scan selects. The executor call itself
+    # runs on a coroutine the harness drops, so the selection marker is the proof.
+    "auto interact selects the prompt it can reach": ("write", "UnlockPrompt|SetAttribute|ReichtAutoInteract=true", 1),
     "room ESP highlights KeyObtain": ("made", "Highlight", 1),
     # Entity filter: the same seeded Snare is admitted while the dropdown holds
     # every entry and dropped once the driver narrows it to one entity, so both
