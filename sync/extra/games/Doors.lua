@@ -3069,12 +3069,16 @@ local ReachGroupBox = Tabs.Main:AddLeftGroupbox("Reach") do
         Default = false
     })
 
+    -- This is the grab/collect-from-anywhere control: every pickup in Doors (lighter,
+    -- flashlight, gold, keys, vitamins) and every door unlock is a ProximityPrompt, and
+    -- the multiplier is applied to MaxActivationDistance for each one. It was capped at
+    -- 2, which reads as "no such feature" because 2x is still arm's length.
     ReachGroupBox:AddSlider("PromptReachMultiplier", {
-        Text = "Prompt Reach Multiplier",
+        Text = "Grab / Interact Reach (x)",
         Default = 1,
         Min = 1,
-        Max = 2,
-        Rounding = 1
+        Max = 100,
+        Rounding = 0
     })
 end
 
@@ -7150,6 +7154,38 @@ do
         end
     end
 
+    -- God mode used to be a single nudge of the Collision part on click and
+    -- nothing else: FLAGS.god was written and never read, so the switch died the
+    -- moment the game re-anchored the hitbox on the next room. Entities kill by
+    -- touching that part, so it has to be kept out of reach on every frame, not
+    -- once. CanTouch=false covers the client-side touch path; the position sink
+    -- covers the server-side one that checks the part's own position.
+    local GOD_SINK = Vector3.new(0, -500, 0)
+    local function godStep()
+        local model = character()
+        if not model then return end
+        local collision = model:FindFirstChild("Collision")
+        if collision then
+            try(function()
+                collision.CanTouch = false
+                collision.CanCollide = false
+                local root = model:FindFirstChild("HumanoidRootPart")
+                -- Anchor on the root, never on the part itself: the part is being
+                -- pushed down every tick, so re-reading it would walk it to -infinity.
+                if not root then return end
+                local origin = root.Position
+                if type(origin) ~= "table" or type(origin.X) ~= "number" then return end
+                collision.Position = origin + GOD_SINK
+            end)
+        end
+        -- Health top-up is a second line of defence for the deaths that never go
+        -- through the touch path. It is best effort: a server-side kill still wins.
+        local hp = model:FindFirstChildOfClass("Humanoid")
+        if hp and hp.Health < hp.MaxHealth then
+            try(function() hp.Health = hp.MaxHealth end)
+        end
+    end
+
     local function applyRoomHooks()
         local room = roomAt(latestRoom())
         if not room then return end
@@ -7225,6 +7261,8 @@ do
             accumulator = 0
             applyRoomProps()
             applyRoomESP()
+
+            if FLAGS.god then godStep() end
 
             local now = tick()
             local model = character()
@@ -7348,68 +7386,37 @@ do
         Default = false,
         Callback = function(state)
             FLAGS.god = state
-            local model = character()
-            local collision = model and model:FindFirstChild("Collision")
-            if collision then
-                local offset = state and -7.5 or 7.5
-                try(function()
-                    local origin = collision.Position
-                    if type(origin) ~= "table" or type(origin.X) ~= "number" then
-                        origin = Vector3.new(0, 0, 0)
-                    end
-                    collision.Position = origin + Vector3.new(0, offset, 0)
-                end)
-            end
+            -- Apply on the click so the switch reads as live, then let the
+            -- heartbeat hold it. The single nudge this used to do was the whole
+            -- old implementation, and it decayed the moment the next room loaded.
+            if state then godStep() end
         end,
     })
-    ProtectGroup:AddToggle("reicht_eyes", {
-        Text = "Eyes Invincibility",
-        Default = false,
-        Callback = function(state)
-            FLAGS.eyes = state
-            if state then
-                local motor = entityInfo("MotorReplication")
-                if motor then try(function() motor:FireServer(0, -120, 0, false) end) end
-            end
-        end,
-    })
-    ProtectGroup:AddToggle("reicht_snare", {
-        Text = "Disable Snare",
-        Default = false,
-        Callback = function(state)
-            FLAGS.disable_snare = state
+    -- The five protection features below were declared a SECOND time here
+    -- ("Eyes Invincibility", "Disable Snare", "Disable Dupe Doors", "Disable A-90
+    -- Visuals", "Disable Seek Trigger") on top of the upstream Anti-* toggles, plus
+    -- "Closet Exit Fix" and "Enable All Interactions" over FastClosetExit and
+    -- InstaInteract. Two switches for one behaviour, and they disagreed about rooms
+    -- that had already spawned: the upstream handlers only sweep on toggle, this
+    -- layer swept on every heartbeat. Latch onto the existing control instead --
+    -- upstream keeps its module work, this layer adds the sweep it was missing.
+    local function latchFlag(toggleName, flag)
+        local toggle = Toggles[toggleName]
+        if not toggle then return end
+        local function apply(value)
+            FLAGS[flag] = value
             applyRoomProps()
-        end,
-    })
-    ProtectGroup:AddToggle("reicht_seek_trigger", {
-        Text = "Disable Seek Trigger",
-        Default = false,
-        Callback = function(state)
-            FLAGS.disable_seek = state
-            applyRoomProps()
-        end,
-    })
-    ProtectGroup:AddToggle("reicht_dupe", {
-        Text = "Disable Dupe Doors",
-        Default = false,
-        Callback = function(state)
-            FLAGS.disable_dupe = state
-            applyRoomProps()
-        end,
-    })
-    ProtectGroup:AddToggle("reicht_a90", {
-        Text = "Disable A-90 Visuals",
-        Default = false,
-        Callback = function(state)
-            FLAGS.a90 = state
-            applyRoomProps()
-        end,
-    })
-    ProtectGroup:AddToggle("reicht_closet", {
-        Text = "Closet Exit Fix",
-        Default = false,
-        Callback = function(state) FLAGS.closet_fix = state end,
-    })
+        end
+        apply(toggle.Value)
+        toggle:OnChanged(apply)
+    end
+    latchFlag("AntiEyes", "eyes")
+    latchFlag("AntiSnare", "disable_snare")
+    latchFlag("AntiDupe", "disable_dupe")
+    latchFlag("AntiA90", "a90")
+    latchFlag("AntiSeekObstructions", "disable_seek")
+    latchFlag("FastClosetExit", "closet_fix")
+    latchFlag("InstaInteract", "all_interactions")
 
     local WorldGroup = SurvivalTab:AddRightGroupbox("World")
 
@@ -7434,20 +7441,6 @@ do
             end,
         })
     end
-    WorldGroup:AddToggle("reicht_interactions", {
-        Text = "Enable All Interactions",
-        Default = false,
-        Callback = function(state)
-            FLAGS.all_interactions = state
-            if not state then
-                for prompt in pairs(PROMPT_SEEN) do
-                    try(function() prompt.Enabled = false end)
-                end
-                PROMPT_SEEN = {}
-            end
-            applyRoomProps()
-        end,
-    })
     WorldGroup:AddToggle("reicht_no_jumpscare", {
         Text = "No Jumpscares",
         Default = false,

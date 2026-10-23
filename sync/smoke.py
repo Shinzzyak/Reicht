@@ -64,6 +64,11 @@ local DEFAULTS = { Rotation = 0, Transparency = 0,
  AbsoluteContentSize = { X = 220, Y = 56 }, TextTransparency = 0, ImageTransparency = 0,
                    BackgroundTransparency = 0, TextSize = 14, Thickness = 1, Volume = 1,
                    ZIndex = 1, LayoutOrder = 0, Visible = true, Enabled = true,
+                   -- ProximityPrompt fields the reach multiplier multiplies. Absent
+                   -- here, `prompt.MaxActivationDistance * value` was nil * number:
+                   -- the grab-from-distance slider errored inside OnChanged and every
+                   -- run reported the feature as fine because nothing was observed.
+                   MaxActivationDistance = 10, HoldDuration = 0.4,
                    TextBounds = { X = 42, Y = 16 },
                    Position = { X = { Scale = 0, Offset = 0 }, Y = { Scale = 0, Offset = 0 } },
                    AnchorPoint = { X = 0, Y = 0 } }
@@ -312,6 +317,35 @@ OBJ.m_IsA = function(self, class)
     return false
 end
 OBJ.m_Destroy = function(self) self._p.Destroyed = true end
+-- Ancestor lookups. PromptCondition() opens with FindFirstAncestorOfClass("Model"),
+-- and BOTH ancestor methods were missing from the mock entirely. Every handler that
+-- gates on a prompt condition -- the reach multiplier, prompt clip, infinite items --
+-- therefore died on the first descendant with "attempt to call a nil value", inside
+-- Util.Try, silently, and reported clean.
+local function classMatches(node, class)
+    local own = node._p.ClassName
+    if own == class then return true end
+    for _, parent in ipairs(CLASS_PARENTS[own] or {}) do
+        if parent == class then return true end
+    end
+    return false
+end
+OBJ.m_FindFirstAncestorOfClass = function(self, class)
+    local node = rawget(self, "_p").Parent
+    while node do
+        if node._p.ClassName == class then return node end
+        node = node._p.Parent
+    end
+    return nil
+end
+OBJ.m_FindFirstAncestorWhichIsA = function(self, class)
+    local node = rawget(self, "_p").Parent
+    while node do
+        if classMatches(node, class) then return node end
+        node = node._p.Parent
+    end
+    return nil
+end
 OBJ.m_Clone = function(self) return newInstance(self._p.ClassName, self._p.Name) end
 OBJ.m_GetAttribute = function(self, k) return (self._p.Attrs or {})[k] end
 OBJ.m_SetAttribute = function(self, k, v)
@@ -584,6 +618,12 @@ end
 local function addChild(parent, child)
     child._p.Parent = parent
     table.insert(rawget(parent, "_p").Children, child)
+    -- Dot access has to resolve to the real child. `workspace.CurrentRooms` is how
+    -- most handlers walk the room, and with only Children populated the dot fell
+    -- through to the Permissive stub, which hands back a detached empty Folder. Every
+    -- feature that iterates by dot path therefore ran against nothing and looked
+    -- clean: the reach multiplier looped over zero prompts for months.
+    rawget(parent, "_p")[child._p.Name] = child
     return child
 end
 local gameData = addChild(rs, newInstance("Folder", "GameData"))
@@ -1690,7 +1730,17 @@ end
 -- 1. drive every widget: its creation callback and every :OnChanged handler
 local function valueFor(kind, spec)
     if kind == "Toggle" then return true end
-    if kind == "Slider" then return spec.Default or spec.Min or 50 end
+    if kind == "Slider" then
+        -- Driving a slider to its own Default moves nothing, so its OnChanged never
+        -- fires and every feature behind a slider looks proven while never having run.
+        -- Pick a value that differs from Default whenever the range allows it.
+        local d = spec.Default
+        local lo, hi = spec.Min, spec.Max
+        if d == nil then return lo or 50 end
+        if hi ~= nil and d < hi then return hi end
+        if lo ~= nil and d > lo then return lo end
+        return d
+    end
     -- An empty Default means the widget starts blank, not that it is never typed into.
     -- Returning "" leaves every callback that guards `if text == "" then return end`
     -- unreachable, so the button behind it can never be proven.
@@ -2097,7 +2147,13 @@ DOORS_PROOFS = {
     "instant breaker fires EBF": ("fire", "EBF|nil", 1),
     "break lights fires UseEventModule": ("fire", "OnClientEvent|breakLights", 1),
     "eyes invincibility fires MotorReplication": ("fire", "MotorReplication|number", 1),
-    "god mode moves Collision": ("write", "Collision|Position", 1),
+    # Two writes minimum, not one: the old god mode was a single nudge on click, so a
+    # "1" here passed while the feature died on the next room load. Continuous
+    # enforcement is the whole claim, so it needs more than the click.
+    "god mode holds Collision out of reach": ("write", "Collision|Position", 2),
+    # Grab/collect from distance: every pickup and door unlock in Doors is a
+    # ProximityPrompt, and the slider multiplies its MaxActivationDistance.
+    "grab reach raises prompt distance": ("write", "RoomPrompt|MaxActivationDistance", 1),
     "room ESP highlights KeyObtain": ("made", "Highlight", 1),
     # Entity filter: the same seeded Snare is admitted while the dropdown holds
     # every entry and dropped once the driver narrows it to one entity, so both

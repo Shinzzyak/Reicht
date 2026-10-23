@@ -2495,11 +2495,11 @@ Text = "Prompt Clip",
 Default = false
 })
 ReachGroupBox:AddSlider("PromptReachMultiplier", {
-Text = "Prompt Reach Multiplier",
+Text = "Grab / Interact Reach (x)",
 Default = 1,
 Min = 1,
-Max = 2,
-Rounding = 1
+Max = 100,
+Rounding = 0
 })
 end
 local AutomationGroupBox = Tabs.Main:AddRightGroupbox("Automation") do
@@ -5818,6 +5818,27 @@ end
 end
 end
 end
+local GOD_SINK = Vector3.new(0, -500, 0)
+local function godStep()
+local model = character()
+if not model then return end
+local collision = model:FindFirstChild("Collision")
+if collision then
+try(function()
+collision.CanTouch = false
+collision.CanCollide = false
+local root = model:FindFirstChild("HumanoidRootPart")
+if not root then return end
+local origin = root.Position
+if type(origin) ~= "table" or type(origin.X) ~= "number" then return end
+collision.Position = origin + GOD_SINK
+end)
+end
+local hp = model:FindFirstChildOfClass("Humanoid")
+if hp and hp.Health < hp.MaxHealth then
+try(function() hp.Health = hp.MaxHealth end)
+end
+end
 local function applyRoomHooks()
 local room = roomAt(latestRoom())
 if not room then return end
@@ -5880,6 +5901,7 @@ if accumulator < 0.25 then return end
 accumulator = 0
 applyRoomProps()
 applyRoomESP()
+if FLAGS.god then godStep() end
 local now = tick()
 local model = character()
 if model then
@@ -5994,68 +6016,26 @@ Text = "God Mode",
 Default = false,
 Callback = function(state)
 FLAGS.god = state
-local model = character()
-local collision = model and model:FindFirstChild("Collision")
-if collision then
-local offset = state and -7.5 or 7.5
-try(function()
-local origin = collision.Position
-if type(origin) ~= "table" or type(origin.X) ~= "number" then
-origin = Vector3.new(0, 0, 0)
+if state then godStep() end
+end,
+})
+local function latchFlag(toggleName, flag)
+local toggle = Toggles[toggleName]
+if not toggle then return end
+local function apply(value)
+FLAGS[flag] = value
+applyRoomProps()
 end
-collision.Position = origin + Vector3.new(0, offset, 0)
-end)
+apply(toggle.Value)
+toggle:OnChanged(apply)
 end
-end,
-})
-ProtectGroup:AddToggle("reicht_eyes", {
-Text = "Eyes Invincibility",
-Default = false,
-Callback = function(state)
-FLAGS.eyes = state
-if state then
-local motor = entityInfo("MotorReplication")
-if motor then try(function() motor:FireServer(0, -120, 0, false) end) end
-end
-end,
-})
-ProtectGroup:AddToggle("reicht_snare", {
-Text = "Disable Snare",
-Default = false,
-Callback = function(state)
-FLAGS.disable_snare = state
-applyRoomProps()
-end,
-})
-ProtectGroup:AddToggle("reicht_seek_trigger", {
-Text = "Disable Seek Trigger",
-Default = false,
-Callback = function(state)
-FLAGS.disable_seek = state
-applyRoomProps()
-end,
-})
-ProtectGroup:AddToggle("reicht_dupe", {
-Text = "Disable Dupe Doors",
-Default = false,
-Callback = function(state)
-FLAGS.disable_dupe = state
-applyRoomProps()
-end,
-})
-ProtectGroup:AddToggle("reicht_a90", {
-Text = "Disable A-90 Visuals",
-Default = false,
-Callback = function(state)
-FLAGS.a90 = state
-applyRoomProps()
-end,
-})
-ProtectGroup:AddToggle("reicht_closet", {
-Text = "Closet Exit Fix",
-Default = false,
-Callback = function(state) FLAGS.closet_fix = state end,
-})
+latchFlag("AntiEyes", "eyes")
+latchFlag("AntiSnare", "disable_snare")
+latchFlag("AntiDupe", "disable_dupe")
+latchFlag("AntiA90", "a90")
+latchFlag("AntiSeekObstructions", "disable_seek")
+latchFlag("FastClosetExit", "closet_fix")
+latchFlag("InstaInteract", "all_interactions")
 local WorldGroup = SurvivalTab:AddRightGroupbox("World")
 local EspGroup = SurvivalTab:AddRightGroupbox("Room ESP")
 for _, spec in ipairs({
@@ -6074,20 +6054,6 @@ applyRoomESP()
 end,
 })
 end
-WorldGroup:AddToggle("reicht_interactions", {
-Text = "Enable All Interactions",
-Default = false,
-Callback = function(state)
-FLAGS.all_interactions = state
-if not state then
-for prompt in pairs(PROMPT_SEEN) do
-try(function() prompt.Enabled = false end)
-end
-PROMPT_SEEN = {}
-end
-applyRoomProps()
-end,
-})
 WorldGroup:AddToggle("reicht_no_jumpscare", {
 Text = "No Jumpscares",
 Default = false,
