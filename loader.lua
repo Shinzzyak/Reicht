@@ -3,6 +3,7 @@ game.Loaded:Wait()
 end
 local BASE = "https://raw.githubusercontent.com/Shinzzyak/Reicht/refs/heads/main/games/"
 local GAMES = {
+[1962086868] = "Tower of Hell",
 [2440500124] = "Doors",
 [3647333358] = "Evade",
 [122245938604556] = "Tongue Escape",

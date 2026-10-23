@@ -426,6 +426,41 @@ Instance = { new = function(class, parent)
     return o
 end }
 
+-- Tag registry. Games gate hazard/collectible logic on CollectionService tags
+-- (`GetTagged("KillBrick")`), and a missing service reads as "no hazards", so the
+-- protection feature silently protects nothing while still reporting success.
+local COLLECTION_SERVICE = { _tags = {} }
+function COLLECTION_SERVICE:GetTagged(tag)
+    local out = {}
+    for inst, tags in pairs(self._tags) do
+        if tags[tag] then table.insert(out, inst) end
+    end
+    return out
+end
+function COLLECTION_SERVICE:GetAllTags()
+    local seen, out = {}, {}
+    for _, tags in pairs(self._tags) do
+        for tag in pairs(tags) do
+            if not seen[tag] then seen[tag] = true; table.insert(out, tag) end
+        end
+    end
+    return out
+end
+function COLLECTION_SERVICE:AddTag(inst, tag)
+    self._tags[inst] = self._tags[inst] or {}
+    self._tags[inst][tag] = true
+end
+function COLLECTION_SERVICE:RemoveTag(inst, tag)
+    if self._tags[inst] then self._tags[inst][tag] = nil end
+end
+function COLLECTION_SERVICE:HasTag(inst, tag)
+    return self._tags[inst] ~= nil and self._tags[inst][tag] == true
+end
+COLLECTION_SERVICE._added = newSignal()
+COLLECTION_SERVICE._removed = newSignal()
+function COLLECTION_SERVICE:GetInstanceAddedSignal() return self._added end
+function COLLECTION_SERVICE:GetInstanceRemovedSignal() return self._removed end
+
 local function service(name)
     local s = newInstance(name, name)
     s.ChildAdded = newSignal(); s.ChildRemoved = newSignal(); s.Heartbeat = newSignal()
@@ -861,6 +896,7 @@ TEXTCHAT_SERVICE.TextChannels = { RBXGeneral = TEXT_CHANNEL }
 TEXTCHAT_SERVICE.ChatVersion = "TextChatService"
 local _getService = function(_, name) return get(name) end
 game.GetService = function(self, name)
+    if name == "CollectionService" then return COLLECTION_SERVICE end
     if name == "TweenService" then return TWEEN_SERVICE end
     if name == "HttpService" then return HTTPSERVICE end
     if name == "TeleportService" then return TELEPORT_SERVICE end
@@ -1105,12 +1141,17 @@ OBJ.m_GenerateGUID = function() return "00000000-0000-4000-8000-000000000000" en
 local CF = {}
 CF.__index = CF
 local function cf(pos)
-    return setmetatable({
+    local obj = setmetatable({
         Position = pos or v3(0, 0, 0),
         LookVector = v3(0, 0, -1),
         RightVector = v3(1, 0, 0),
         UpVector = v3(0, 1, 0),
     }, CF)
+    -- Roblox CFrames carry a Rotation property and movement code multiplies by it
+    -- (`CFrame.new(p) * root.CFrame.Rotation`). Without it the multiply indexes nil
+    -- and the whole climb loop dies on the first step.
+    obj.Rotation = obj
+    return obj
 end
 local function isCF(b) return type(b) == "table" and getmetatable(b) == CF end
 CF.__mul = function(a, b)
@@ -1373,6 +1414,44 @@ uis.GetFocusedTextBox = function() return nil end
 -- throws and the button looks dead.
 uis.GetMouseLocation = function() return v2(0, 0) end
 uis.GetMouseDelta = function() return v2(0, 0) end
+
+-- Tower of Hell (place 1962086868). Its climb reads workspace.tower.sectionData,
+-- .sections and .sectionCount and refuses to route unless the count matches the
+-- number of sections and the topmost section is named "finish". Without the tower
+-- the autofarm has nowhere to walk and looks inert.
+do
+    local tower = addChild(ws, newInstance("Model", "tower"))
+    tower.Permissive = true
+    local sectionData = addChild(tower, newInstance("Folder", "sectionData"))
+    sectionData.Permissive = true
+    local sections = addChild(tower, newInstance("Folder", "sections"))
+    sections.Permissive = true
+    local names = { "1", "2", "3", "finish" }
+    for index, label in ipairs(names) do
+        local section = addChild(sectionData, newInstance("Model", label))
+        section.Permissive = true
+        local center = addChild(section, newInstance("Part", "center"))
+        center.Size = Vector3.new(12, 1, 12)
+        center.CFrame = CFrame.new(0, index * 20, 0)
+        center.CanCollide = true
+        local marker = addChild(section, newInstance("IntValue", "i"))
+        marker.Value = index
+        local platform = addChild(sections, newInstance("Part", label))
+        platform.Size = Vector3.new(12, 1, 12)
+        platform.CFrame = CFrame.new(0, index * 20, 0)
+        platform.CanCollide = true
+    end
+    local count = addChild(tower, newInstance("IntValue", "sectionCount"))
+    count.Value = #names
+    -- A tagged hazard, so "hazard protection" is proven by the CanTouch write
+    -- rather than by the toggle flipping.
+    local killBrick = addChild(ws, newInstance("Part", "KillBrick"))
+    killBrick.CanTouch = true
+    killBrick.Size = Vector3.new(6, 1, 6)
+    killBrick.CFrame = CFrame.new(0, 30, 0)
+    COLLECTION_SERVICE:AddTag(killBrick, "KillBrick")
+end
+
 local vu = get("VirtualUser")
 vu.CaptureController = function() end
 vu.ClickButton2 = function() end
@@ -2023,6 +2102,17 @@ DE_PROOFS = {
 # These four have no remote traffic the harness can reach -- their call sites hang off
 # server-owned geometry (plots, ore blocks, map areas) -- but their local features do
 # land on real objects. A row here asserts the write, not the intent.
+# Tower of Hell has no remotes: its features move the character and touch tagged
+# hazards. Each row asserts the write the feature claims to make, so a toggle that
+# only flips its own flag fails here.
+TOWER_PROOFS = {
+    "hover builds a body velocity": ("made", "BodyVelocity", 1),
+    "climb writes the root CFrame": ("write", "HumanoidRootPart|CFrame", 2),
+    "hazard protection disables touch on the tagged KillBrick": ("write", "KillBrick|CanTouch", 1),
+    "noclip clears collision on the character": ("write", "Head|CanCollide", 1),
+    "climb speed reaches the humanoid": ("write", "Humanoid|WalkSpeed", 1),
+}
+
 BLOX_PROOFS = {
     "esp draws a tracer circle": ("write", "Circle|Radius", 1),
     "fps boost writes the lighting": ("write", "Lighting|ClockTime", 1),
@@ -2149,7 +2239,8 @@ def main() -> int:
               "BloxStrike": BLOX_PROOFS,
               "Sniper Arena": SNIPER_PROOFS,
               "TNT Mining": TNT_PROOFS,
-              "Open Sea For Animals": SEA_PROOFS}.get(target.stem)
+              "Open Sea For Animals": SEA_PROOFS,
+              "Tower of Hell": TOWER_PROOFS}.get(target.stem)
     if proofs and "trace fire total" in out:
         proofs_passed, proofs_failed = check_proofs(out, proofs)
     has_options = "options: " in out and "driven: 0" not in out
