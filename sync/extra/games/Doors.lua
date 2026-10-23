@@ -6536,7 +6536,7 @@ Library:GiveSignal(RunService.RenderStepped:Connect(function()
                         -- in game (the stock prompt ignores unknown attributes) and it is
                         -- the only way the harness can tell "scan ran and fired" from
                         -- "scan never ran".
-                        try(function() prompt:SetAttribute("ReichtFired", true) end)
+                        pcall(function() prompt:SetAttribute("ReichtFired", true) end)
                         firePrompt(prompt)
                     end
                 end)

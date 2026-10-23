@@ -5294,7 +5294,7 @@ Script.Temp.PaintingDebounce = false
 end
 return
 end
-try(function() prompt:SetAttribute("ReichtFired", true) end)
+pcall(function() prompt:SetAttribute("ReichtFired", true) end)
 firePrompt(prompt)
 end
 end)
