@@ -145,11 +145,22 @@ local PrettyFloorName = {
 
 
 local EntityTable = {
-    ["Names"] = {"BackdoorRush", "BackdoorLookman", "RushMoving", "AmbushMoving", "Eyes", "JeffTheKiller", "A60", "A120"},
+    -- Floor 2 and event entities. Names taken from the string tables of the decrypted
+    -- hub builds (a123: Alma/Bash/Drones/Scribble toggles, dih: MonumentEntity,
+    -- StemsEntity, LiveEntityBramble, SallyLingering, SurgeSpawn, BashMoving,
+    -- DronesStampede). Absent names cost nothing: the scan simply never matches them.
+    ["Names"] = {"BackdoorRush", "BackdoorLookman", "RushMoving", "AmbushMoving", "Eyes", "JeffTheKiller", "A60", "A120", "Alma", "Bash", "BashMoving", "Drones", "DronesStampede", "Scribble", "MonumentEntity", "StemsEntity", "LiveEntityBramble", "SallyLingering", "SurgeSpawn"},
     ["SideNames"] = {"FigureRig", "GiggleCeiling", "GrumbleRig", "Snare"},
     ["ShortNames"] = {
         ["BackdoorRush"] = "Blitz",
-        ["JeffTheKiller"] = "Jeff The Killer"
+        ["JeffTheKiller"] = "Jeff The Killer",
+        ["LiveEntityBramble"] = "Bramble",
+        ["SallyLingering"] = "Sally",
+        ["MonumentEntity"] = "Monument",
+        ["StemsEntity"] = "Stems",
+        ["DronesStampede"] = "Drones",
+        ["BashMoving"] = "Bash",
+        ["SurgeSpawn"] = "Surge"
     },
     -- Localised display names. The decrypted hubs ship a language switch
     -- (CurrentLanguage + GetLocalizedEntityList); the list itself is ours, because the

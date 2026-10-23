@@ -119,11 +119,18 @@ local PrettyFloorName = {
 ["Fools"] = "Super Hard Mode",
 }
 local EntityTable = {
-["Names"] = {"BackdoorRush", "BackdoorLookman", "RushMoving", "AmbushMoving", "Eyes", "JeffTheKiller", "A60", "A120"},
+["Names"] = {"BackdoorRush", "BackdoorLookman", "RushMoving", "AmbushMoving", "Eyes", "JeffTheKiller", "A60", "A120", "Alma", "Bash", "BashMoving", "Drones", "DronesStampede", "Scribble", "MonumentEntity", "StemsEntity", "LiveEntityBramble", "SallyLingering", "SurgeSpawn"},
 ["SideNames"] = {"FigureRig", "GiggleCeiling", "GrumbleRig", "Snare"},
 ["ShortNames"] = {
 ["BackdoorRush"] = "Blitz",
-["JeffTheKiller"] = "Jeff The Killer"
+["JeffTheKiller"] = "Jeff The Killer",
+["LiveEntityBramble"] = "Bramble",
+["SallyLingering"] = "Sally",
+["MonumentEntity"] = "Monument",
+["StemsEntity"] = "Stems",
+["DronesStampede"] = "Drones",
+["BashMoving"] = "Bash",
+["SurgeSpawn"] = "Surge"
 },
 ["Localized"] = {
 ["EN"] = {},

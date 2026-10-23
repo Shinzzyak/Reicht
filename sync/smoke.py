@@ -608,6 +608,12 @@ eyesModel.Permissive = true
 local rushModel = addChild(ws, newInstance("Model", "BackdoorRush"))
 rushModel.Permissive = true
 addChild(rushModel, newInstance("Part", "Root"))
+-- Floor 2 name: proves the extended EntityTable reaches the ESP. Its name only
+-- exists because the decrypted hub tables carried it, so a green here means the
+-- extra names are wired, not merely typed into a list.
+local brambleModel = addChild(ws, newInstance("Model", "LiveEntityBramble"))
+brambleModel.Permissive = true
+addChild(brambleModel, newInstance("Part", "Root"))
 
 game = newInstance("DataModel", "Game")
 game.Workspace = ws
@@ -1752,6 +1758,7 @@ DOORS_PROOFS = {
     # branches of the guard are exercised in one run.
     "entity filter admits a listed entity": ("write", "Eyes|SetAttribute|ReichtEntityESPFilter=on", 1),
     "entity filter drops an unlisted entity": ("write", "Eyes|SetAttribute|ReichtEntityESPFilter=off", 1),
+    "floor 2 entity name reaches the filter": ("write", "LiveEntityBramble|SetAttribute|ReichtEntityESPFilter=on", 1),
     "inf filter blocks an unlisted tool": ("write", "Candle|SetAttribute|ReichtInfItemTarget=off", 1),
     "inf filter admits a listed tool": ("write", "Candle|SetAttribute|ReichtInfItemTarget=on", 1),
     "inf filter drops the key exactly once": ("fire", "DropItem|table", 1),
