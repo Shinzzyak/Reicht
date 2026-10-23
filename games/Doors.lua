@@ -640,6 +640,9 @@ local TAB_ORDER = {
 { "Visuals", "Visuals", "rbxassetid://10709819149" },
 { "Floor", "Floor", "rbxassetid://10723415903" },
 { "UI Settings", "UI Settings", "rbxassetid://7734052335" },
+{ "Spawner", "Spawner", "rbxassetid://11372950109" },
+{ "Items", "Items", "rbxassetid://4483345998" },
+{ "Survival", "Survival", "rbxassetid://10734975692" },
 }
 local Tabs = {}
 for _, spec in ipairs(TAB_ORDER) do
@@ -5300,6 +5303,532 @@ SaveManager:SetFolder("Lonely Hub/doors")
 SaveManager:BuildConfigSection(Tabs["UI Settings"])
 ThemeManager:ApplyToTab(Tabs["UI Settings"])
 SaveManager:LoadAutoloadConfig()
+do
+local RS = game:GetService("ReplicatedStorage")
+local WS = game:GetService("Workspace")
+local PlayersS = game:GetService("Players")
+local RunS = game:GetService("RunService")
+local LP = PlayersS.LocalPlayer
+local function try(fn, ...)
+local ok, res = pcall(fn, ...)
+if ok then return res end
+return nil
+end
+local function gd(name)
+local folder = RS:FindFirstChild("GameData")
+return folder and folder:FindFirstChild(name) or nil
+end
+local function latestRoom()
+local value = gd("LatestRoom")
+return value and tonumber(value.Value) or 0
+end
+local function rooms()
+return WS:FindFirstChild("CurrentRooms")
+end
+local function roomAt(index)
+local folder = rooms()
+if not folder then return nil end
+return folder:FindFirstChild(tostring(index)) or folder[tostring(index)]
+end
+local function character()
+local model = LP.Character
+if not model then model = try(function() return LP.CharacterAdded:Wait() end) end
+return model
+end
+local function humanoid()
+local model = character()
+if not model then return nil end
+return model:FindFirstChildOfClass("Humanoid") or model:FindFirstChild("Humanoid")
+end
+local function bricks(name)
+local folder = RS:FindFirstChild("Bricks")
+return folder and folder:FindFirstChild(name) or nil
+end
+local function entityInfo(name)
+local folder = RS:FindFirstChild("EntityInfo")
+return folder and folder:FindFirstChild(name) or nil
+end
+local function mainGame()
+local gui = LP:FindFirstChild("PlayerGui")
+local mainUI = gui and gui:FindFirstChild("MainUI")
+local initiator = mainUI and mainUI:FindFirstChild("Initiator")
+return initiator and initiator:FindFirstChild("Main_Game") or nil
+end
+local function mainData()
+local module = mainGame()
+if not module then return nil end
+return try(function() return require(module) end)
+end
+local function moduleAt(root, ...)
+local node = root
+for _, key in ipairs({ ... }) do
+if not node then return nil end
+node = node:FindFirstChild(key)
+end
+if not node then return nil end
+return try(function() return require(node) end)
+end
+local function fireSignal(signal, ...)
+if not signal then return end
+local args = { ... }
+if type(firesignal) == "function" then
+try(firesignal, signal, table.unpack(args))
+return
+end
+if type(getconnections) == "function" then
+local conns = try(getconnections, signal)
+if conns then
+for _, conn in next, conns do
+try(function() conn.Fire(conn, table.unpack(args)) end)
+end
+return
+end
+end
+try(function() signal:Fire(table.unpack(args)) end)
+end
+local function notify(text)
+try(function()
+Library:Notify(text, 3)
+end)
+end
+local function spawnEntity(kind)
+local room = roomAt(latestRoom())
+if kind == "Screech" then
+local mod = moduleAt(mainGame(), "RemoteListener", "Modules", "Screech")
+if mod then try(mod, mainData()) end
+elseif kind == "Spider" then
+local mod = moduleAt(mainGame(), "RemoteListener", "Modules", "SpiderJumpscare")
+if mod then try(mod, mainData()) end
+elseif kind == "Halt" then
+local mod = moduleAt(RS:FindFirstChild("ClientModules"), "EntityModules", "Shade")
+if mod and room then try(mod.stuff, mainData(), room) end
+elseif kind == "Glitch" then
+local mod = moduleAt(RS:FindFirstChild("ClientModules"), "EntityModules", "Glitch")
+if mod and room then try(mod.stuff, mainData(), room) end
+elseif kind == "SeekEyes" then
+local mod = moduleAt(RS:FindFirstChild("ClientModules"), "EntityModules", "Seek")
+if mod and room then try(mod.tease, nil, room) end
+elseif kind == "Eyes" then
+local model = try(function() return game:GetObjects("rbxassetid://11388700077")[1] end)
+if model then
+local nodes = room and room:FindFirstChild("Nodes")
+local anchor = nil
+if nodes and #nodes:GetChildren() > 0 then
+local pick = nodes:GetChildren()[math.max(1, math.floor(#nodes:GetChildren() / 2))]
+anchor = pick
+elseif room then
+anchor = room:FindFirstChild("Base")
+end
+if anchor and anchor.CFrame then
+model.CFrame = anchor.CFrame + Vector3.new(0, 7, 0)
+end
+model.Parent = WS
+end
+end
+end
+local function useEvent(event, ...)
+local module = bricks("UseEventModule")
+if not module then return end
+local signal = module.OnClientEvent
+if not signal then return end
+fireSignal(signal, event, ...)
+end
+local function breakLights()
+useEvent("breakLights", roomAt(latestRoom()), 0.416, 60)
+end
+local function flickerLights()
+useEvent("flickerLights", latestRoom(), 1)
+end
+local function instantBreaker()
+local remote = bricks("EBF")
+if remote then try(function() remote:FireServer() end) end
+end
+local function heartbeatMinigame()
+local remote = bricks("ClutchHeartbeat")
+local signal = remote and remote.OnClientEvent
+if signal then fireSignal(signal) end
+end
+local function openAllDoors()
+local folder = rooms()
+if not folder then return end
+for _, room in ipairs(folder:GetChildren()) do
+local door = room:FindFirstChild("Door")
+local remote = door and door:FindFirstChild("ClientOpen")
+if remote then try(function() remote:FireServer() end) end
+end
+end
+local function skipDoor()
+local room = roomAt(latestRoom() + 1)
+local door = room and room:FindFirstChild("Door")
+local part = door and (door:FindFirstChild("Door") or door:FindFirstChildWhichIsA("BasePart"))
+local model = character()
+if part and model then
+try(function() model:PivotTo(CFrame.new(part.Position + Vector3.new(0, 3, 0))) end)
+end
+end
+local function redRoom()
+local events = moduleAt(RS:FindFirstChild("ClientModules"), "Module_Events")
+local room = roomAt(latestRoom())
+if events and room then try(events.tryp, room, 1000000) end
+end
+local function unlockAchievements()
+local list = try(function() return require(RS:FindFirstChild("Achievements")) end)
+if type(list) ~= "table" then
+notify("Achievements module not reachable here.")
+return
+end
+local unlock = moduleAt(mainGame(), "RemoteListener", "Modules", "AchievementUnlock")
+if not unlock then return end
+for identifier in pairs(list) do
+try(unlock, nil, identifier)
+end
+end
+local function giveCrucifix()
+local tool = try(function() return game:GetObjects("rbxassetid://11480603603")[1] end)
+if not tool then
+notify("Crucifix asset needs executor GetObjects.")
+return
+end
+local backpack = LP:FindFirstChild("Backpack")
+if backpack then tool.Parent = backpack end
+end
+local PLUSHIES = {
+["A-90 Plush"] = {
+folder = "Reicht/Doors/Plush/A90",
+files = {
+["model.rbxm"] = "https://raw.githubusercontent.com/tim3craft/A-90-A-120-Plushie/main/A-90%20Plush.rbxm",
+},
+},
+["A-120 Plush"] = {
+folder = "Reicht/Doors/Plush/A120",
+files = {
+["model.rbxm"] = "https://raw.githubusercontent.com/tim3craft/A-90-A-120-Plushie/main/A-120.rbxm",
+},
+},
+}
+local function givePlushie(name)
+local spec = PLUSHIES[name]
+if not spec then return end
+if type(writefile) ~= "function" or type(getcustomasset) ~= "function"
+or type(isfolder) ~= "function" or type(makefolder) ~= "function" then
+notify("Plushies need writefile/getcustomasset support.")
+return
+end
+for _, dir in ipairs({ "Reicht", "Reicht/Doors", "Reicht/Doors/Plush", spec.folder }) do
+if not isfolder(dir) then try(makefolder, dir) end
+end
+local path = spec.folder .. "/model.rbxm"
+local file = spec.files["model.rbxm"]
+if type(isfile) ~= "function" or not isfile(path) then
+local body = try(game.HttpGet, game, file)
+if not body or #body == 0 then
+notify("Plushie download failed.")
+return
+end
+try(writefile, path, body)
+end
+local asset = try(getcustomasset, path, true)
+if not asset then
+notify("Plushie asset could not be mounted.")
+return
+end
+local objects = try(function() return game:GetObjects(asset) end)
+local model = objects and objects[1]
+if not model then return end
+local tool = model:FindFirstChildWhichIsA("Tool", true) or model
+if tool:IsA("Model") and not tool:IsA("Tool") then
+local holder = Instance.new("Tool")
+holder.Name = name
+holder.RequiresHandle = true
+for _, child in ipairs(tool:GetChildren()) do child.Parent = holder end
+tool:Destroy()
+tool = holder
+end
+tool.Name = name
+local backpack = LP:FindFirstChild("Backpack")
+if backpack then tool.Parent = backpack end
+end
+local FLAGS = {}
+local ROOM_HOOKS = {}
+local PROMPT_SEEN = {}
+local HIDE_TICK = 0
+local LAST_ITEM_WASTE = 0
+local LAST_BREAKER = 0
+local function applyRoomProps()
+local folder = rooms()
+if folder then
+for _, object in ipairs(folder:GetDescendants()) do
+if object.Name == "DoorFake" then
+local hidden = object:FindFirstChild("Hidden")
+if hidden then hidden.CanTouch = not FLAGS.disable_dupe end
+local lock = object:FindFirstChild("LockPart")
+local prompt = lock and lock:FindFirstChild("UnlockPrompt")
+if prompt then prompt.Enabled = not FLAGS.disable_dupe end
+elseif object.Name == "Snare" then
+local hitbox = object:FindFirstChild("Hitbox")
+if hitbox then hitbox.CanTouch = not FLAGS.disable_snare end
+elseif object.Name == "Collision" and FLAGS.disable_seek then
+object.CanTouch = false
+end
+if FLAGS.all_interactions and try(function() return object:IsA("ProximityPrompt") end) then
+PROMPT_SEEN[object] = true
+object.Enabled = true
+object.RequiresLineOfSight = false
+end
+end
+end
+if FLAGS.eyes then
+if WS:FindFirstChild("Eyes") then
+local motor = entityInfo("MotorReplication")
+if motor then try(function() motor:FireServer(0, -120, 0, false) end) end
+end
+end
+if FLAGS.a90 then
+local entity = WS:FindFirstChild("A90")
+if entity then
+for _, part in ipairs(entity:GetDescendants()) do
+if try(function() return part:IsA("Sound") end) then
+try(function() part:Stop() end)
+elseif try(function() return part:IsA("BasePart") end) then
+try(function() part.Transparency = 1 end)
+end
+end
+end
+end
+end
+local function applyRoomHooks()
+local room = roomAt(latestRoom())
+if not room then return end
+for id, hook in pairs(ROOM_HOOKS) do
+if FLAGS[id] then try(hook, room) end
+end
+end
+local roomSignal = gd("LatestRoom")
+if roomSignal then
+try(function()
+roomSignal.Changed:Connect(function()
+applyRoomHooks()
+applyRoomProps()
+end)
+end)
+end
+local accumulator = 0
+try(function()
+RunS.Heartbeat:Connect(function(delta)
+accumulator = accumulator + (delta or 0)
+if accumulator < 0.25 then return end
+accumulator = 0
+applyRoomProps()
+local now = tick()
+local model = character()
+if model then
+if FLAGS.closet_fix and model:GetAttribute("Hiding") == true then
+if now - HIDE_TICK > 1 then
+local camLock = entityInfo("CamLock")
+if camLock then try(function() camLock:FireServer() end) end
+end
+end
+if model:GetAttribute("Hiding") == true then HIDE_TICK = now end
+end
+if FLAGS.no_breaker and now - LAST_BREAKER > 1 then
+LAST_BREAKER = now
+instantBreaker()
+end
+if FLAGS.waste_items and now - LAST_ITEM_WASTE > 1 then
+LAST_ITEM_WASTE = now
+for _, player in ipairs(PlayersS:GetPlayers()) do
+if player ~= LP then
+local backpack = player:FindFirstChild("Backpack")
+if backpack then
+for _, item in ipairs(backpack:GetChildren()) do
+if item.Name == "Lighter" or item.Name == "Flashlight" or item.Name == "Vitamins" then
+local remote = item:FindFirstChild("Remote")
+if remote then try(function() remote:FireServer() end) end
+end
+end
+end
+end
+end
+end
+end)
+end)
+local SpawnerTab = Tabs["Spawner"]
+local EntitiesGroup = SpawnerTab:AddLeftGroupbox("Entity Modules")
+EntitiesGroup:AddLabel("Calls the game's own client entity modules locally.")
+EntitiesGroup:AddButton("Spawn Screech", function() spawnEntity("Screech") end)
+EntitiesGroup:AddButton("Spawn Screech x100", function()
+for _ = 1, 100 do spawnEntity("Screech") end
+end)
+EntitiesGroup:AddButton("Spawn Halt", function() spawnEntity("Halt") end)
+EntitiesGroup:AddButton("Spawn Glitch", function() spawnEntity("Glitch") end)
+EntitiesGroup:AddButton("Seek Eyes", function() spawnEntity("SeekEyes") end)
+EntitiesGroup:AddButton("Spider Jumpscare", function() spawnEntity("Spider") end)
+EntitiesGroup:AddButton("Spawn Eyes (model)", function() spawnEntity("Eyes") end)
+local EveryGroup = SpawnerTab:AddRightGroupbox("Every Door")
+EveryGroup:AddToggle("reicht_screech_door", {
+Text = "Screech Every Door",
+Default = false,
+Callback = function(state)
+FLAGS.screech_door = state
+ROOM_HOOKS.screech_door = function() spawnEntity("Screech") end
+end,
+})
+EveryGroup:AddToggle("reicht_halt_door", {
+Text = "Halt Every Door",
+Default = false,
+Callback = function(state)
+FLAGS.halt_door = state
+ROOM_HOOKS.halt_door = function() spawnEntity("Halt") end
+end,
+})
+EveryGroup:AddToggle("reicht_glitch_door", {
+Text = "Glitch Every Door",
+Default = false,
+Callback = function(state)
+FLAGS.glitch_door = state
+ROOM_HOOKS.glitch_door = function() spawnEntity("Glitch") end
+end,
+})
+EveryGroup:AddToggle("reicht_breaklights_door", {
+Text = "Break Lights Every Door",
+Default = false,
+Callback = function(state)
+FLAGS.breaklights_door = state
+ROOM_HOOKS.breaklights_door = function() breakLights() end
+end,
+})
+EveryGroup:AddToggle("reicht_flicker_door", {
+Text = "Flicker Lights Every Door",
+Default = false,
+Callback = function(state)
+FLAGS.flicker_door = state
+ROOM_HOOKS.flicker_door = function() flickerLights() end
+end,
+})
+local ItemsTab = Tabs["Items"]
+local GiversGroup = ItemsTab:AddLeftGroupbox("Givers")
+GiversGroup:AddButton("Open All Doors (Skeleton Key)", function() openAllDoors() end)
+GiversGroup:AddButton("Give Crucifix", function() giveCrucifix() end)
+GiversGroup:AddButton("100 HP", function()
+local hp = humanoid()
+if hp then try(function() hp.Health = 100 end) end
+end)
+GiversGroup:AddButton("Instant Breaker", function() instantBreaker() end)
+GiversGroup:AddButton("Unlock All Achievements", function() unlockAchievements() end)
+local UtilityGroup = ItemsTab:AddRightGroupbox("Utility")
+UtilityGroup:AddButton("Skip Door", function() skipDoor() end)
+UtilityGroup:AddButton("Red Room", function() redRoom() end)
+UtilityGroup:AddButton("Heartbeat Minigame", function() heartbeatMinigame() end)
+UtilityGroup:AddButton("Break Lights", function() breakLights() end)
+UtilityGroup:AddButton("Flicker Lights", function() flickerLights() end)
+UtilityGroup:AddToggle("reicht_no_breaker", {
+Text = "No Breaker Puzzle",
+Default = false,
+Callback = function(state) FLAGS.no_breaker = state end,
+})
+local SurvivalTab = Tabs["Survival"]
+local ProtectGroup = SurvivalTab:AddLeftGroupbox("Protection")
+ProtectGroup:AddToggle("reicht_god_mode", {
+Text = "God Mode",
+Default = false,
+Callback = function(state)
+FLAGS.god = state
+local model = character()
+local collision = model and model:FindFirstChild("Collision")
+if collision then
+local offset = state and -7.5 or 7.5
+try(function()
+local origin = collision.Position
+if type(origin) ~= "table" or type(origin.X) ~= "number" then
+origin = Vector3.new(0, 0, 0)
+end
+collision.Position = origin + Vector3.new(0, offset, 0)
+end)
+end
+end,
+})
+ProtectGroup:AddToggle("reicht_eyes", {
+Text = "Eyes Invincibility",
+Default = false,
+Callback = function(state)
+FLAGS.eyes = state
+if state then
+local motor = entityInfo("MotorReplication")
+if motor then try(function() motor:FireServer(0, -120, 0, false) end) end
+end
+end,
+})
+ProtectGroup:AddToggle("reicht_snare", {
+Text = "Disable Snare",
+Default = false,
+Callback = function(state)
+FLAGS.disable_snare = state
+applyRoomProps()
+end,
+})
+ProtectGroup:AddToggle("reicht_seek_trigger", {
+Text = "Disable Seek Trigger",
+Default = false,
+Callback = function(state)
+FLAGS.disable_seek = state
+applyRoomProps()
+end,
+})
+ProtectGroup:AddToggle("reicht_dupe", {
+Text = "Disable Dupe Doors",
+Default = false,
+Callback = function(state)
+FLAGS.disable_dupe = state
+applyRoomProps()
+end,
+})
+ProtectGroup:AddToggle("reicht_a90", {
+Text = "Disable A-90 Visuals",
+Default = false,
+Callback = function(state)
+FLAGS.a90 = state
+applyRoomProps()
+end,
+})
+ProtectGroup:AddToggle("reicht_closet", {
+Text = "Closet Exit Fix",
+Default = false,
+Callback = function(state) FLAGS.closet_fix = state end,
+})
+local WorldGroup = SurvivalTab:AddRightGroupbox("World")
+WorldGroup:AddToggle("reicht_interactions", {
+Text = "Enable All Interactions",
+Default = false,
+Callback = function(state)
+FLAGS.all_interactions = state
+if not state then
+for prompt in pairs(PROMPT_SEEN) do
+try(function() prompt.Enabled = false end)
+end
+PROMPT_SEEN = {}
+end
+applyRoomProps()
+end,
+})
+WorldGroup:AddToggle("reicht_no_jumpscare", {
+Text = "No Jumpscares",
+Default = false,
+Callback = function(state)
+if state then
+local remote = bricks("Jumpscare")
+if remote then try(function() remote:Destroy() end) end
+end
+end,
+})
+WorldGroup:AddToggle("reicht_waste", {
+Text = "Waste Other Players Items",
+Default = false,
+Callback = function(state) FLAGS.waste_items = state end,
+})
+WorldGroup:AddButton("Give A-90 Plush", function() givePlushie("A-90 Plush") end)
+WorldGroup:AddButton("Give A-120 Plush", function() givePlushie("A-120 Plush") end)
+print("[Reicht | Doors] merge layer ready")
+end
 Script.Functions.UpdateRPC()
 getgenv().lonelyhub_loaded = true
 end

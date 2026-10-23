@@ -108,6 +108,7 @@ OBJ.__index = function(self, k)
     if m then return m end
     if SIGNAL_NAMES[k] then
         local s = newSignal()
+        s.SignalName = k
         rawget(self, "_p")[k] = s
         return s
     end
@@ -223,14 +224,26 @@ OBJ.m_FindFirstChildWhichIsA = function(self, class)
     end
     return nil
 end
-OBJ.m_GetDescendants = function(self) return self._p.Children end
+-- Roblox walks the whole tree; a shallow version hides every nested part
+-- (room -> DoorFake -> Hidden) and makes room-scan features look inert.
+OBJ.m_GetDescendants = function(self)
+    local out = {}
+    local function walk(node)
+        for _, child in ipairs(node._p.Children) do
+            table.insert(out, child)
+            walk(child)
+        end
+    end
+    walk(self)
+    return out
+end
 OBJ.m_IsA = function(self, class) return self._p.ClassName == class end
 OBJ.m_Destroy = function(self) self._p.Destroyed = true end
 OBJ.m_Clone = function(self) return newInstance(self._p.ClassName, self._p.Name) end
 OBJ.m_GetAttribute = function(self, k) return (self._p.Attrs or {})[k] end
 OBJ.m_SetAttribute = function(self, k, v) self._p.Attrs = self._p.Attrs or {}; self._p.Attrs[k] = v end
 OBJ.m_GetPropertyChangedSignal = function(self) return newSignal() end
-OBJ.m_GetDescendantsAsync = function(self) return self._p.Children end
+OBJ.m_GetDescendantsAsync = function(self) return OBJ.m_GetDescendants(self) end
 OBJ.m_TranslateBy = function(self) end
 OBJ.m_ChangeState = function(self) end
 OBJ.m_FireServer = function(self, ...)
@@ -358,6 +371,28 @@ local floorValue = addChild(gameData, newInstance("StringValue", "Floor"))
 floorValue.Value = "Hotel"
 local latestRoom = addChild(gameData, newInstance("IntValue", "LatestRoom"))
 latestRoom.Value = 0
+
+-- Merge-layer surfaces. The DOORS features folded in from the other hubs read
+-- Bricks (breaker, light events, heartbeat, jumpscare), EntityInfo (camera lock,
+-- motor replication) and walk CurrentRooms; seeding them turns each feature from
+-- "callback ran" into "it actually touched the object it claims to touch".
+local bricksFolder = addChild(rs, newInstance("Folder", "Bricks"))
+bricksFolder.Permissive = true
+local function addRemote(name, parent)
+    local event = newInstance("RemoteEvent", name)
+    addChild(parent, event)
+    return event
+end
+addRemote("EBF", bricksFolder)
+addRemote("Jumpscare", bricksFolder)
+addRemote("ClutchHeartbeat", bricksFolder)
+addRemote("UseEventModule", bricksFolder)
+
+local entityInfoFolder = addChild(rs, newInstance("Folder", "EntityInfo"))
+entityInfoFolder.Permissive = true
+addRemote("MotorReplication", entityInfoFolder)
+addRemote("CamLock", entityInfoFolder)
+
 local ws = get("Workspace")
 -- Game code walks Workspace.CurrentRooms / .Map / .Generation by name; without
 -- Permissive those reads are nil and every feature that touches the map bails.
@@ -365,6 +400,27 @@ ws.Permissive = true
 ws.Gravity = 196.2
 ws.CurrentCamera = newInstance("Camera", "Camera")
 ws.CurrentCamera.FieldOfView = 70
+
+local roomsFolder = addChild(ws, newInstance("Folder", "CurrentRooms"))
+roomsFolder.Permissive = true
+local roomZero = addChild(roomsFolder, newInstance("Model", "0"))
+roomZero.Permissive = true
+local roomDoor = addChild(roomZero, newInstance("Model", "Door"))
+roomDoor.Permissive = true
+addRemote("ClientOpen", roomDoor)
+local fakeDoor = addChild(roomZero, newInstance("Model", "DoorFake"))
+fakeDoor.Permissive = true
+addChild(fakeDoor, newInstance("Part", "Hidden"))
+local lockPart = addChild(fakeDoor, newInstance("Model", "LockPart"))
+lockPart.Permissive = true
+addChild(lockPart, newInstance("ProximityPrompt", "UnlockPrompt"))
+local snareModel = addChild(roomZero, newInstance("Model", "Snare"))
+snareModel.Permissive = true
+addChild(snareModel, newInstance("Part", "Hitbox"))
+addChild(roomZero, newInstance("Part", "Collision"))
+addChild(roomZero, newInstance("ProximityPrompt", "RoomPrompt"))
+local eyesModel = addChild(ws, newInstance("Model", "Eyes"))
+eyesModel.Permissive = true
 
 game = newInstance("DataModel", "Game")
 game.Workspace = ws
@@ -665,7 +721,16 @@ Drawing = { new = function(kind)
     return setmetatable({ Kind = kind, Remove = function() end, Visible = true }, { __index = function() return function() end end })
 end }
 setfflag = function() return true end
-firesignal = function() end
+firesignal = function(signal, ...)
+        if type(signal) ~= "table" then return end
+        -- A local signal fire is game traffic the same way :FireServer is, so it
+        -- has to land in TRACE or "the button ran" is all the proof we get.
+        local first = select(1, ...)
+        local key = tostring(rawget(signal, "SignalName") or "signal")
+            .. "|" .. tostring(type(first) == "string" and first or type(first))
+        bump(TRACE.fire, key)
+        if type(signal.Fire) == "function" then signal.Fire(signal, ...) end
+    end
 getgc = function() return {} end
 readfile = function() return "" end
 writefile = function() end
@@ -1337,6 +1402,13 @@ DOORS_PROOFS = {
     "fullbright writes Lighting.Ambient": ("write", "Lighting|Ambient", 1),
     "third person writes Head transparency": ("write", "Head|LocalTransparencyModifier", 1),
     "FOV slider writes Camera.FieldOfView": ("write", "Camera|FieldOfView", 1),
+    # Merge layer: one row per folded-in mechanism.
+    "dupe doors writes Hidden.CanTouch": ("write", "Hidden|CanTouch", 1),
+    "disable snare writes Hitbox.CanTouch": ("write", "Hitbox|CanTouch", 1),
+    "instant breaker fires EBF": ("fire", "EBF|nil", 1),
+    "break lights fires UseEventModule": ("fire", "OnClientEvent|breakLights", 1),
+    "eyes invincibility fires MotorReplication": ("fire", "MotorReplication|number", 1),
+    "god mode moves Collision": ("write", "Collision|Position", 1),
 }
 
 
