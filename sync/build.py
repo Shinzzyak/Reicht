@@ -744,6 +744,35 @@ def defensive_ui(text):
     )
     return text
 
+def strip_stats_ui(text):
+    """Drop the watermark overlay: it is the FPS/ping/playtime box the operator reads
+    as clutter. The floating button stays -- that is the only chrome he wants on a
+    phone screen. Kept as a build patch because ui.lua is generated, never hand-edited.
+    """
+    if "Watermark overlay removed on purpose" in text:
+        return text
+    pattern = re.compile(
+        r"[ \t]*Watermark\.Build\(options\.WatermarkTitle or window\.Title\)\s*\n"
+        r"[ \t]*Watermark\.SetVisible\(options\.Watermark ~= false\)\s*\n"
+    )
+    if len(pattern.findall(text)) != 1:
+        raise SystemExit("ui.lua watermark strip: call pair not found exactly once")
+    text = pattern.sub(
+        "    -- Watermark overlay removed on purpose: the floating button is the only chrome.\n"
+        "    Watermark.SetVisible(false)\n",
+        text,
+    )
+    # The switch that drove it is now a dead toggle: SetVisible is a no-op with no
+    # frame built. Drop the row so the settings tab has no control that does nothing.
+    toggle = re.compile(r"[ \t]*interface:AddToggle\(\"MarioWatermark\".*?\n")
+    if len(toggle.findall(text)) != 1:
+        raise SystemExit("ui.lua watermark strip: toggle row not found exactly once")
+    return toggle.sub(
+        "    -- MarioWatermark toggle removed: no overlay left to switch.\n",
+        text,
+    )
+
+
 def extra_games():
     """Games authored in this repo: `extra/games.json` maps script stem -> {id, name}."""
     root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "extra")
@@ -824,6 +853,7 @@ def main():
     ui_text = add_button_registry(ui_text)
     ui_text = minimal_ui(ui_text)
     ui_text = defensive_ui(ui_text)
+    ui_text = strip_stats_ui(ui_text)
     open(os.path.join(stage, "ui.lua"), "w", encoding="utf-8").write(ui_text)
 
     built = []

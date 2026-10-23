@@ -314,95 +314,9 @@ local function MakeDraggable(topbarobject, object, locked)
         end
     end)
 end
-local Stats = game:GetService("Stats")
-local fpsCounter = Instance.new("ScreenGui")
-fpsCounter.Name = "FPSCounter"
-fpsCounter.Parent = game.CoreGui
-fpsCounter.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-fpsCounter.ResetOnSpawn = false
-local frame = Instance.new("Frame")
-frame.Parent = fpsCounter
-frame.Size = UDim2.new(0, 180, 0, 80)
-frame.Position = UDim2.new(0, 300, 0, 10)
-frame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-frame.BackgroundTransparency = 0.7
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 15)
-corner.Parent = frame
-local gradient = Instance.new("UIGradient")
-gradient.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(80, 180, 255)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 0, 0))
-})
-gradient.Parent = frame
-task.spawn(function()
-    while task.wait(0.03) do
-        gradient.Rotation = (gradient.Rotation + 1) % 360
-    end
-end)
-local uiStroke = Instance.new("UIStroke")
-uiStroke.Thickness = 2
-uiStroke.Color = Color3.fromRGB(80, 180, 255)
-uiStroke.Parent = frame
-task.spawn(function()
-    local a = Color3.fromRGB(80, 180, 255)
-    local b = Color3.fromRGB(255, 255, 255)
-    local t, d = 0, 1
-    while task.wait(0.03) do
-        t += 0.02 * d
-        if t >= 1 then t, d = 1, -1 elseif t <= 0 then t, d = 0, 1 end
-        uiStroke.Color = a:Lerp(b, t)
-    end
-end)
-local label = Instance.new("TextLabel")
-label.Parent = frame
-label.Size = UDim2.new(1, -10, 1, -10)
-label.Position = UDim2.new(0, 5, 0, 5)
-label.BackgroundTransparency = 1
-label.TextColor3 = Color3.fromRGB(255, 255, 255)
-label.Font = Enum.Font.GothamBlack
-label.TextSize = 10
-label.TextWrapped = true
-label.TextXAlignment = Enum.TextXAlignment.Center
-label.TextYAlignment = Enum.TextYAlignment.Center
-label.Text = "FPS: 0 | Ping: 0 ms\nClient Timer: 0h 0m 0s"
-MakeDraggable(frame, frame, false)
-local function GetPing()
-    local n = Stats:FindFirstChild("Network")
-    if not n then return 0 end
-    local s = n:FindFirstChild("ServerStatsItem")
-    if not s then return 0 end
-    local p = s:FindFirstChild("Data Ping")
-    if not p then return 0 end
-    return math.floor(p:GetValue())
-end
-local startTime = tick()
-local lastUpdateTime = startTime
-local frameCount = 0
-local previousText = ""
-RunService.RenderStepped:Connect(function()
-    frameCount += 1
-    local now = tick()
-    local dt = now - lastUpdateTime
-    if dt >= 1 then
-        local fps = math.round(frameCount / dt)
-        local elapsed = now - startTime
-        local h = math.floor(elapsed / 3600)
-        local m = math.floor((elapsed % 3600) / 60)
-        local s = math.floor(elapsed % 60)
-        local ping = GetPing()
-        local text = string.format(
-            "FPS: %d | Ping: %d ms\nClient Timer: %dh %dm %ds",
-            fps, ping, h, m, s
-        )
-        if text ~= previousText then
-            label.Text = text
-            previousText = text
-        end
-        lastUpdateTime = now
-        frameCount = 0
-    end
-end)
+-- Floating stat overlay (FPS / ping / client timer) removed on purpose. The
+-- operator reads it as clutter over the game; the floating button is the only
+-- chrome this hub keeps on screen. Stats service was only used by that box.
 if require then
     print("Supported require()")
 end
@@ -492,10 +406,18 @@ local DConfiguration = {
         },
         PurchaseAutomations = {
             Enabled = false,
-            Selected = "Cola",
+            -- Was the literal string "Cola": the dropdown never fires OnChanged for
+            -- its default, so this stale name survived every session and BuyItem
+            -- returned before it ever reached the remote. Empty means "use the
+            -- first catalog entry", which is what the dropdown shows.
+            Selected = "",
             Amount = 1,
+            Interval = 4,
             Connection = nil,
             LastBuy = 0,
+            Failures = 0,
+            Catalog = nil,
+            Remote = nil,
         },
     },
     Combat = {
@@ -1595,105 +1517,124 @@ function DFunctions.GetEmotesName()
     table.sort(names)
     return names
 end
-function DFunctions.GetMultipleShopItems()
-    local names = {}
+-- Shop catalog, built once. The payload had two identical copies of this pair and
+-- both walked the whole registry on every call, which is why nothing about the
+-- purchase feature could be trusted: a single shape mismatch in the registry and
+-- the dropdown fell back to a hard-coded name ("Cola") that no item can ever match.
+-- One catalog, tolerant of the three shapes a registry entry can arrive in, and a
+-- name->id map so buying never re-scans.
+DConfiguration.AutoFarm.PurchaseAutomations.Catalog = nil
+function DFunctions.BuildShopCatalog()
+    local cached = DConfiguration.AutoFarm.PurchaseAutomations.Catalog
+    if cached then return cached end
+    local names, ids = {}, {}
     local reg = DFunctions.GetItemRegistry()
-    if not reg or not reg.GetAll then return names end
-    local allIds = reg.GetAll()
-    for id, _ in pairs(allIds) do
-        local config = reg.GetConfig(id)
-        if config and config.PurchaseInfo then
-            local purchase = config.PurchaseInfo
-            if purchase.AppearsIn == "Shop" and purchase.OwnershipType == "Multiple" then
-                local name = config.AppearanceInfo and config.AppearanceInfo.Name or config.Name or "Unknown"
-                table.insert(names, name)
+    if reg then
+        local getAll = reg.GetAll or reg.GetAllItems or reg.GetItems
+        local all = type(getAll) == "function" and Safe(getAll) or nil
+        if not all and type(reg) == "table" then all = reg end
+        for id, entry in pairs(all or {}) do
+            -- Entry shapes seen in the wild: the config itself, {Config=...}, or
+            -- {Module=...}. Refuse to guess past these three.
+            local config = entry
+            if type(entry) == "table" then
+                config = entry.Config or entry.Configuration or entry
+                if type(config) ~= "table" and type(entry.Module) == "table" then config = entry.Module end
             end
-        end
-    end
-    table.sort(names)
-    return names
-end
-function DFunctions.BuyItem()
-    local selected = DConfiguration.AutoFarm.PurchaseAutomations.Selected
-    if not selected or selected == "" then return end
-    local reg = DFunctions.GetItemRegistry()
-    if not reg or not reg.GetAll then return end
-    local allIds = reg.GetAll()
-    local itemId = nil
-    for id, _ in pairs(allIds) do
-        local config = reg.GetConfig(id)
-        if config and config.PurchaseInfo then
-            local purchase = config.PurchaseInfo
-            if purchase.AppearsIn == "Shop" and purchase.OwnershipType == "Multiple" then
-                local name = config.AppearanceInfo and config.AppearanceInfo.Name or config.Name or "Unknown"
-                if name == selected then
-                    itemId = id
-                    break
+            if type(config) == "table" then
+                if not config.PurchaseInfo and reg.GetConfig then
+                    local ok, fetched = pcall(reg.GetConfig, id)
+                    if ok and type(fetched) == "table" then config = fetched end
+                end
+                local purchase = config.PurchaseInfo
+                -- Only items the shop actually sells. OwnershipType used to be
+                -- pinned to "Multiple" as well, which silently dropped every
+                -- single-purchase item and left the list empty.
+                if type(purchase) == "table" and (purchase.AppearsIn == "Shop" or purchase.Shop == true) then
+                    local name = (config.AppearanceInfo and config.AppearanceInfo.Name)
+                        or config.Name or config.Id or tostring(id)
+                    if type(name) == "string" and name ~= "" and not ids[name] then
+                        table.insert(names, name)
+                        ids[name] = id
+                    end
                 end
             end
         end
     end
-    if not itemId then return end
-    local amount = DConfiguration.AutoFarm.PurchaseAutomations.Amount or 1
-    local purchaseEvent = game:GetService("ReplicatedStorage"):FindFirstChild("Shared")
-        and ReplicatedStorage.Shared:FindFirstChild("UserData")
-        and ReplicatedStorage.Shared.UserData:FindFirstChild("Events")
-        and ReplicatedStorage.Shared.UserData.Events:FindFirstChild("Requests")
-        and ReplicatedStorage.Shared.UserData.Events.Requests:FindFirstChild("Purchase")
-    if not purchaseEvent then return end
-    pcall(function()
-        purchaseEvent:FireServer(itemId, amount)
-    end)
+    table.sort(names)
+    local catalog = { Names = names, Ids = ids }
+    DConfiguration.AutoFarm.PurchaseAutomations.Catalog = catalog
+    return catalog
 end
 function DFunctions.GetMultipleShopItems()
-    local names = {}
-    local reg = DFunctions.GetItemRegistry()
-    if not reg or not reg.GetAll then return names end
-    local allIds = reg.GetAll()
-    for id, _ in pairs(allIds) do
-        local config = reg.GetConfig(id)
-        if config and config.PurchaseInfo then
-            local purchase = config.PurchaseInfo
-            if purchase.AppearsIn == "Shop" and purchase.OwnershipType == "Multiple" then
-                local name = config.AppearanceInfo and config.AppearanceInfo.Name or config.Name or "Unknown"
-                table.insert(names, name)
-            end
+    return DFunctions.BuildShopCatalog().Names
+end
+-- The purchase remote moved between builds of the game, so resolve the first path
+-- that exists and remember it. Firing nothing is indistinguishable from buying and
+-- being refused, which is how a dead button looked alive.
+function DFunctions.GetPurchaseRemote()
+    local cached = DConfiguration.AutoFarm.PurchaseAutomations.Remote
+    if cached and cached.Parent then return cached end
+    local candidates = {
+        { "Shared", "UserData", "Events", "Requests", "Purchase" },
+        { "Shared", "UserData", "Events", "Purchase" },
+        { "Shared", "Events", "Purchase" },
+        { "Events", "Purchase" },
+        { "Remotes", "Purchase" },
+        { "Requests", "Purchase" },
+        { "Net", "RE/Purchase" },
+    }
+    for _, path in ipairs(candidates) do
+        local node = ReplicatedStorage
+        for _, step in ipairs(path) do
+            node = node and node:FindFirstChild(step)
+        end
+        if node and (node:IsA("RemoteEvent") or node:IsA("RemoteFunction")) then
+            DConfiguration.AutoFarm.PurchaseAutomations.Remote = node
+            return node
         end
     end
-    table.sort(names)
-    return names
+    -- Last resort: any remote literally named Purchase anywhere under the storage.
+    for _, d in ipairs(ReplicatedStorage:GetDescendants()) do
+        if d.Name == "Purchase" and (d:IsA("RemoteEvent") or d:IsA("RemoteFunction")) then
+            DConfiguration.AutoFarm.PurchaseAutomations.Remote = d
+            return d
+        end
+    end
+    return nil
 end
 function DFunctions.BuyItem()
-    local selected = DConfiguration.AutoFarm.PurchaseAutomations.Selected
-    if not selected or selected == "" then return end
-    local reg = DFunctions.GetItemRegistry()
-    if not reg or not reg.GetAll then return end
-    local allIds = reg.GetAll()
-    local itemId = nil
-    for id, _ in pairs(allIds) do
-        local config = reg.GetConfig(id)
-        if config and config.PurchaseInfo then
-            local purchase = config.PurchaseInfo
-            if purchase.AppearsIn == "Shop" and purchase.OwnershipType == "Multiple" then
-                local name = config.AppearanceInfo and config.AppearanceInfo.Name or config.Name or "Unknown"
-                if name == selected then
-                    itemId = id
-                    break
-                end
-            end
-        end
+    local config = DConfiguration.AutoFarm.PurchaseAutomations
+    local catalog = DFunctions.BuildShopCatalog()
+    local selected = config.Selected
+    if (not selected or selected == "") and #catalog.Names > 0 then
+        -- Toggling the switch without opening the dropdown used to buy nothing at
+        -- all, because the library never fires OnChanged for a default value.
+        selected = catalog.Names[1]
+        config.Selected = selected
     end
-    if not itemId then return end
-    local amount = DConfiguration.AutoFarm.PurchaseAutomations.Amount or 1
-    local purchaseEvent = game:GetService("ReplicatedStorage"):FindFirstChild("Shared")
-        and ReplicatedStorage.Shared:FindFirstChild("UserData")
-        and ReplicatedStorage.Shared.UserData:FindFirstChild("Events")
-        and ReplicatedStorage.Shared.UserData.Events:FindFirstChild("Requests")
-        and ReplicatedStorage.Shared.UserData.Events.Requests:FindFirstChild("Purchase")
-    if not purchaseEvent then return end
-    pcall(function()
-        purchaseEvent:FireServer(itemId, amount)
+    if not selected or selected == "" then
+        return false, "no shop item selected"
+    end
+    local itemId = catalog.Ids[selected]
+    if not itemId then
+        return false, "selected item is not in the shop catalog"
+    end
+    local remote = DFunctions.GetPurchaseRemote()
+    if not remote then
+        return false, "purchase remote not found"
+    end
+    local amount = tonumber(config.Amount) or 1
+    local ok, err = pcall(function()
+        if remote:IsA("RemoteFunction") then
+            remote:InvokeServer(itemId, amount)
+        else
+            remote:FireServer(itemId, amount)
+        end
     end)
+    if not ok then return false, tostring(err) end
+    config.LastBuy = tick()
+    return true, itemId
 end
 function DFunctions.GetCosmeticsName()
     local names = {}
@@ -2551,7 +2492,12 @@ end
 local EmoteNames = DFunctions.GetEmotesName()
 if #EmoteNames == 0 then EmoteNames = {"BoldMarch", "DefaultEmote"} end
 local ShopItemNames = DFunctions.GetMultipleShopItems()
-if #ShopItemNames == 0 then ShopItemNames = {"Cola"} end
+-- No fake fallback. A hard-coded "Cola" in the dropdown is worse than an empty
+-- list: the operator selects a name that no item can ever match, the buy call
+-- returns silently, and the feature looks broken with no way to tell why.
+if #ShopItemNames == 0 then
+    ShopItemNames = { "(shop registry not ready - reopen the menu)" }
+end
 local CosmeticNames = DFunctions.GetCosmeticsName()
 Tabs.Main:AddSection("Billboard ESP")
 local function clearBillboardESP(espName)
@@ -3199,16 +3145,34 @@ Toggle:OnChanged(function(State)
 end)
 Tabs.AutoFarm:AddSection("Purchase Automations")
 local Toggle = Tabs.AutoFarm:AddToggle("AutoBuy", {Title = "Auto Purchase Selected Item", Default = false })
+local function AutoBuyTick(force)
+    local config = DConfiguration.AutoFarm.PurchaseAutomations
+    if not config.Enabled and not force then return end
+    local interval = tonumber(config.Interval) or 4
+    if not force and tick() - (config.LastBuy or 0) < interval then return end
+    local ok, detail = DFunctions.BuyItem()
+    if ok then
+        config.Failures = 0
+        return
+    end
+    -- Say why once, not every tick. A silent failure is what made this button look
+    -- alive while it fired nothing for hours.
+    config.Failures = (config.Failures or 0) + 1
+    if config.Failures == 1 then
+        Alert("Auto buy: " .. tostring(detail))
+    end
+end
 Toggle:OnChanged(function(State)
     DConfiguration.AutoFarm.PurchaseAutomations.Enabled = State
     if State then
-        DConfiguration.AutoFarm.PurchaseAutomations.LastBuy = tick()
+        DConfiguration.AutoFarm.PurchaseAutomations.Failures = 0
+        -- Buy on the first press instead of waiting a full interval for nothing.
+        task.spawn(function() AutoBuyTick(true) end)
+        if DConfiguration.AutoFarm.PurchaseAutomations.Connection then
+            DConfiguration.AutoFarm.PurchaseAutomations.Connection:Disconnect()
+        end
         DConfiguration.AutoFarm.PurchaseAutomations.Connection = RunService.Heartbeat:Connect(function()
-            if not DConfiguration.AutoFarm.PurchaseAutomations.Enabled then return end
-            if tick() - (DConfiguration.AutoFarm.PurchaseAutomations.LastBuy or 0) >= 4 then
-                DFunctions.BuyItem()
-                DConfiguration.AutoFarm.PurchaseAutomations.LastBuy = tick()
-            end
+            AutoBuyTick(false)
         end)
     else
         if DConfiguration.AutoFarm.PurchaseAutomations.Connection then
@@ -3223,6 +3187,10 @@ local Dropdown = Tabs.AutoFarm:AddDropdown("SelectedItem", {
     Multi = false,
     Default = 1,
 })
+-- Seed the selection from the list. The library does not fire OnChanged for a
+-- default, so without this the first item is visible in the dropdown and the
+-- buy call still sees Selected == nil.
+DConfiguration.AutoFarm.PurchaseAutomations.Selected = DConfiguration.AutoFarm.PurchaseAutomations.Selected or ShopItemNames[1]
 Dropdown:OnChanged(function(Value)
     DConfiguration.AutoFarm.PurchaseAutomations.Selected = Value
 end)
@@ -3234,6 +3202,24 @@ Tabs.AutoFarm:AddInput("PurchaseAmount", {
     Finished = false,
     Callback = function(Value)
         DConfiguration.AutoFarm.PurchaseAutomations.Amount = tonumber(Value) or 1
+    end,
+})
+Tabs.AutoFarm:AddInput("PurchaseInterval", {
+    Title = "Purchase Interval (seconds)",
+    Default = "4",
+    Placeholder = "4",
+    Numeric = true,
+    Finished = false,
+    Callback = function(Value)
+        DConfiguration.AutoFarm.PurchaseAutomations.Interval = tonumber(Value) or 4
+    end,
+})
+Tabs.AutoFarm:AddButton({
+    Title = "Buy Now",
+    Description = "Fire one purchase immediately",
+    Callback = function()
+        local ok, detail = DFunctions.BuyItem()
+        Alert(ok and ("Bought item " .. tostring(detail)) or ("Buy failed: " .. tostring(detail)))
     end,
 })
 Tabs.AutoFarm:AddSection("VIP Automations")
@@ -4552,11 +4538,13 @@ Tabs.Settings:AddParagraph({
     Content = " "
 })
 Tabs.Settings:AddButton({
-    Title = "Remove FPS Counter",
-    Description = "",
+    Title = "Clear Settings Cache",
+    Description = "Wipes the saved config folder so the next launch starts clean",
     Callback = function()
-        if fpsCounter then
-            fpsCounter:Destroy()
+        if writefile and isfolder and isfolder("Reicht/Evade") then
+            for _, name in ipairs(listfiles("Reicht/Evade")) do
+                pcall(delfile, name)
+            end
         end
     end
 })

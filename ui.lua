@@ -7954,7 +7954,6 @@ end })
 interface:AddKeybind("MarioMenuKey", { Text = Lang.Strings.MenuKey, Default = State.MenuKey, Mode = "Always", ChangedCallback = function(name)
 State.MenuKey = name
 end })
-interface:AddToggle("MarioWatermark", { Text = Lang.Strings.Watermark, Description = Lang.Strings.WatermarkDesc, Default = Watermark.Frame ~= nil and Watermark.Frame.Visible, Callback = Watermark.SetVisible })
 interface:AddToggle("MarioParticles", { Text = Lang.Strings.Particles, Description = Lang.Strings.ParticlesDesc, Default = Particles.Enabled, Callback = Particles.SetEnabled })
 interface:AddToggle("MarioFloat", { Text = Lang.Strings.FloatButton, Description = Lang.Strings.FloatDesc, Default = Float.Button ~= nil and Float.Button.Visible, Callback = Float.SetVisible })
 local about = tab:AddLeftGroupbox(Lang.Strings.About, "star")
@@ -7989,8 +7988,7 @@ end
 local window = Window.New(options)
 self.Window = window
 Float.Build()
-Watermark.Build(options.WatermarkTitle or window.Title)
-Watermark.SetVisible(options.Watermark ~= false)
+Watermark.SetVisible(false)
 Configs.SetFolder(options.ConfigFolder or options.Folder or window.Title)
 local function Build()
 if Library.Unloaded then

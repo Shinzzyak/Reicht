@@ -430,9 +430,31 @@ end
 -- true, which silently disables anything filtering on a boolean (auto carry saw
 -- every candidate as ragdolled). CharacterService is deliberately unreachable so
 -- the payload falls back to the attribute-based path the harness can seed.
+-- Item registry: the shop dropdown reads this module. A permissive stub answers
+-- every call with another stub, so `pairs(reg.GetAll())` yields nothing and the
+-- auto-buy catalog is empty -- the feature then looks broken for a harness reason
+-- instead of a real one. Seed the two shapes the payload actually reads.
+local SHOP_REGISTRY = {
+    { id = 101, Name = "Cola", PurchaseInfo = { AppearsIn = "Shop", OwnershipType = "Multiple" } },
+    { id = 102, Name = "Medkit", PurchaseInfo = { AppearsIn = "Shop", OwnershipType = "Multiple" } },
+    { id = 103, Name = "Lockpick", PurchaseInfo = { AppearsIn = "Inventory", OwnershipType = "Single" } },
+}
+local ITEM_REGISTRY = {
+    GetAll = function()
+        local map = {}
+        for _, entry in ipairs(SHOP_REGISTRY) do map[entry.id] = entry end
+        return map
+    end,
+    GetConfig = function(id)
+        for _, entry in ipairs(SHOP_REGISTRY) do
+            if entry.id == id then return entry end
+        end
+    end,
+}
 require = function(mod)
     local name = type(mod) == "table" and mod._p and mod._p.Name
     if name == "CharacterService" then return nil end
+    if name == "Registry" then return ITEM_REGISTRY end
     -- Game config modules carry real numbers, and a permissive stand-in turns them
     -- into tables: `tonumber(reward.Minute)` reads nil and the feature looks dead
     -- while the code is fine. Shape the two modules whose fields are read as numbers.
@@ -538,6 +560,24 @@ players.GetUserIdFromNameAsync = function() return 1 end
 
 local rs = get("ReplicatedStorage")
 rs.Permissive = true
+-- Emote source. The payload resolves an emote two ways: a folder scan under
+-- ReplicatedStorage.Items.Emotes (ModuleScripts carrying an "ID" attribute) and the
+-- registry's GetByCategory. With neither seeded, the emote proof used to pass only
+-- because the permissive registry stub answered TryGetByName with a fabricated
+-- module whose GetAttribute("ID") was truthy -- a fire on invented data. Seed the
+-- folder so the fire is real.
+local itemsFolder = newInstance("Folder", "Items")
+itemsFolder._p.Parent = rs
+table.insert(rs._p.Children, itemsFolder)
+local emotesFolder = newInstance("Folder", "Emotes")
+emotesFolder._p.Parent = itemsFolder
+table.insert(itemsFolder._p.Children, emotesFolder)
+for _, emote in ipairs({ { "BoldMarch", 7 }, { "DefaultEmote", 8 } }) do
+    local mod = newInstance("ModuleScript", emote[1])
+    mod:SetAttribute("ID", emote[2])
+    mod._p.Parent = emotesFolder
+    table.insert(emotesFolder._p.Children, mod)
+end
 -- DOORS derives its whole menu from ReplicatedStorage.GameData: the floor name
 -- picks widget labels ("Auto " .. HidingPlaceName[floor.Value]), so an empty
 -- GameData aborts the build instead of exercising it.
@@ -2028,6 +2068,11 @@ FEATURE_PROOFS = {
     # The old loop fired every 0.5s and the body came back down on its own.
     "auto carry fires Carry once per body": ("fire", "Interact|Carry", 1, 1),
     "emote fires CharacterTask": ("fire", "CharacterTask|Emote", 1),
+    # Auto buy: the dropdown used to default to a hard-coded "Cola" that no registry
+    # entry can match, so BuyItem returned before touching the remote. The harness
+    # pumps the heartbeat, so this fires once per simulated interval -- the ceiling
+    # catches a per-frame runaway, not the exact count.
+    "auto buy fires Purchase": ("fire", "Purchase|number", 1, 20),
     "vignette off fires SetSetting": ("fire", "SetSetting|NextbotVignette", 1),
     "speed writes Humanoid.WalkSpeed": ("write", "Humanoid|WalkSpeed", 1),
     "jump power writes Humanoid.JumpPower": ("write", "Humanoid|JumpPower", 1),
