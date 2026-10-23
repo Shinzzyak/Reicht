@@ -125,6 +125,23 @@ local EntityTable = {
 ["BackdoorRush"] = "Blitz",
 ["JeffTheKiller"] = "Jeff The Killer"
 },
+["Localized"] = {
+["EN"] = {},
+["ID"] = {
+["RushMoving"] = "Rush",
+["AmbushMoving"] = "Ambush",
+["Eyes"] = "Mata",
+["JeffTheKiller"] = "Jeff Sang Pembunuh",
+["A60"] = "A-60",
+["A120"] = "A-120",
+["Snare"] = "Jerat",
+["GrumbleRig"] = "Grumble",
+["GiggleCeiling"] = "Giggle",
+["FigureRig"] = "Figure",
+["BackdoorRush"] = "Blitz",
+["BackdoorLookman"] = "Lookman"
+}
+},
 ["NotifyMessage"] = {
 ["GloombatSwarm"] = "Gloombats in next room!"
 },
@@ -516,6 +533,7 @@ billboard.StudsOffset = Vector3.new(0, 2, 0) + (spec.StudsOffset or Vector3.new(
 billboard.AlwaysOnTop = true
 billboard.Adornee = model
 local label = Instance.new("TextLabel")
+label.Name = "ReichtESPText"
 label.BackgroundTransparency = 1
 label.Size = UDim2.fromScale(1, 1)
 label.Font = Enum.Font.Code
@@ -664,6 +682,49 @@ local display = type(key) == "number" and entry or key
 local spawnName = ENTITY_DISPLAY[display]
 if spawnName then EntityESPFilter.Selected[spawnName] = true end
 end
+end
+local EntityLanguage = { Current = "EN" }
+function EntityLanguage.Set(language)
+EntityLanguage.Current = EntityTable.Localized[language] and language or "EN"
+end
+function EntityLanguage.Name(entityName)
+local table_ = EntityTable.Localized[EntityLanguage.Current]
+return table_ and table_[entityName] or nil
+end
+function EntityLanguage.Relabel()
+for _, list in pairs(Script.ESPTable) do
+for _, esp in pairs(list) do
+local entity = esp.Spec and esp.Spec.Model
+local label = esp.Label
+if entity and label then
+local text = EntityLanguage.Name(entity.Name) or esp.Spec.Name
+label.Text = tostring(text or "")
+end
+end
+end
+end
+local ItemFilter = { Selected = {} }
+function ItemFilter.Set(text)
+ItemFilter.Selected = {}
+for token in tostring(text or ""):gmatch("[^,;]+") do
+local clean = token:match("^%s*(.-)%s*$"):lower()
+if clean ~= "" then ItemFilter.Selected[clean] = true end
+end
+end
+function ItemFilter.Allows(tool)
+if not tool then return false end
+local allowed
+if next(ItemFilter.Selected) == nil then
+allowed = true
+else
+allowed = false
+local id = tool:GetAttribute("ID")
+for _, candidate in ipairs({ id, tool.Name }) do
+if type(candidate) == "string" and ItemFilter.Selected[candidate:lower()] then allowed = true end
+end
+end
+Safe(function() tool:SetAttribute("ReichtInfItemTarget", allowed and "on" or "off") end)
+return allowed
 end
 local ThemeManager = {}
 function ThemeManager:SetLibrary() end
@@ -1122,7 +1183,7 @@ if not EntityESPFilter.Allows(entity) then return end
 Script.Functions.ESP({
 Type = "Entity",
 Object = entity,
-Text = Script.Functions.GetShortName(entity.Name),
+Text = Script.Functions.GetEntityName(entity.Name),
 Color = Options.EntityEspColor.Value,
 IsEntity = entity.Name ~= "JeffTheKiller",
 })
@@ -1133,7 +1194,7 @@ if entity.Name == "Snare" and not entity:FindFirstChild("Hitbox") then return en
 Script.Functions.ESP({
 Type = "SideEntity",
 Object = entity,
-Text = Script.Functions.GetShortName(entity.Name),
+Text = Script.Functions.GetEntityName(entity.Name),
 TextParent = entity.PrimaryPart,
 Color = Options.EntityEspColor.Value,
 })
@@ -1216,6 +1277,9 @@ end)
 end
 end
 do
+function Script.Functions.GetEntityName(entityName: string)
+return EntityLanguage.Name(entityName) or Script.Functions.GetShortName(entityName)
+end
 function Script.Functions.GetShortName(entityName: string)
 if EntityTable.ShortNames[entityName] then
 return EntityTable.ShortNames[entityName]
@@ -2562,6 +2626,12 @@ Text = "Infinite Items",
 Default = false,
 Visible = not isFools
 })
+BypassGroupBox:AddInput("InfItemsFilter", {
+Text = "Infinite Items Filter",
+Placeholder = "candle, lockpick (empty = all)",
+Default = "",
+Visible = not isFools
+})
 BypassGroupBox:AddToggle("InfCrucifix", {
 Text = "Infinite Crucifix",
 Default = false,
@@ -2663,6 +2733,11 @@ Default = true
 ESPSettingsTab:AddToggle("ESPShowEntityText", {
 Text = "Show Entity Text",
 Default = true
+})
+ESPSettingsTab:AddDropdown("EntityLanguage", {
+Text = "Entity Names",
+Values = { "EN", "ID" },
+Default = "EN"
 })
 ESPSettingsTab:AddSlider("ESPFillTransparency", {
 Text = "Fill Transparency",
@@ -4404,6 +4479,13 @@ end)
 Toggles.ESPShowEntityText:OnChanged(function(value)
 ESPLibrary.Text.Set(value)
 end)
+Options.EntityLanguage:OnChanged(function(value)
+EntityLanguage.Set(value)
+EntityLanguage.Relabel()
+end)
+Options.InfItemsFilter:OnChanged(function(value)
+ItemFilter.Set(value)
+end)
 Options.ESPTracerThickness:OnChanged(function(value)
 ESPLibrary.Thickness.Set(value)
 end)
@@ -4608,7 +4690,8 @@ local isRoomsDoorLock = prompt.Parent.Parent.Parent.Name == "RoomsDoor_Entrance"
 if isDoorLock or isSkeletonDoor or isChestBox or isRoomsDoorLock then
 local equippedTool = character:FindFirstChildOfClass("Tool")
 local toolId = equippedTool and equippedTool:GetAttribute("ID")
-if Toggles.InfItems.Value and equippedTool and equippedTool:GetAttribute("UniversalKey") then
+if Toggles.InfItems.Value and equippedTool and equippedTool:GetAttribute("UniversalKey")
+and ItemFilter.Allows(equippedTool) then
 task.wait(isChestBox and 0.05 or 0)
 remotesFolder.DropItem:FireServer(equippedTool)
 task.spawn(function()

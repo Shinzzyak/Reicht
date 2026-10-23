@@ -162,7 +162,9 @@ OBJ.__newindex = function(self, k, v)
     -- They carry the Reicht prefix, so name-based admission keeps the proof that a
     -- visual switch actually reached the object instead of only running its handler.
     if tostring(p.Name):find("^Reicht") then
-        bump(TRACE.wrote, tostring(p.Name) .. "|" .. k)
+        -- Text writes carry their value: "the label was rewritten" is a weaker claim
+        -- than "the label now says the localised name".
+        bump(TRACE.wrote, tostring(p.Name) .. "|" .. k .. (type(v) == "string" and ("=" .. v) or ""))
     end
     if not cls:find("^UI") and not cls:find("Frame") and not cls:find("Label")
         and not cls:find("Button") and not cls:find("Image") and not cls:find("Sprite")
@@ -449,6 +451,9 @@ addRemote("EBF", bricksFolder)
 addRemote("Jumpscare", bricksFolder)
 addRemote("ClutchHeartbeat", bricksFolder)
 addRemote("UseEventModule", bricksFolder)
+local remotesFolder = addChild(rs, newInstance("Folder", "RemotesFolder"))
+remotesFolder.Permissive = true
+addRemote("DropItem", remotesFolder)
 
 local entityInfoFolder = addChild(rs, newInstance("Folder", "EntityInfo"))
 entityInfoFolder.Permissive = true
@@ -575,6 +580,14 @@ addChild(fakeDoor, newInstance("Part", "Hidden"))
 local lockPart = addChild(fakeDoor, newInstance("Model", "LockPart"))
 lockPart.Permissive = true
 addChild(lockPart, newInstance("ProximityPrompt", "UnlockPrompt"))
+-- Infinite Items path: a door lock the payload recognises, and the remote it drops
+-- the key tool through. Without both the filter guard is never consulted.
+local lockHolder = addChild(roomZero, newInstance("Model", "LockHolder"))
+lockHolder.Permissive = true
+lockHolder:SetAttribute("Opened", false)
+local lockModel = addChild(lockHolder, newInstance("Model", "Lock"))
+lockModel.Permissive = true
+addChild(lockModel, newInstance("ProximityPrompt", "UnlockPrompt"))
 local snareModel = addChild(roomZero, newInstance("Model", "Snare"))
 snareModel.Permissive = true
 addChild(snareModel, newInstance("Part", "Hitbox"))
@@ -1167,6 +1180,13 @@ char._p.Parent = ws
 -- Game code reads character.Head / character.Humanoid by name.
 char.Permissive = true
 lp.Character = char
+-- The key tool the Infinite Items guard inspects: UniversalKey marks it, ID is what
+-- the user's filter list is matched against.
+local keyTool = newInstance("Tool", "Candle")
+keyTool.Permissive = true
+keyTool:SetAttribute("UniversalKey", true)
+keyTool:SetAttribute("ID", "candle")
+table.insert(char._p.Children, keyTool); keyTool._p.Parent = char
 -- Game code resolves the character with CharacterAdded:Wait() when .Character is
 -- still nil; replay the spawn so that call gets the rig instead of nothing.
 lp.CharacterAdded.Fire(lp.CharacterAdded, char)
@@ -1414,6 +1434,34 @@ if LIB and type(LIB.Options) == "table" then
     if type(filterOpt) == "table" and type(filterOpt.SetValue) == "function"
         and type(filterOpt.Values) == "table" and #filterOpt.Values > 0 then
         try("entity filter narrowed", function() filterOpt:SetValue({ filterOpt.Values[1] }) end)
+    end
+
+    -- Item filter, both branches on the same prompt and the same tool: the list must
+    -- drop the key when it is not named, and act when it is.
+    local infOpt = LIB.Options.InfItemsFilter
+    local infToggle = LIB.Toggles.InfItems
+    local promptService = get("ProximityPromptService")
+    -- __index on a Permissive container fabricates a child for unknown names, so the
+    -- real prompt has to come from FindFirstChild or the handler gets a dummy.
+    local lockPrompt = lockModel:FindFirstChild("UnlockPrompt")
+    if type(infOpt) == "table" and type(infOpt.SetValue) == "function" and lockPrompt then
+        if infToggle and type(infToggle.SetValue) == "function" then
+            try("inf items on", function() infToggle:SetValue(true) end)
+        end
+        try("inf filter blocks unlisted tool", function()
+            infOpt:SetValue("lockpick")
+            promptService.PromptTriggered:Fire(lockPrompt, lp)
+        end)
+        try("inf filter allows listed tool", function()
+            infOpt:SetValue("candle")
+            promptService.PromptTriggered:Fire(lockPrompt, lp)
+        end)
+    end
+
+    -- Language switch has to reach labels that already exist, not only new spawns.
+    local langOpt = LIB.Options.EntityLanguage
+    if type(langOpt) == "table" and type(langOpt.SetValue) == "function" then
+        try("entity language switch", function() langOpt:SetValue("ID") end)
     end
 
     if type(LIB.Buttons) == "table" then
@@ -1704,6 +1752,10 @@ DOORS_PROOFS = {
     # branches of the guard are exercised in one run.
     "entity filter admits a listed entity": ("write", "Eyes|SetAttribute|ReichtEntityESPFilter=on", 1),
     "entity filter drops an unlisted entity": ("write", "Eyes|SetAttribute|ReichtEntityESPFilter=off", 1),
+    "inf filter blocks an unlisted tool": ("write", "Candle|SetAttribute|ReichtInfItemTarget=off", 1),
+    "inf filter admits a listed tool": ("write", "Candle|SetAttribute|ReichtInfItemTarget=on", 1),
+    "inf filter drops the key exactly once": ("fire", "DropItem|table", 1),
+    "entity language relabels the name plate": ("write", "ReichtESPText|Text=Mata", 1),
     "tracer thickness reaches Drawing": ("write", "Line|Thickness", 2),
     # The name plate is a BillboardGui, so this only proves anything because ESP
     # objects are admitted to the trace by name. Off then on again = two writes.

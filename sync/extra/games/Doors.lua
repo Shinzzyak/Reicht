@@ -151,6 +151,26 @@ local EntityTable = {
         ["BackdoorRush"] = "Blitz",
         ["JeffTheKiller"] = "Jeff The Killer"
     },
+    -- Localised display names. The decrypted hubs ship a language switch
+    -- (CurrentLanguage + GetLocalizedEntityList); the list itself is ours, because the
+    -- hub's list is inside its VM and only the setting names are readable.
+    ["Localized"] = {
+        ["EN"] = {},
+        ["ID"] = {
+            ["RushMoving"] = "Rush",
+            ["AmbushMoving"] = "Ambush",
+            ["Eyes"] = "Mata",
+            ["JeffTheKiller"] = "Jeff Sang Pembunuh",
+            ["A60"] = "A-60",
+            ["A120"] = "A-120",
+            ["Snare"] = "Jerat",
+            ["GrumbleRig"] = "Grumble",
+            ["GiggleCeiling"] = "Giggle",
+            ["FigureRig"] = "Figure",
+            ["BackdoorRush"] = "Blitz",
+            ["BackdoorLookman"] = "Lookman"
+        }
+    },
     ["NotifyMessage"] = {
         ["GloombatSwarm"] = "Gloombats in next room!"
     },
@@ -603,6 +623,7 @@ do
         billboard.AlwaysOnTop = true
         billboard.Adornee = model
         local label = Instance.new("TextLabel")
+        label.Name = "ReichtESPText"
         label.BackgroundTransparency = 1
         label.Size = UDim2.fromScale(1, 1)
         label.Font = Enum.Font.Code
@@ -765,6 +786,65 @@ function EntityESPFilter.Set(selection)
         local spawnName = ENTITY_DISPLAY[display]
         if spawnName then EntityESPFilter.Selected[spawnName] = true end
     end
+end
+
+-- Language for the names ESP writes on screen. Kept separate from the entity filter:
+-- the filter decides *what* is shown, this decides what it is called.
+local EntityLanguage = { Current = "EN" }
+
+function EntityLanguage.Set(language)
+    EntityLanguage.Current = EntityTable.Localized[language] and language or "EN"
+end
+
+function EntityLanguage.Name(entityName)
+    local table_ = EntityTable.Localized[EntityLanguage.Current]
+    return table_ and table_[entityName] or nil
+end
+
+-- Re-label what is already on screen. Without this the switch only affects entities
+-- that spawn afterwards, which reads as "the toggle does nothing" mid-round.
+function EntityLanguage.Relabel()
+    for _, list in pairs(Script.ESPTable) do
+        for _, esp in pairs(list) do
+            local entity = esp.Spec and esp.Spec.Model
+            local label = esp.Label
+            if entity and label then
+                local text = EntityLanguage.Name(entity.Name) or esp.Spec.Name
+                label.Text = tostring(text or "")
+            end
+        end
+    end
+end
+
+-- Infinite Items filter. The decrypted hub gates its infinite-item action behind a
+-- chosen item list (SelectedItems / InfiniteItemsSelected / IsInfItemTarget); the
+-- library has no multi-select over runtime item ids, so the list arrives as text.
+local ItemFilter = { Selected = {} }
+
+function ItemFilter.Set(text)
+    ItemFilter.Selected = {}
+    for token in tostring(text or ""):gmatch("[^,;]+") do
+        local clean = token:match("^%s*(.-)%s*$"):lower()
+        if clean ~= "" then ItemFilter.Selected[clean] = true end
+    end
+end
+
+function ItemFilter.Allows(tool)
+    if not tool then return false end
+    local allowed
+    if next(ItemFilter.Selected) == nil then
+        allowed = true
+    else
+        allowed = false
+        local id = tool:GetAttribute("ID")
+        for _, candidate in ipairs({ id, tool.Name }) do
+            if type(candidate) == "string" and ItemFilter.Selected[candidate:lower()] then allowed = true end
+        end
+    end
+    -- Same contract as the entity filter: the decision is published on the object so
+    -- the rest of the hub (and the run's evidence) can see which branch was taken.
+    Safe(function() tool:SetAttribute("ReichtInfItemTarget", allowed and "on" or "off") end)
+    return allowed
 end
 
 -- The body's epilog drives these two; the hub's own settings tab already covers
@@ -1340,7 +1420,7 @@ do
         Script.Functions.ESP({
             Type = "Entity",
             Object = entity,
-            Text = Script.Functions.GetShortName(entity.Name),
+            Text = Script.Functions.GetEntityName(entity.Name),
             Color = Options.EntityEspColor.Value,
             IsEntity = entity.Name ~= "JeffTheKiller",
         })
@@ -1353,7 +1433,7 @@ do
         Script.Functions.ESP({
             Type = "SideEntity",
             Object = entity,
-            Text = Script.Functions.GetShortName(entity.Name),
+            Text = Script.Functions.GetEntityName(entity.Name),
             TextParent = entity.PrimaryPart,
             Color = Options.EntityEspColor.Value,
         })
@@ -1451,6 +1531,12 @@ end
 
 --// Assets Functions \\--
 do
+    -- Language-aware name for on-screen labels; falls back to the short name so the
+    -- English build and every non-entity string behave exactly as before.
+    function Script.Functions.GetEntityName(entityName: string)
+        return EntityLanguage.Name(entityName) or Script.Functions.GetShortName(entityName)
+    end
+
     function Script.Functions.GetShortName(entityName: string)
         if EntityTable.ShortNames[entityName] then
             return EntityTable.ShortNames[entityName]
@@ -3120,6 +3206,13 @@ local BypassGroupBox = Tabs.Exploits:AddRightGroupbox("Bypass") do
         Visible = not isFools
     })
 
+    BypassGroupBox:AddInput("InfItemsFilter", {
+        Text = "Infinite Items Filter",
+        Placeholder = "candle, lockpick (empty = all)",
+        Default = "",
+        Visible = not isFools
+    })
+
     BypassGroupBox:AddToggle("InfCrucifix", {
         Text = "Infinite Crucifix",
         Default = false,
@@ -3244,6 +3337,12 @@ local ESPTabBox = Tabs.Visuals:AddLeftTabbox() do
         ESPSettingsTab:AddToggle("ESPShowEntityText", {
             Text = "Show Entity Text",
             Default = true
+        })
+
+        ESPSettingsTab:AddDropdown("EntityLanguage", {
+            Text = "Entity Names",
+            Values = { "EN", "ID" },
+            Default = "EN"
         })
     
         ESPSettingsTab:AddSlider("ESPFillTransparency", {
@@ -5370,6 +5469,15 @@ Toggles.ESPShowEntityText:OnChanged(function(value)
     ESPLibrary.Text.Set(value)
 end)
 
+Options.EntityLanguage:OnChanged(function(value)
+    EntityLanguage.Set(value)
+    EntityLanguage.Relabel()
+end)
+
+Options.InfItemsFilter:OnChanged(function(value)
+    ItemFilter.Set(value)
+end)
+
 Options.ESPTracerThickness:OnChanged(function(value)
     ESPLibrary.Thickness.Set(value)
 end)
@@ -5623,7 +5731,8 @@ Library:GiveSignal(ProximityPromptService.PromptTriggered:Connect(function(promp
         local equippedTool = character:FindFirstChildOfClass("Tool")
         local toolId = equippedTool and equippedTool:GetAttribute("ID")
 
-        if Toggles.InfItems.Value and equippedTool and equippedTool:GetAttribute("UniversalKey") then
+        if Toggles.InfItems.Value and equippedTool and equippedTool:GetAttribute("UniversalKey")
+            and ItemFilter.Allows(equippedTool) then
             task.wait(isChestBox and 0.05 or 0)
             remotesFolder.DropItem:FireServer(equippedTool)
 
