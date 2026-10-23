@@ -207,7 +207,19 @@ local function childOf(self, name)
     return nil
 end
 
-OBJ.m_FindFirstChild = function(self, name) return childOf(self, name) end
+-- Real Roblox FindFirstChild takes a recursive flag as its second argument.
+-- Ignoring it makes every `ReplicatedStorage:FindFirstChild(name, true)` return nil
+-- even when the object sits one folder down, so those features bail out silently --
+-- the same class of fake-green as a missing PivotTo.
+OBJ.m_FindFirstChild = function(self, name, recursive)
+    local direct = childOf(self, name)
+    if direct or not recursive then return direct end
+    for _, child in ipairs(rawget(self, "_p").Children or {}) do
+        local found = OBJ.m_FindFirstChild(child, name, true)
+        if found then return found end
+    end
+    return nil
+end
 OBJ.m_WaitForChild = function(self, name)
     local c = childOf(self, name)
     if c then return c end
@@ -251,7 +263,26 @@ OBJ.m_GetDescendants = function(self)
     walk(self)
     return out
 end
-OBJ.m_IsA = function(self, class) return self._p.ClassName == class end
+-- Roblox classes inherit: `remote:IsA("BaseRemoteEvent")` is true for a RemoteEvent.
+-- A flat equality check says no, and scripts that name the superclass (MM2 asks for
+-- BaseRemoteEvent) reject their own remotes and go inert while errors stay at 0.
+local CLASS_PARENTS = {
+    RemoteEvent = { "BaseRemoteEvent" },
+    UnreliableRemoteEvent = { "BaseRemoteEvent" },
+    RemoteFunction = { "BaseRemoteEvent" },
+    TextLabel = { "GuiObject", "GuiBase2d", "Instance" },
+    Frame = { "GuiObject", "GuiBase2d", "Instance" },
+    Part = { "BasePart" },
+    MeshPart = { "BasePart" },
+}
+OBJ.m_IsA = function(self, class)
+    local own = self._p.ClassName
+    if own == class then return true end
+    for _, parent in ipairs(CLASS_PARENTS[own] or {}) do
+        if parent == class then return true end
+    end
+    return false
+end
 OBJ.m_Destroy = function(self) self._p.Destroyed = true end
 OBJ.m_Clone = function(self) return newInstance(self._p.ClassName, self._p.Name) end
 OBJ.m_GetAttribute = function(self, k) return (self._p.Attrs or {})[k] end
@@ -495,6 +526,24 @@ for _, name in ipairs({
     "SearchPumpkin", "ShopStock",
 }) do
     addRemote(name, petGame)
+end
+
+-- Murder Mystery 2 resolves its five remotes through Remotes.Gameplay / Remotes.Extras
+-- and asks for the BaseRemoteEvent superclass, so both the tree and IsA have to be real.
+local petExtras = addChild(petRemotes, newInstance("Folder", "Extras"))
+petExtras.Permissive = true
+local mmGameplay = addChild(petRemotes, newInstance("Folder", "Gameplay"))
+mmGameplay.Permissive = true
+for _, name in ipairs({ "CoinCollected", "CoinsStarted", "RoundStart" }) do
+    addRemote(name, mmGameplay)
+end
+do
+    local pd = newInstance("RemoteFunction", "GetCurrentPlayerData")
+    addChild(mmGameplay, pd)
+    pd.Permissive = true
+    local rc = newInstance("RemoteFunction", "RedeemCode")
+    addChild(petExtras, rc)
+    rc.Permissive = true
 end
 
 local entityInfoFolder = addChild(rs, newInstance("Folder", "EntityInfo"))
@@ -761,6 +810,23 @@ local function jsonEncode(value)
     return "null"
 end
 local HTTPSERVICE = {}
+-- Roblox has this; the mock did not, and MM2 names its ESP folder with it. The
+-- missing method raised inside a pcall, the whole ESP init aborted, and the game still
+-- reported errors: 0 -- the warn line was the only trace.
+function HTTPSERVICE:GenerateGUID(wrapInBraces)
+    local hex = "0123456789abcdef"
+    local out = {}
+    for i = 1, 32 do
+        local idx = (i * 7 + 3) % 16 + 1
+        out[i] = hex:sub(idx, idx)
+    end
+    local guid = table.concat(out)
+    guid = guid:sub(1, 8) .. "-" .. guid:sub(9, 12) .. "-" .. guid:sub(13, 16) .. "-" ..
+        guid:sub(17, 20) .. "-" .. guid:sub(21, 32)
+    if wrapInBraces ~= false then return "{" .. guid .. "}" end
+    return guid
+end
+
 function HTTPSERVICE:JSONEncode(value)
     local text = jsonEncode(value)
     JSON_MEMORY[text] = value
@@ -1461,7 +1527,14 @@ end
 local function valueFor(kind, spec)
     if kind == "Toggle" then return true end
     if kind == "Slider" then return spec.Default or spec.Min or 50 end
-    if kind == "Input" then return spec.Default or "1" end
+    -- An empty Default means the widget starts blank, not that it is never typed into.
+    -- Returning "" leaves every callback that guards `if text == "" then return end`
+    -- unreachable, so the button behind it can never be proven.
+    if kind == "Input" then
+        local d = spec.Default
+        if d == nil or d == "" then return "1" end
+        return d
+    end
     if kind == "Dropdown" then return (spec.Values and spec.Values[1]) or "1" end
     if kind == "Keybind" then return true end
     if kind == "ColorPicker" then return { R = 1, G = 1, B = 1 } end
@@ -1933,6 +2006,44 @@ PET_PROOFS = {
 }
 
 
+# Four games whose features act on the game's own objects rather than on a remote.
+# A WROTE/MADE row is still a real assertion: it says the feature reached the object
+# it names. Where a remote does fire, the row carries the argument shape too.
+MM2_PROOFS = {
+    "fly drives a BodyVelocity": ("made", "BodyVelocity", 1),
+    "kill platform-stands the target humanoid": ("write", "Humanoid|PlatformStand", 1),
+    "jump power reaches the humanoid": ("write", "Humanoid|JumpPower", 1),
+}
+DICE_PROOFS = {
+    "fly drives a BodyVelocity": ("made", "BodyVelocity", 1),
+}
+DE_PROOFS = {
+    "vehicle despawn reaches the server": ("fire", "VehicleEvent|Despawn", 1),
+}
+# These four have no remote traffic the harness can reach -- their call sites hang off
+# server-owned geometry (plots, ore blocks, map areas) -- but their local features do
+# land on real objects. A row here asserts the write, not the intent.
+BLOX_PROOFS = {
+    "esp draws a tracer circle": ("write", "Circle|Radius", 1),
+    "fps boost writes the lighting": ("write", "Lighting|ClockTime", 1),
+}
+SNIPER_PROOFS = {
+    "esp draws a tracer circle": ("write", "Circle|Radius", 1),
+}
+TNT_PROOFS = {
+    "walk speed reaches the humanoid": ("write", "Humanoid|WalkSpeed", 1),
+}
+SEA_PROOFS = {
+    "noclip clears the head collision": ("write", "Head|CanCollide", 1),
+    "fps boost writes the lighting": ("write", "Lighting|ClockTime", 1),
+}
+
+EGG_PROOFS = {
+    "offline reward claim reaches the server": ("fire", "OfflineRewardRemote|Claim", 1),
+    "index claim-all reaches the server": ("fire", "IndexRemote|ClaimAll", 1),
+}
+
+
 def check_proofs(out: str, table: dict | None = None) -> tuple[int, int]:
     """Report per-feature evidence. Returns (passed, failed)."""
     table = FEATURE_PROOFS if table is None else table
@@ -1954,7 +2065,16 @@ def check_proofs(out: str, table: dict | None = None) -> tuple[int, int]:
                     seen[kind][parts[0]] = int(parts[1])
     passed = failed = 0
     for label, (kind, key, need) in table.items():
-        got = seen[kind].get(key, 0)
+        # A typo in the trace-kind name used to raise KeyError and kill the whole
+        # proof run after the smoke itself had passed -- the game looked proven
+        # because no FAIL line was printed. Report it as a failing row instead.
+        bucket = seen.get(kind)
+        if bucket is None:
+            passed += 0
+            failed += 1
+            print(f"PROOF|FAIL|{label}|unknown trace kind {kind!r}")
+            continue
+        got = bucket.get(key, 0)
         ok = got >= need
         passed += ok
         failed += not ok
@@ -2021,7 +2141,15 @@ def main() -> int:
               "Stone Skipping": STONE_PROOFS,
               "Build the Pyramid": PYRAMID_PROOFS,
               "AirDrop Arena": AIRDROP_PROOFS,
-              "Ride A Pet": PET_PROOFS}.get(target.stem)
+              "Ride A Pet": PET_PROOFS,
+              "Murder Mystery 2": MM2_PROOFS,
+              "Anime Dice": DICE_PROOFS,
+              "Driving Empire": DE_PROOFS,
+              "Break and Steal an Egg": EGG_PROOFS,
+              "BloxStrike": BLOX_PROOFS,
+              "Sniper Arena": SNIPER_PROOFS,
+              "TNT Mining": TNT_PROOFS,
+              "Open Sea For Animals": SEA_PROOFS}.get(target.stem)
     if proofs and "trace fire total" in out:
         proofs_passed, proofs_failed = check_proofs(out, proofs)
     has_options = "options: " in out and "driven: 0" not in out
