@@ -239,7 +239,17 @@ OBJ.m_IsFocused = function() return false end
 OBJ.m_CaptureFocus = function() end
 OBJ.m_ReleaseFocus = function() end
 OBJ.m_ClearAllChildren = function(self) self._p.Children = {} end
-OBJ.m_IsDescendantOf = function() return true end
+-- Walking the parent chain, not a blanket true. A blanket true made every weld in
+-- the character look like a weld to somebody else's body, so "am I carrying this
+-- player" answered yes for our own joints and the carry loop could never retry.
+OBJ.m_IsDescendantOf = function(self, ancestor)
+    local node = self._p and self._p.Parent
+    while node do
+        if node == ancestor then return true end
+        node = node._p and node._p.Parent
+    end
+    return false
+end
 OBJ.m_GetAttributeChangedSignal = function() return newSignal() end
 OBJ.m_TweenPosition = function() end
 OBJ.m_TweenSize = function() end
@@ -1574,6 +1584,19 @@ teammate.UserId = 2
 teammate.Character = downedModel
 if downedModel then table.insert(downedModel._p.Children, teammate) end
 players.GetPlayers = function() return { lp, teammate } end
+-- Carrying a body in Evade welds it to you; that is the only honest way to tell a
+-- successful pick-up from a server that silently ignored the request. The harness
+-- states the weld so "already carrying" is a fact the script can check: auto carry
+-- must fire "Carry" once for this body, never again, because the action is a toggle
+-- and a second fire drops it.
+if downedModel and downedModel.PrimaryPart and hrp then
+    local carryWeld = newInstance("WeldConstraint", "CarryWeld")
+    carryWeld._p.ClassName = "WeldConstraint"
+    carryWeld.Part0 = hrp
+    carryWeld.Part1 = downedModel.PrimaryPart
+    table.insert(hrp._p.Children, carryWeld)
+    carryWeld._p.Parent = hrp
+end
 
 -- Vote popup: the vote features refuse to fire while the popup is hidden.
 local pg = newInstance("Folder", "PlayerGui")
@@ -1979,7 +2002,9 @@ def lua_long(text: str) -> str:
 # A feature that merely runs without error does not satisfy any of these.
 FEATURE_PROOFS = {
     "token farm fires Revive": ("fire", "Interact|Revive", 1),
-    "auto carry fires Carry": ("fire", "Interact|Carry", 1),
+    # Exactly one: "Carry" is a toggle, so a second fire for the same body drops it.
+    # The old loop fired every 0.5s and the body came back down on its own.
+    "auto carry fires Carry once per body": ("fire", "Interact|Carry", 1, 1),
     "emote fires CharacterTask": ("fire", "CharacterTask|Emote", 1),
     "vignette off fires SetSetting": ("fire", "SetSetting|NextbotVignette", 1),
     "speed writes Humanoid.WalkSpeed": ("write", "Humanoid|WalkSpeed", 1),
@@ -2154,7 +2179,12 @@ def check_proofs(out: str, table: dict | None = None) -> tuple[int, int]:
                 if len(parts) == 2 and parts[1].isdigit():
                     seen[kind][parts[0]] = int(parts[1])
     passed = failed = 0
-    for label, (kind, key, need) in table.items():
+    for label, spec in table.items():
+        kind, key, need = spec[0], spec[1], spec[2]
+        # A fourth element caps the count. Some bugs are too many fires rather than
+        # too few: a toggle-style remote fired twice undoes itself, and "at least
+        # one" would call that healthy.
+        most = spec[3] if len(spec) > 3 else None
         # A typo in the trace-kind name used to raise KeyError and kill the whole
         # proof run after the smoke itself had passed -- the game looked proven
         # because no FAIL line was printed. Report it as a failing row instead.
@@ -2165,10 +2195,11 @@ def check_proofs(out: str, table: dict | None = None) -> tuple[int, int]:
             print(f"PROOF|FAIL|{label}|unknown trace kind {kind!r}")
             continue
         got = bucket.get(key, 0)
-        ok = got >= need
+        ok = got >= need and (most is None or got <= most)
         passed += ok
         failed += not ok
-        print(f"PROOF|{'PASS' if ok else 'FAIL'}|{label}|{got}/{need}")
+        bound = f" max {most}" if most is not None else ""
+        print(f"PROOF|{'PASS' if ok else 'FAIL'}|{label}|{got}/{need}{bound}")
     return passed, failed
 
 

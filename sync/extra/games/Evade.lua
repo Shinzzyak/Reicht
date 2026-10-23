@@ -240,79 +240,12 @@ local function GetAutoDuration()
     return math.clamp(duration, 1, 6)
 end
 local Duration = GetAutoDuration()
-local openshit = Instance.new("ScreenGui")
-openshit.Name = "openshit"
-openshit.Parent = LocalPlayer.PlayerGui
-openshit.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-openshit.ResetOnSpawn = false
-local mainopen = Instance.new("TextButton")
-mainopen.Name = "mainopen"
-mainopen.Parent = openshit
-mainopen.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-mainopen.BackgroundTransparency = 1
-mainopen.Position = UDim2.new(0.101969875, 0, 0.110441767, 0)
-mainopen.Size = UDim2.new(0, 64, 0, 42)
-mainopen.Text = ""
-mainopen.Visible = true
-local mainopens = Instance.new("UICorner")
-mainopens.Parent = mainopen
-local SizeBackMulti = 0.1
-local function DownloadAsset(url, filename)
-    local request = http_request or (syn and syn.request) or request
-    if not request then return nil end
-    local ok, response = pcall(function()
-        return request({ Url = url, Method = "GET" }).Body
-    end)
-    if not ok or not response then return nil end
-    writefile(filename, response)
-    return getcustomasset(filename)
-end
-local AssetsIcon = DownloadAsset(
-    "https://raw.githubusercontent.com/Vraigos/Elderwyrm-Hub-X/03664e8f5718dcf889a6827c5613d51685c98151/images/AssetsIcon.png",
-    "AssetsIcon.png"
-) or ""
-local AssetsBackground = DownloadAsset(
-    "https://raw.githubusercontent.com/Vraigos/Elderwyrm-Hub-X/03664e8f5718dcf889a6827c5613d51685c98151/images/AssetsBackground.png",
-    "AssetsBackground.png"
-) or ""
-local backgroundImage = Instance.new("ImageLabel")
-backgroundImage.Name = "RotatingBackground"
-backgroundImage.Parent = mainopen
-backgroundImage.Size = UDim2.new(1.8 + SizeBackMulti, 0, 1.8 + SizeBackMulti, 0)
-backgroundImage.Position = UDim2.new(0.5, 0, 0.5, 0)
-backgroundImage.AnchorPoint = Vector2.new(0.5, 0.5)
-backgroundImage.BackgroundTransparency = 1
-backgroundImage.Image = AssetsBackground
-backgroundImage.SizeConstraint = Enum.SizeConstraint.RelativeXX
-backgroundImage.ZIndex = 0
-local WIDTH = 0.85
-local HEIGHT = 1
-local frontImage = Instance.new("ImageLabel")
-frontImage.Name = "StaticIcon"
-frontImage.Parent = mainopen
-frontImage.Size = UDim2.new(WIDTH, 0, HEIGHT, 0)
-frontImage.Position = UDim2.new(0.5, 0, 0.5, 0)
-frontImage.AnchorPoint = Vector2.new(0.5, 0.5)
-frontImage.BackgroundTransparency = 1
-frontImage.Image = AssetsIcon
-frontImage.ZIndex = 1
-frontImage.ScaleType = Enum.ScaleType.Stretch
-local frontCorner = Instance.new("UICorner")
-frontCorner.CornerRadius = UDim.new(1, 0)
-frontCorner.Parent = frontImage
-local rotation = 0
-local speed = 90
-local lastTime = tick()
-task.spawn(function()
-    while true do
-        local now = tick()
-        local delta = now - lastTime
-        lastTime = now
-        rotation = (rotation + speed * delta) % 360
-        backgroundImage.Rotation = rotation
-        task.wait()
-    end
-end)
+-- The Draconic hub's own floating opener used to live here: a draggable circle that
+-- pulled two PNGs off the Elderwyrm repo, spun a background and played a sound on
+-- click. The Reicht menu already ships its own floating block, so this rendered a
+-- second button next to it and the downloads were pure waste on mobile data.
+-- Removed; nothing else referenced it. MakeDraggable below stays, it is used by the
+-- FPS counter and every feature button.
 local function MakeDraggable(topbarobject, object, locked)
     local Dragging = false
     local DragInput
@@ -381,35 +314,6 @@ local function MakeDraggable(topbarobject, object, locked)
         end
     end)
 end
-MakeDraggable(mainopen, mainopen, false)
-local function playSound(soundId)
-    local sound = Instance.new("Sound")
-    sound.SoundId = "rbxassetid://" .. soundId
-    sound.Parent = game:GetService("SoundService")
-    sound:Play()
-    sound.Ended:Connect(function()
-        sound:Destroy()
-    end)
-end
-mainopen.MouseButton1Click:Connect(function()
-    local sounds = { "7127123605", "137566474343039", "438666542", "257001341", "257000833", "7127123554", "131607746976396", "97325669841459", "109312518223078" }
-    playSound(sounds[math.random(#sounds)])
-    Window:Minimize()
-    local function smoothSpeed(target, duration)
-        local start = speed
-        local steps = 30
-        for i = 1, steps do
-            speed = start + (target - start) * (i / steps)
-            task.wait(duration / steps)
-        end
-        speed = target
-    end
-    smoothSpeed(360, 0.4)
-    task.wait(0.5)
-    smoothSpeed(180, 0.4)
-    task.wait(0.3)
-    smoothSpeed(90, 0.4)
-end)
 local Stats = game:GetService("Stats")
 local fpsCounter = Instance.new("ScreenGui")
 fpsCounter.Name = "FPSCounter"
@@ -695,6 +599,9 @@ local DConfiguration = {
                 lastAttempt = 0,
                 Cooldown = 0.5,
                 Connection = nil,
+                HeldTag = nil,
+                HeldAt = 0,
+                RetryAfter = 2.5,
             },
             Macro = {
                 SelectedEmote = "BoldMarch",
@@ -2186,24 +2093,83 @@ function DFunctions.getNearestDownedPlayer()
     end
     return nearest
 end
-function DFunctions.CarryPlayer()
-    local target = DFunctions.getNearestDownedPlayer()
-    if not target or not target.Character then return end
-    local tag = target.Character:GetAttribute("Tag")
-    if tag then
-        pcall(function()
-            ReplicatedStorage.Events.Interact:FireServer("Carry", tag)
-        end)
+-- True when the other player's body is welded to ours. That is what "carrying" means
+-- physically in Evade: the body stops being a ragdoll on the floor and follows you.
+-- Checked instead of trusting a flag, because a silent server rejection would
+-- otherwise look identical to a successful pick-up.
+function DFunctions.IsCarryingBody(player)
+    local character = LocalPlayer.Character
+    local other = player and player.Character
+    if not character or not other then return false end
+    for _, item in ipairs(character:GetDescendants()) do
+        if item:IsA("WeldConstraint") or item:IsA("Weld") or item:IsA("Motor6D") then
+            local a, b = item.Part0, item.Part1
+            if a and b then
+                if (a:IsDescendantOf(character) and b:IsDescendantOf(other))
+                    or (b:IsDescendantOf(character) and a:IsDescendantOf(other)) then
+                    return true
+                end
+            end
+        end
     end
+    return false
+end
+function DFunctions.FindPlayerByTag(tag)
+    if not tag then return nil end
+    for _, plr in ipairs(Players:GetPlayers()) do
+        local character = plr.Character
+        if character and character:GetAttribute("Tag") == tag then return plr end
+    end
+    return nil
+end
+function DFunctions.CarryPlayer()
+    local Carry = DConfiguration.Misc.GameAutomation.Carry
+    -- A downed player cannot carry anyone; firing anyway burns the remote and reads
+    -- on the server as a drop.
+    if DFunctions.GetStatus(LocalPlayer) ~= "ALIVE" then return false end
+    local target = DFunctions.getNearestDownedPlayer()
+    if not target or not target.Character then return false end
+    local tag = target.Character:GetAttribute("Tag")
+    if not tag then return false end
+    -- "Carry" is a toggle, not a grab. Firing it twice for the same body drops that
+    -- body, and the server needs a moment before the body stops reading as downed --
+    -- so the old 0.5s loop grabbed and released on its own. One fire per body; the
+    -- hold is released only when that body stops being downed.
+    if Carry.HeldTag then
+        if Carry.HeldTag == tag and DFunctions.IsCarryingBody(target) then return false end
+        if Carry.HeldTag == tag and tick() - (Carry.HeldAt or 0) < (Carry.RetryAfter or 2.5) then return false end
+        Carry.HeldTag = nil
+    end
+    Carry.HeldTag = tag
+    Carry.HeldAt = tick()
+    pcall(function()
+        ReplicatedStorage.Events.Interact:FireServer("Carry", tag)
+    end)
+    return true
+end
+function DFunctions.ReleaseCarryHold()
+    local Carry = DConfiguration.Misc.GameAutomation.Carry
+    local tag = Carry.HeldTag
+    if not tag then return false end
+    local held = DFunctions.FindPlayerByTag(tag)
+    -- The body we picked up is revived, dead or gone: the carry is over, so the next
+    -- downed body may be picked up without dropping anything.
+    if not held or not DFunctions.isPlayerDowned(held) then
+        Carry.HeldTag = nil
+        return true
+    end
+    return false
 end
 function DFunctions.StartAutoCarry()
     local Carry = DConfiguration.Misc.GameAutomation.Carry
     if Carry.Connection then Carry.Connection:Disconnect() end
     Carry.Enabled = true
+    Carry.HeldTag = nil
     Carry.Connection = RunService.Heartbeat:Connect(function()
         if not Carry.Enabled then return end
         local now = tick()
         if now - (Carry.lastAttempt or 0) < (Carry.Cooldown or 0.5) then return end
+        DFunctions.ReleaseCarryHold()
         DFunctions.CarryPlayer()
         Carry.lastAttempt = now
     end)
@@ -2211,6 +2177,7 @@ end
 function DFunctions.StopAutoCarry()
     local Carry = DConfiguration.Misc.GameAutomation.Carry
     Carry.Enabled = false
+    Carry.HeldTag = nil
     if Carry.Connection then
         Carry.Connection:Disconnect()
         Carry.Connection = nil
