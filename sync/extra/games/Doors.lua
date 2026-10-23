@@ -6865,6 +6865,53 @@ do
         end)
     end
 
+
+    -- ---- room ESP -----------------------------------------------------------
+    -- Targets recovered by decrypting an obfuscated Doors hub (dih_doors): its
+    -- string table decoded to exactly these part names plus the menu labels
+    -- "Key ESP", "Lever ESP", "Breaker Pole ESP", "Book ESP (LiveHintBook)" and
+    -- "Exit / Dupe Check (RoomExit)". Names are the game's own, not guesses, so
+    -- the scan hits what Doors actually spawns per room.
+    local ESP_TARGETS = {
+        key_esp = { "KeyObtain", "RoomKey", "Key" },
+        lever_esp = { "LeverForGate", "GateLever", "Lever", "LEVER" },
+        breaker_esp = { "LiveBreakerPolePickup", "BreakerPolePickup", "LiveBreakerPole", "BreakerPole" },
+        book_esp = { "LiveHintBook", "HintBook" },
+        exit_esp = { "RoomExit", "RoomEntrance" },
+    }
+    local ESP_MADE = {}
+    local ESP_COLOR = Color3.fromRGB(214, 76, 64)
+
+    local function applyRoomESP()
+        local folder = rooms()
+        if not folder then return end
+        local wanted = {}
+        for flag, names in pairs(ESP_TARGETS) do
+            if FLAGS[flag] then
+                for _, name in ipairs(names) do wanted[name] = true end
+            end
+        end
+        for _, object in ipairs(folder:GetDescendants()) do
+            if wanted[object.Name] then
+                if not ESP_MADE[object] then
+                    local ok, entry = pcall(function()
+                        return ESPLibrary.ESP.Highlight({
+                            Model = object,
+                            FillColor = ESP_COLOR,
+                            OutlineColor = Color3.fromRGB(255, 255, 255),
+                            FillTransparency = 0.6,
+                            OutlineTransparency = 0,
+                        })
+                    end)
+                    if ok and entry then ESP_MADE[object] = entry end
+                end
+            elseif ESP_MADE[object] then
+                try(function() ESP_MADE[object]:Remove() end)
+                ESP_MADE[object] = nil
+            end
+        end
+    end
+
     -- Single heartbeat keeps every continuous feature on one thread instead of
     -- one loop per toggle.
     local accumulator = 0
@@ -6874,6 +6921,7 @@ do
             if accumulator < 0.25 then return end
             accumulator = 0
             applyRoomProps()
+            applyRoomESP()
 
             local now = tick()
             local model = character()
@@ -7061,6 +7109,28 @@ do
     })
 
     local WorldGroup = SurvivalTab:AddRightGroupbox("World")
+
+    -- Five ESP toggles from the decrypted hub above. One shared scan, so enabling
+    -- all five costs the same as one.
+    local EspGroup = SurvivalTab:AddRightGroupbox("Room ESP")
+    for _, spec in ipairs({
+        { "key_esp", "Key ESP" },
+        { "lever_esp", "Lever ESP" },
+        { "breaker_esp", "Breaker Pole ESP" },
+        { "book_esp", "Book ESP (Hint Book)" },
+        { "exit_esp", "Room Exit / Dupe Check" },
+    }) do
+        EspGroup:AddToggle(spec[1], {
+            Text = spec[2],
+            Default = false,
+            Callback = function(value)
+                FLAGS[spec[1]] = value
+                -- Immediate pass so the highlight appears on the same click; the
+                -- heartbeat keeps it in sync as rooms change.
+                applyRoomESP()
+            end,
+        })
+    end
     WorldGroup:AddToggle("reicht_interactions", {
         Text = "Enable All Interactions",
         Default = false,

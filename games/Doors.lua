@@ -5612,6 +5612,44 @@ applyRoomProps()
 end)
 end)
 end
+local ESP_TARGETS = {
+key_esp = { "KeyObtain", "RoomKey", "Key" },
+lever_esp = { "LeverForGate", "GateLever", "Lever", "LEVER" },
+breaker_esp = { "LiveBreakerPolePickup", "BreakerPolePickup", "LiveBreakerPole", "BreakerPole" },
+book_esp = { "LiveHintBook", "HintBook" },
+exit_esp = { "RoomExit", "RoomEntrance" },
+}
+local ESP_MADE = {}
+local ESP_COLOR = Color3.fromRGB(214, 76, 64)
+local function applyRoomESP()
+local folder = rooms()
+if not folder then return end
+local wanted = {}
+for flag, names in pairs(ESP_TARGETS) do
+if FLAGS[flag] then
+for _, name in ipairs(names) do wanted[name] = true end
+end
+end
+for _, object in ipairs(folder:GetDescendants()) do
+if wanted[object.Name] then
+if not ESP_MADE[object] then
+local ok, entry = pcall(function()
+return ESPLibrary.ESP.Highlight({
+Model = object,
+FillColor = ESP_COLOR,
+OutlineColor = Color3.fromRGB(255, 255, 255),
+FillTransparency = 0.6,
+OutlineTransparency = 0,
+})
+end)
+if ok and entry then ESP_MADE[object] = entry end
+end
+elseif ESP_MADE[object] then
+try(function() ESP_MADE[object]:Remove() end)
+ESP_MADE[object] = nil
+end
+end
+end
 local accumulator = 0
 try(function()
 RunS.Heartbeat:Connect(function(delta)
@@ -5619,6 +5657,7 @@ accumulator = accumulator + (delta or 0)
 if accumulator < 0.25 then return end
 accumulator = 0
 applyRoomProps()
+applyRoomESP()
 local now = tick()
 local model = character()
 if model then
@@ -5796,6 +5835,23 @@ Default = false,
 Callback = function(state) FLAGS.closet_fix = state end,
 })
 local WorldGroup = SurvivalTab:AddRightGroupbox("World")
+local EspGroup = SurvivalTab:AddRightGroupbox("Room ESP")
+for _, spec in ipairs({
+{ "key_esp", "Key ESP" },
+{ "lever_esp", "Lever ESP" },
+{ "breaker_esp", "Breaker Pole ESP" },
+{ "book_esp", "Book ESP (Hint Book)" },
+{ "exit_esp", "Room Exit / Dupe Check" },
+}) do
+EspGroup:AddToggle(spec[1], {
+Text = spec[2],
+Default = false,
+Callback = function(value)
+FLAGS[spec[1]] = value
+applyRoomESP()
+end,
+})
+end
 WorldGroup:AddToggle("reicht_interactions", {
 Text = "Enable All Interactions",
 Default = false,

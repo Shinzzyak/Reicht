@@ -555,6 +555,11 @@ snareModel.Permissive = true
 addChild(snareModel, newInstance("Part", "Hitbox"))
 addChild(roomZero, newInstance("Part", "Collision"))
 addChild(roomZero, newInstance("ProximityPrompt", "RoomPrompt"))
+-- Room ESP targets: the part names a decrypted Doors hub points at. Without them
+-- the ESP scan has nothing to find and its proof would pass on an empty room.
+for _, name in ipairs({ "KeyObtain", "LeverForGate", "LiveBreakerPolePickup", "LiveHintBook", "RoomExit" }) do
+    addChild(roomZero, newInstance("Part", name))
+end
 local eyesModel = addChild(ws, newInstance("Model", "Eyes"))
 eyesModel.Permissive = true
 
@@ -1604,6 +1609,7 @@ DOORS_PROOFS = {
     "break lights fires UseEventModule": ("fire", "OnClientEvent|breakLights", 1),
     "eyes invincibility fires MotorReplication": ("fire", "MotorReplication|number", 1),
     "god mode moves Collision": ("write", "Collision|Position", 1),
+    "room ESP highlights KeyObtain": ("made", "Highlight", 1),
 }
 
 
