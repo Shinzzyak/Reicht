@@ -86,10 +86,12 @@ function FloatingButtonManager:Load(name)
                     button.TextSize = math.floor(s * 0.45)
                 end
             else
-                if corner then corner.CornerRadius = UDim.new(0, 15) end
+                -- Minimal chrome: one radius across the hub (10) and a label that
+                -- fits a pill instead of shouting from a 24px corner box.
+                if corner then corner.CornerRadius = UDim.new(0, 10) end
                 if button then
                     button.TextScaled = false
-                    button.TextSize = 24 
+                    button.TextSize = 18
                 end
             end
         end

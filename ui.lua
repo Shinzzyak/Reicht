@@ -974,7 +974,7 @@ return text
 end
 function Lang.SearchText(spec)
 if type(spec) == "table" then
-return ((spec.EN or "") .. " " .. (spec.TH or "")):lower()
+return (tostring(spec.EN or "") .. " " .. tostring(spec.TH or "")):lower()
 end
 return tostring(spec or ""):lower()
 end
@@ -3849,7 +3849,7 @@ function Dropdown:Render()
 local active = self:GetActiveValues()
 local labels = {}
 for _, entry in ipairs(active) do
-table.insert(labels, Dropdown.FormatValue(entry))
+table.insert(labels, tostring(Dropdown.FormatValue(entry)))
 end
 local text = #labels > 0 and table.concat(labels, ", ") or Lang.Resolve(self.Placeholder or Lang.Strings.None)
 self.Display.Text = text
@@ -7366,7 +7366,7 @@ if not part or (settings.TeamCheck and info.Friendly) then
 continue
 end
 local rel = part.Position - root.Position
-local offset = Vector2.new(rel:Dot(right), -rel:Dot(look)) / settings.RadarRange * radius
+local offset = Vector2.new(rel:Dot(right), -rel:Dot(look)) / (settings.RadarRange or 250) * radius
 local outside = offset.Magnitude > radius
 if outside then
 offset = offset.Unit * radius
@@ -8196,5 +8196,45 @@ Library.Sheet = function(self, spec)
 return Sheet.Show(type(self) == "table" and self ~= Library and self or spec)
 end
 Library.CloseSheet = Sheet.Close
+do
+Config.SeasonTheme = "Minimal"
+Config.Particles.Count = 0
+Themes.Minimal = Palette({
+Backdrop = "0E1014", BackdropAlt = "12151A", Topbar = "14181E",
+Sidebar = "11141A", SidebarAlt = "161A21",
+SidebarText = "E7E9ED", SidebarMuted = "8B929E",
+TabActive = "1F242C", TabActiveText = "FFFFFF",
+Panel = "161A21", PanelHeader = "1A1F27", Element = "1E232B", Hover = "252B34",
+Outline = "262C35", Shadow = "000000",
+Text = "E8EAEE", SubText = "A5ACB8", Muted = "6E7581", Track = "262C35",
+Cloud = "0E1014", CloudAlpha = 0,
+Accent = "D64C40", AccentDark = "A0342C",
+Grass = "1A1F27", GrassDark = "14181E", Brick = "1E232B", BrickDark = "14181E",
+Decor = { "None" },
+Particle = { ".", false, "262C35" },
+})
+table.insert(Themes.Order, 1, "Minimal")
+local W = Config.Window
+W.Width, W.Height = 720, 500
+W.MinWidth, W.MinHeight = 300, 240
+W.TouchMinWidth, W.TouchMinHeight = 300, 240
+W.Topbar, W.Sidebar, W.SidebarCompact = 46, 168, 56
+W.Header, W.UserCard = 52, 46
+W.Ground = 0
+W.Margin, W.TouchMargin = 16, 8
+W.Radius, W.Stroke, W.Shadow = 10, 1, 0
+local T = Config.Metrics.Touch
+T.Row, T.Box, T.Item, T.Tab = 40, 40, 38, 46
+T.Check, T.Knob = 26, 22
+T.Switch = Vector2.new(50, 26)
+T.SwitchKnob = 20
+T.Radius = 10
+local D = Config.Metrics.Desktop
+D.Radius, D.Depth = 9, 2
+Config.Group.Radius, Config.Group.Stroke, Config.Group.Shadow = 10, 1, 0
+Config.Button.Depth, Config.Button.PadX = 2, 12
+Config.Selectable.Radius = 8
+Config.Page.ScrollBar = 4
+end
 Library.Window = Library.CreateWindow
 return Library

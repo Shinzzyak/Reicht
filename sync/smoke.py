@@ -134,10 +134,12 @@ OBJ.__index = function(self, k)
         return def
     end
     if rawget(self, "_p").Permissive then
+        -- Detached on purpose: a real container does not grow a child just
+        -- because someone read a dot. Caching here made repeated existence
+        -- probes (`rs:FindFirstChild("Services")`) start returning true on the
+        -- third call, which is how a Folder ended up being :Fire()'d.
         local o = newInstance("Folder", k)
-        o._p.Parent = self
         o._p.Permissive = true
-        table.insert(rawget(self, "_p").Children, o)
         return o
     end
     return nil
@@ -246,6 +248,8 @@ OBJ.m_GetPropertyChangedSignal = function(self) return newSignal() end
 OBJ.m_GetDescendantsAsync = function(self) return OBJ.m_GetDescendants(self) end
 OBJ.m_TranslateBy = function(self) end
 OBJ.m_ChangeState = function(self) end
+-- Deprecated-but-shipped API hubs still call for low-graphics mode.
+OBJ.m_Set3dRenderingEnabled = function(self, value) end
 OBJ.m_FireServer = function(self, ...)
     -- rawget: on a Permissive container `self.Fired` would auto-create a child
     -- Folder and the counter becomes a table (arithmetic error, swallowed by the
@@ -256,7 +260,22 @@ OBJ.m_FireServer = function(self, ...)
     local key = tostring(rawget(self, "_p").Name) .. "|" .. tostring(type(arg) == "string" and arg or type(arg))
     bump(TRACE.fire, key)
 end
-OBJ.m_Invoke = function(self) return nil end
+OBJ.m_Invoke = function(self) return {} end
+OBJ.m_QueryDescendants = function(self, class)
+    -- Added to Roblox in 2025; hubs use it to find prompts/ImageLabels in one call.
+    -- Without it the name is auto-created as a permissive child and the call is
+    -- "attempt to call a table value".
+    local out = {}
+    local function walk(node)
+        local p = rawget(node, "_p")
+        for _, child in ipairs(p and p.Children or {}) do
+            if child.ClassName == class then table.insert(out, child) end
+            walk(child)
+        end
+    end
+    walk(self)
+    return out
+end
 OBJ.m_Play = function(self) end
 OBJ.m_Remove = function(self) end
 OBJ.m_GetPlayers = function(self) return {} end
@@ -279,7 +298,19 @@ end
     function s:Once(fn) table.insert(self.handlers, fn) end
     s.Fire = function(self, ...)
         self.lastArgs = table.pack(...)
-        for _, fn in ipairs(self.handlers) do pcall(fn, ...) end
+        local args = table.pack(...)
+        for _, fn in ipairs(self.handlers) do
+            -- Every handler runs on its own thread, like Roblox. A handler that
+            -- calls task.wait() would otherwise yield the thread that fired the
+            -- signal; when that thread is the state's main thread (the prelude
+            -- replays CharacterAdded before MAIN exists) Luau aborts the whole
+            -- run with "thread yielded unexpectedly" and the game never builds.
+            local co = coroutine.create(fn)
+            for _ = 1, 8 do
+                local ok = coroutine.resume(co, table.unpack(args, 1, args.n))
+                if not ok or coroutine.status(co) == "dead" then break end
+            end
+        end
     end
     return s
 end
@@ -338,6 +369,12 @@ end
 get("GuiService").IsTenFootInterface = function() return false end
 get("GuiService").TopbarInset = { Height = 36 }
 get("RunService").IsStudio = function() return false end
+for _, n in ipairs({ "JumpRequest", "TouchTap", "TouchLongPress", "TouchPan", "TouchSwipe",
+        "TouchRotate", "TouchPinch", "WindowFocused", "WindowFocusReleased", "PointerAction" }) do
+    local uis = get("UserInputService")
+    local sig = newSignal(); sig.SignalName = n
+    rawget(uis, "_p")[n] = sig
+end
 get("UserInputService").TouchEnabled = false
 get("UserInputService").MouseEnabled = true
 
@@ -400,6 +437,105 @@ ws.Permissive = true
 ws.Gravity = 196.2
 ws.CurrentCamera = newInstance("Camera", "Camera")
 ws.CurrentCamera.FieldOfView = 70
+
+-- A live server ships the game's own framework tree (Knit Services/Controllers/
+-- Modules, per-game packages). Without it every module-gated feature bails
+-- before the menu is even built, and the run reports "0 options" instead of a
+-- real defect. Seed exactly the paths the script itself asks for.
+local function seedPath(path)
+    local node = rs
+    local parts = {}
+    for part in path:gmatch("[^%.]+") do parts[#parts + 1] = part end
+    for i, part in ipairs(parts) do
+        local existing = childOf(node, part)
+        if not existing then
+            local last = i == #parts
+            local class = "Folder"
+            if last then
+                class = (part:find("Remote") or part:find("Event")) and "RemoteEvent" or "ModuleScript"
+            end
+            existing = newInstance(class, part)
+            existing._p.Parent = node
+            existing._p.Permissive = true
+            table.insert(rawget(node, "_p").Children, existing)
+        end
+        node = existing
+    end
+    return node
+end
+for _, root in ipairs({ "Services", "Controllers", "Modules", "Shared", "Packages", "Remotes" }) do
+    if not childOf(rs, root) then
+        local f = newInstance("Folder", root)
+        f._p.Parent = rs
+        f._p.Permissive = true
+        table.insert(rawget(rs, "_p").Children, f)
+    end
+end
+for _, path in ipairs(__RS_PATHS__) do seedPath(path) end
+
+-- Knit package layout. Hubs that talk to a Knit game resolve their services as
+-- ReplicatedStorage.Packages._Index.<sleitnick_knit@ver>.knit.Services; without
+-- that tree the whole script bails with "needs an update" and builds no menu.
+do
+    local packages = childOf(rs, "Packages") or seedPath("Packages")
+    local index = childOf(packages, "_Index")
+    if not index then
+        index = newInstance("Folder", "_Index")
+        addChild(packages, index)
+    end
+    index.Permissive = true
+    local pkg = childOf(index, "sleitnick_knit@1.7.0")
+    if not pkg then
+        pkg = newInstance("Folder", "sleitnick_knit@1.7.0")
+        addChild(index, pkg)
+    end
+    pkg.Permissive = true
+    local knit = childOf(pkg, "knit")
+    if not knit then
+        knit = newInstance("Folder", "knit")
+        addChild(pkg, knit)
+    end
+    knit.Permissive = true
+    for _, name in ipairs({ "Services", "Controllers" }) do
+        local branch = childOf(knit, name)
+        if not branch then
+            branch = newInstance("Folder", name)
+            addChild(knit, branch)
+        end
+        branch.Permissive = true
+    end
+    local shared = childOf(rs, "Shared") or seedPath("Shared")
+    if not childOf(shared, "Config") then
+        local cfg = newInstance("ModuleScript", "Config")
+        addChild(shared, cfg)
+        cfg.Permissive = true
+    end
+end
+
+-- Remote pairs the script asks for by name. Hub code resolves them through
+-- ReplicatedStorage.Remote.<folder>_Server.<name> and rejects anything that is not
+-- a RemoteEvent/RemoteFunction, so the class matters as much as the name.
+do
+    local holder = childOf(rs, "Remote")
+    if not holder then
+        holder = newInstance("Folder", "Remote")
+        addChild(rs, holder)
+    end
+    holder.Permissive = true
+    for _, pair in ipairs(__REMOTE_PAIRS__) do
+        local folder = childOf(holder, pair[1] .. "_Server")
+        if not folder then
+            folder = newInstance("Folder", pair[1] .. "_Server")
+            addChild(holder, folder)
+        end
+        folder.Permissive = true
+        if not childOf(folder, pair[2]) then
+            local remote = newInstance("RemoteFunction", pair[2])
+            addChild(folder, remote)
+            remote.Permissive = true
+        end
+    end
+end
 
 local roomsFolder = addChild(ws, newInstance("Folder", "CurrentRooms"))
 roomsFolder.Permissive = true
@@ -478,6 +614,17 @@ end
 local TELEPORT_SERVICE = {}
 function TELEPORT_SERVICE:TeleportToPlaceInstance() end
 function TELEPORT_SERVICE:Teleport() end
+do
+    -- Fires when the client shows an error dialog (kick, disconnect). Auto-rejoin
+    -- hubs hang off it; without the signal the Connect is an index-nil.
+    local gui = get("GuiService")
+    if not gui.ErrorMessageChanged then
+        gui.ErrorMessageChanged = newSignal()
+        gui.ErrorMessageChanged.SignalName = "ErrorMessageChanged"
+    end
+end
+TELEPORT_SERVICE.TeleportInitFailed = newSignal()
+TELEPORT_SERVICE.TeleportInitFailed.SignalName = "TeleportInitFailed"
 function TELEPORT_SERVICE:TeleportAsync() end
 -- Games that talk in chat go through TextChatService.TextChannels.RBXGeneral;
 -- a nil channel is a harness gap, not a game bug.
@@ -511,14 +658,17 @@ workspace = ws
 
 PENDING = {}
 task = {
+    -- Roblox hands back the thread; scripts key their bookkeeping tables on it
+    -- (`children[thread] = true`), so returning nothing is a nil-index crash.
     spawn = function(fn, ...)
         local co = coroutine.create(fn)
         table.insert(PENDING, co)
         local ok, err = coroutine.resume(co, ...)
         if not ok then table.insert(PENDING_ERRORS or {}, tostring(err)) end
+        return co
     end,
-    defer = function(fn, ...) task.spawn(fn, ...) end,
-    delay = function(_, fn, ...) task.spawn(fn, ...) end,
+    defer = function(fn, ...) return task.spawn(fn, ...) end,
+    delay = function(_, fn, ...) return task.spawn(fn, ...) end,
     wait = function(t) coroutine.yield() return 0 end,
     cancel = function() end,
 }
@@ -619,7 +769,20 @@ UDim = {
     fromScale = function(s) return udim(s, 0) end,
 }
 local V2 = {}
-V2.__index = V2
+-- Vector2 exposes Magnitude/Unit as properties in Roblox; hub radar code divides
+-- by them. A plain V2 table leaves offset.Magnitude nil and the compare kills the
+-- frame handler ("attempt to compare number < nil").
+V2.__index = function(self, k)
+    if k == "Magnitude" then
+        return math.sqrt(self.X * self.X + self.Y * self.Y)
+    end
+    if k == "Unit" then
+        local m = math.sqrt(self.X * self.X + self.Y * self.Y)
+        if m == 0 then return v2(0, 0) end
+        return v2(self.X / m, self.Y / m)
+    end
+    return V2[k]
+end
 local function v2(x, y) return setmetatable({ X = x or 0, Y = y or 0 }, V2) end
 V2.__add = function(a, b) return v2(a.X + b.X, a.Y + b.Y) end
 V2.__sub = function(a, b) return v2(a.X - b.X, a.Y - b.Y) end
@@ -631,6 +794,10 @@ V2.__div = function(a, b) return v2(a.X / b, a.Y / b) end
 V2.Lerp = function(a, b, t) return v2(a.X + (b.X - a.X) * t, a.Y + (b.Y - a.Y) * t) end
 Vector2 = { new = v2, zero = v2(0, 0), one = v2(1, 1) }
 local V3 = {}
+-- Forward declaration: V3.__index reads .Unit, which calls v3, which is only
+-- assigned further down. Without this the Unit read is a call to a nil global
+-- and every aim/ESP frame dies on it.
+local v3
 V3.__index = function(self, k)
     if k == "Magnitude" then
         return math.sqrt(self.X * self.X + self.Y * self.Y + self.Z * self.Z)
@@ -642,7 +809,7 @@ V3.__index = function(self, k)
     end
     return V3[k]
 end
-local function v3(x, y, z)
+v3 = function(x, y, z)
     return setmetatable({ X = x or 0, Y = y or 0, Z = z or 0 }, V3)
 end
 -- Roblox mixes Vector3 with CFrame/other types; a strict __add would abort the
@@ -664,7 +831,35 @@ V3.__mul = function(a, b)
 end
 V3.__div = function(a, b) return v3(a.X / b, a.Y / b, a.Z / b) end
 V3.__eq = function(a, b) return a.X == b.X and a.Y == b.Y and a.Z == b.Z end
-Vector3 = { new = v3, zero = v3(0, 0, 0), one = v3(1, 1, 1) }
+-- Aim/ESP math calls these as methods (`dir:Dot(toTarget)`); a missing method
+-- aborts the whole frame handler, not just one feature.
+V3.Dot = function(a, b) return a.X * b.X + a.Y * b.Y + a.Z * b.Z end
+V3.Cross = function(a, b)
+    return v3(a.Y * b.Z - a.Z * b.Y, a.Z * b.X - a.X * b.Z, a.X * b.Y - a.Y * b.X)
+end
+V3.Lerp = function(a, b, t)
+    return v3(a.X + (b.X - a.X) * t, a.Y + (b.Y - a.Y) * t, a.Z + (b.Z - a.Z) * t)
+end
+-- Aim/ESP code leans on the axis constants (`Vector3.yAxis * vertical`);
+-- without them every fly/aim path dies on "arithmetic on nil".
+Vector3 = { new = v3, zero = v3(0, 0, 0), one = v3(1, 1, 1),
+    xAxis = v3(1, 0, 0), yAxis = v3(0, 1, 0), zAxis = v3(0, 0, 1) }
+
+-- Camera/aim/ESP math divides ViewportSize; a nil here kills the whole render
+-- loop with "attempt to index nil with 'X'" while every option still reports ok.
+ws.CurrentCamera.ViewportSize = Vector2.new(1280, 720)
+ws.GetServerTimeNow = function(self) return os.time() end
+OBJ.m_GetServerTimeNow = function(self) return os.time() end
+-- BindToRenderStep is how real hubs schedule per-frame work; route it onto the
+-- RenderStepped signal the frame loop already drives.
+OBJ.m_BindToRenderStep = function(self, name, priority, fn)
+    local p = rawget(self, "_p")
+    local sig = p.RenderStepped
+    if not sig then sig = newSignal(); sig.SignalName = "RenderStepped"; p.RenderStepped = sig end
+    if type(fn) == "function" then table.insert(sig.handlers, fn) end
+end
+OBJ.m_UnbindFromRenderStep = function() end
+OBJ.m_GenerateGUID = function() return "00000000-0000-4000-8000-000000000000" end
 -- Camera code multiplies CFrames every frame (`camera.CFrame * CFrame.new(0,1,0)`),
 -- so the mock needs the operator, not just the constructor.
 local CF = {}
@@ -1451,6 +1646,23 @@ def main() -> int:
     game_id = guard.group(1) if guard else "3647333358"
     script = HARNESS.replace("SCRIPT_SOURCE", "[" + "=" * level + "[" + src + "]" + "=" * level + "]")
     script = script.replace("GAME_ID", game_id)
+    # Every module path this script looks up by name. Dotted strings cover
+    # GameLib.Find-style lookups; the Needs blocks list bare names that live
+    # under the Knit Services/Controllers/Modules roots.
+    paths = set(re.findall(r'(?:Find|FindFirstChild|WaitForChild)\(\s*"([A-Za-z0-9_][A-Za-z0-9_.]*)"', src))
+    paths.update(re.findall(r'"([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+)"', src))
+    for block in re.findall(r"Needs\s*=\s*\{(.*?)\n\}", src, re.S):
+        for bare in re.findall(r'"([A-Za-z0-9_]+)"', block):
+            for root in ("Services", "Controllers", "Modules"):
+                paths.add(root + "." + bare)
+    paths = sorted(p for p in paths if not p.startswith("game.") and "http" not in p)
+    lua_paths = "{" + ", ".join('"%s"' % p for p in paths) + "}"
+    script = script.replace("__RS_PATHS__", lua_paths)
+    # Remote pairs: Reicht.Util.Remote("Profile", "GetTotalDataRF") and friends.
+    pairs = sorted(set(re.findall(
+        r'Remote\(\s*"([A-Za-z0-9_]+)"\s*,\s*"([A-Za-z0-9_]+)"', src)))
+    lua_pairs = "{" + ", ".join('{"%s", "%s"}' % (f, n) for f, n in pairs) + "}"
+    script = script.replace("__REMOTE_PAIRS__", lua_pairs)
     script = script.replace("__UI_SOURCE__", lua_long((ROOT / "ui.lua").read_text(encoding="utf-8")))
     fbm_path = ROOT / "FloatingButton.lua"
     fbm = fbm_path.read_text(encoding="utf-8") if fbm_path.exists() else ""

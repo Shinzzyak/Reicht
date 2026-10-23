@@ -438,6 +438,104 @@ def previous_state():
     return table, files
 
 
+
+MINIMAL_THEME = """
+-- Reicht minimal theme. Appended after the upstream config so an upstream refresh
+-- cannot quietly bring the seasonal chrome back. Every field below is an upstream
+-- name: we retune their knobs instead of forking their renderer.
+do
+    Config.SeasonTheme = "Minimal"
+    Config.Particles.Count = 0
+
+    Themes.Minimal = Palette({
+        Backdrop = "0E1014", BackdropAlt = "12151A", Topbar = "14181E",
+        Sidebar = "11141A", SidebarAlt = "161A21",
+        SidebarText = "E7E9ED", SidebarMuted = "8B929E",
+        TabActive = "1F242C", TabActiveText = "FFFFFF",
+        Panel = "161A21", PanelHeader = "1A1F27", Element = "1E232B", Hover = "252B34",
+        Outline = "262C35", Shadow = "000000",
+        Text = "E8EAEE", SubText = "A5ACB8", Muted = "6E7581", Track = "262C35",
+        Cloud = "0E1014", CloudAlpha = 0,
+        Accent = "D64C40", AccentDark = "A0342C",
+        Grass = "1A1F27", GrassDark = "14181E", Brick = "1E232B", BrickDark = "14181E",
+        Decor = { "None" },
+        Particle = { ".", false, "262C35" },
+    })
+    table.insert(Themes.Order, 1, "Minimal")
+
+    local W = Config.Window
+    W.Width, W.Height = 720, 500
+    W.MinWidth, W.MinHeight = 300, 240
+    W.TouchMinWidth, W.TouchMinHeight = 300, 240
+    W.Topbar, W.Sidebar, W.SidebarCompact = 46, 168, 56
+    W.Header, W.UserCard = 52, 46
+    W.Ground = 0
+    W.Margin, W.TouchMargin = 16, 8
+    W.Radius, W.Stroke, W.Shadow = 10, 1, 0
+
+    -- Touch targets grow: the hub is used on phones first.
+    local T = Config.Metrics.Touch
+    T.Row, T.Box, T.Item, T.Tab = 40, 40, 38, 46
+    T.Check, T.Knob = 26, 22
+    T.Switch = Vector2.new(50, 26)
+    T.SwitchKnob = 20
+    T.Radius = 10
+
+    local D = Config.Metrics.Desktop
+    D.Radius, D.Depth = 9, 2
+    Config.Group.Radius, Config.Group.Stroke, Config.Group.Shadow = 10, 1, 0
+    Config.Button.Depth, Config.Button.PadX = 2, 12
+    Config.Selectable.Radius = 8
+    Config.Page.ScrollBar = 4
+end
+"""
+
+
+def minimal_ui(text):
+    """Retune the upstream hub chrome to one flat, minimal, touch-first theme.
+
+    The upstream ui.lua is a Mario-styled shell: twelve seasonal palettes, drifting
+    clouds, particles and a grass strip. All of it is decoration that costs frames
+    on a phone and buries the controls. The override lands just before `return
+    Library`, which is after Config/Themes exist and before any game calls
+    CreateWindow, so every widget built later already sees the new numbers.
+    """
+    if "Reicht minimal theme" in text:
+        return text
+    marker = "\nLibrary.CloseSheet = Sheet.Close\n"
+    if text.count(marker) != 1:
+        raise SystemExit("ui.lua minimal theme: CloseSheet marker not found")
+    return text.replace(marker, marker + MINIMAL_THEME)
+
+
+def defensive_ui(text):
+    """Two upstream one-liners that abort a whole frame handler on real data.
+
+    Both are nil-safety, not behaviour: a radar range that was never persisted and
+    a lang spec whose EN is itself a table (hubs hand their own lang tables to the
+    Add* helpers). Upstream assumes a shape the games do not always produce.
+    """
+    text = resub(
+        text,
+        r"local offset = Vector2\.new\(rel:Dot\(right\), -rel:Dot\(look\)\) / settings\.RadarRange \* radius",
+        lambda m: ("local offset = Vector2.new(rel:Dot(right), -rel:Dot(look)) "
+                   "/ (settings.RadarRange or 250) * radius"),
+        "ui.lua radar range nil",
+    )
+    text = resub(
+        text,
+        r"table\.insert\(labels, Dropdown\.FormatValue\(entry\)\)",
+        lambda m: "table.insert(labels, tostring(Dropdown.FormatValue(entry)))",
+        "ui.lua dropdown label non-string",
+    )
+    text = resub(
+        text,
+        r'return \(\(spec\.EN or ""\) \.\. " " \.\. \(spec\.TH or ""\)\):lower\(\)',
+        lambda m: 'return (tostring(spec.EN or "") .. " " .. tostring(spec.TH or "")):lower()',
+        "ui.lua lang search non-string spec",
+    )
+    return text
+
 def extra_games():
     """Games authored in this repo: `extra/games.json` maps script stem -> {id, name}."""
     root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "extra")
@@ -506,6 +604,8 @@ def main():
     ui_text = add_press_mode(ui_text)
     ui_text = warn_duplicate_ids(ui_text)
     ui_text = add_button_registry(ui_text)
+    ui_text = minimal_ui(ui_text)
+    ui_text = defensive_ui(ui_text)
     open(os.path.join(stage, "ui.lua"), "w", encoding="utf-8").write(ui_text)
 
     built = []
