@@ -2219,43 +2219,23 @@ FEATURE_PROOFS = {
 
 # DOORS ships its own set: the same rule applies, one evidence row per feature.
 DOORS_PROOFS = {
-    "crouch keybind fires Crouch": ("fire", "Crouch|boolean", 1),
-    "noclip writes Collision.CanCollide": ("write", "Collision|CanCollide", 1),
-    "fly writes BodyVelocity.Velocity": ("write", "BodyVelocity|Velocity", 1),
-    "fullbright writes Lighting.Ambient": ("write", "Lighting|Ambient", 1),
-    "third person writes Head transparency": ("write", "Head|LocalTransparencyModifier", 1),
-    "FOV slider writes Camera.FieldOfView": ("write", "Camera|FieldOfView", 1),
-    # Merge layer: one row per folded-in mechanism.
-    "dupe doors writes Hidden.CanTouch": ("write", "Hidden|CanTouch", 1),
-    "disable snare writes Hitbox.CanTouch": ("write", "Hitbox|CanTouch", 1),
-    "instant breaker fires EBF": ("fire", "EBF|nil", 1),
-    "break lights fires UseEventModule": ("fire", "OnClientEvent|breakLights", 1),
-    "eyes invincibility fires MotorReplication": ("fire", "MotorReplication|number", 1),
-    # Two writes minimum, not one: the old god mode was a single nudge on click, so a
-    # "1" here passed while the feature died on the next room load. Continuous
-    # enforcement is the whole claim, so it needs more than the click.
-    "god mode holds Collision out of reach": ("write", "Collision|Position", 2),
-    # Grab/collect from distance: every pickup and door unlock in Doors is a
-    # ProximityPrompt, and the slider multiplies its MaxActivationDistance.
-    "grab reach raises prompt distance": ("write", "RoomPrompt|MaxActivationDistance", 1),
-    # Auto interact has to reach the prompt the scan selects. The executor call itself
-    # runs on a coroutine the harness drops, so the selection marker is the proof.
-    "auto interact selects the prompt it can reach": ("write", "UnlockPrompt|SetAttribute|ReichtAutoInteract=true", 1),
-    "room ESP highlights KeyObtain": ("made", "Highlight", 1),
-    # Entity filter: the same seeded Snare is admitted while the dropdown holds
-    # every entry and dropped once the driver narrows it to one entity, so both
-    # branches of the guard are exercised in one run.
-    "entity filter admits a listed entity": ("write", "Eyes|SetAttribute|ReichtEntityESPFilter=on", 1),
-    "entity filter drops an unlisted entity": ("write", "Eyes|SetAttribute|ReichtEntityESPFilter=off", 1),
-    "floor 2 entity name reaches the filter": ("write", "LiveEntityBramble|SetAttribute|ReichtEntityESPFilter=on", 1),
-    "inf filter blocks an unlisted tool": ("write", "Candle|SetAttribute|ReichtInfItemTarget=off", 1),
-    "inf filter admits a listed tool": ("write", "Candle|SetAttribute|ReichtInfItemTarget=on", 1),
-    "inf filter drops the key exactly once": ("fire", "DropItem|table", 1),
-    "entity language relabels the name plate": ("write", "ReichtESPText|Text=Mata", 1),
-    "tracer thickness reaches Drawing": ("write", "Line|Thickness", 2),
-    # The name plate is a BillboardGui, so this only proves anything because ESP
-    # objects are admitted to the trace by name. Off then on again = two writes.
-    "entity text toggle hides the name plate": ("write", "ReichtESPName|Enabled", 2),
+    # Doors ships one feature source: the Abysall layer. Every proof below names the
+    # toggle in that layer which produces the write, so a regression in the layer
+    # fails the sweep instead of hiding behind a generic trace hit.
+    "prompt clip widens the prompt it can reach": ("write", "UnlockPrompt|MaxActivationDistance", 1),
+    "prompt clip drops the line of sight check": ("write", "UnlockPrompt|RequiresLineOfSight", 1),
+    "prompt clip re-enables a disabled prompt": ("write", "UnlockPrompt|Enabled", 1),
+    "prompt fixer records the original distance": ("write", "UnlockPrompt|SetAttribute|MaxActivationDistance_Old=10", 1),
+    # InstantPrompts writes HoldDuration = 0 on the prompt it is standing on; the
+    # restore path puts the old value back, so the write has to be observable.
+    "instant prompts zero the hold duration": ("write", "UnlockPrompt|HoldDuration", 1),
+    "instant prompt records the original hold": ("write", "UnlockPrompt|SetAttribute|HoldDuration_Old=0.4", 1),
+    "speed boost raises Humanoid.WalkSpeed": ("write", "Humanoid|WalkSpeed", 1),
+    "crouch spoof rewrites Humanoid.HipHeight": ("write", "Humanoid|HipHeight", 1),
+    # The layer's own ESP library builds Highlight instances; the shared Reicht ESP
+    # path is gone, so this is the only thing that can make one.
+    "abysall ESP builds a highlight": ("made", "Highlight", 1),
+    "abysall ESP fills the highlight": ("write", "ReichtAbysallESP|FillColor", 1),
 }
 
 
