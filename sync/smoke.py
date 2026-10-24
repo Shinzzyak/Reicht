@@ -657,11 +657,17 @@ lp.PlayerGui = newInstance("PlayerGui", "PlayerGui")
 -- fabricate, the real folder has to exist on the PlayerGui the payload captures. (A
 -- later block replaces PlayerGui entirely, which is too late: the payload has already
 -- cached this instance.)
-local bootMainUI = newInstance("Folder", "MainUI")
-bootMainUI._p.ClassName = "Folder"
-bootMainUI._p.Permissive = true
-table.insert(rawget(lp.PlayerGui, "_p").Children, bootMainUI)
-bootMainUI._p.Parent = lp.PlayerGui
+-- REICHT_NO_MAINUI drops the seed on purpose: the live game can ship without this
+-- folder, and the layer has to stay wired when it does. This is the case the operator
+-- hit in game -- menu opened, ESP and half the toggles dead.
+local bootMainUI = nil
+if not __NO_MAINUI__ then bootMainUI = newInstance("Folder", "MainUI") end
+if bootMainUI then
+    bootMainUI._p.ClassName = "Folder"
+    bootMainUI._p.Permissive = true
+    table.insert(rawget(lp.PlayerGui, "_p").Children, bootMainUI)
+    bootMainUI._p.Parent = lp.PlayerGui
+end
 lp.PlayerScripts = newInstance("PlayerScripts", "PlayerScripts")
 players.LocalPlayer = lp
 -- The lock-prompt path demands a key in the bag and a room number that matches the
@@ -2524,6 +2530,7 @@ def main() -> int:
     script = script.replace("__REMOTE_PAIRS__", lua_pairs)
     script = script.replace("__STRICT_WFC__", "true" if os.environ.get("REICHT_STRICT_WFC") == "1" else "false")
     script = script.replace("__NO_FPP__", "true" if os.environ.get("REICHT_NO_FPP") == "1" else "false")
+    script = script.replace("__NO_MAINUI__", "true" if os.environ.get("REICHT_NO_MAINUI") == "1" else "false")
     # Frame budget. A hub that drains a queue one object per frame needs more frames
     # than the default before its later handlers are reachable at all.
     script = script.replace("__FRAMES__", os.environ.get("REICHT_FRAMES", "60"))

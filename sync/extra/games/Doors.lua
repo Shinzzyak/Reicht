@@ -1419,16 +1419,19 @@ local ReichtWindow = Window
         "EyestalkIntro",
     }
 
-    local Character
-    local Humanoid
-    local RootPart
+    -- Handlers registered below read these on every heartbeat, long before
+    -- CharacterAdded fires. Seed them from the character the player already has so a
+    -- heartbeat that lands first cannot index nil and kill its own connection.
+    local Character = LocalPlayer.Character
+    local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+    local RootPart = Character and Character:FindFirstChild("HumanoidRootPart")
 
     local Collision
     local CollisionClone
     local CollisionPart
     local CollisionPartClone
 
-    local Camera
+    local Camera = Services.Workspace.CurrentCamera
 
     local RemotesFolder   = Services.ReplicatedStorage:FindFirstChild("RemotesFolder")
     local LiveModifiers   = Services.ReplicatedStorage:FindFirstChild("LiveModifiers")
@@ -5640,18 +5643,20 @@ local ReichtWindow = Window
     Groupboxes.Exploits_Audio:AddToggle("ab_RemoveInteractingSounds", { Text = "Remove Interacting Sounds", Default = false, Tooltip = "Removes the sounds when interacting with proximity prompts." })
 
     Toggles.ab_RemoveJamminMusic:OnChanged(function(Value)
-    	local Jam = Globals.MainUI.Initiator.Main_Game.Health:FindFirstChild("Jam")
+    	local Jam = Safe(function() return Globals.MainUI.Initiator.Main_Game.Health:FindFirstChild("Jam") end)
     	if Jam then
     		Jam.Volume = Value and 0 or 0.45
     		Globals.JamMuffle.Enabled = LiveModifiers:FindFirstChild("Jammin") and not Value or false
     	end
     end)
     Toggles.ab_RemoveInteractingSounds:OnChanged(function(Value)
-    	local PS = Globals.MainUI.Initiator.Main_Game.PromptService
-    	PS.Triggered.Volume   = Value and 0 or 0.04
-    	PS.Holding.Volume     = Value and 0 or 0.1
-    	PS.Notification.Volume = Value and 0 or 0.03
-    	Globals.MainUI.Initiator.Main_Game.Reminder.Caption.Volume = Value and 0 or 0.1
+    	local PS = Safe(function() return Globals.MainUI.Initiator.Main_Game.PromptService end)
+    	if PS then
+    		PS.Triggered.Volume    = Value and 0 or 0.04
+    		PS.Holding.Volume      = Value and 0 or 0.1
+    		PS.Notification.Volume = Value and 0 or 0.03
+    	end
+    	Safe(function() Globals.MainUI.Initiator.Main_Game.Reminder.Caption.Volume = Value and 0 or 0.1 end)
     end)
 
     Groupboxes.Visuals_LeftTab = Tabs.Visuals:AddLeftTabbox("Camera / Effects")
@@ -5708,8 +5713,8 @@ local ReichtWindow = Window
     	end
     end)
     Toggles.ab_RemoveCutscenes:OnChanged(function(Value)
-        local Cutscenes = Globals.MainUI.Initiator.Main_Game.RemoteListener.Cutscenes
-        for _, Object in pairs(Cutscenes:GetChildren()) do
+        local Cutscenes = Safe(function() return Globals.MainUI.Initiator.Main_Game.RemoteListener.Cutscenes end)
+        for _, Object in pairs(Cutscenes and Cutscenes:GetChildren() or {}) do
             if table.find(CutsceneNames, Object.Name) and Object:IsA("ModuleScript") or table.find(CutsceneNames, Object:GetAttribute("OriginalName")) and Object:IsA("ModuleScript") then
                 Object.Name = (Value and Object.Name .. "_Disabled" or Object:GetAttribute("OriginalName"))
             end
@@ -5764,13 +5769,13 @@ local ReichtWindow = Window
     	Modules.Glitch.Name = Value and "Glitch_Disabled" or "Glitch"
     end)
     Toggles.ab_DisableTimothyJumpscare:OnChanged(function(Value)
-    	Modules.SpiderJumpscare.Name = Value and "SpiderJumpscare_Disabled" or "SpiderJumpscare"
+    	if Modules.SpiderJumpscare then Modules.SpiderJumpscare.Name = Value and "SpiderJumpscare_Disabled" or "SpiderJumpscare" end
     end)
     Toggles.ab_DisableVoidJumpscare:OnChanged(function(Value)
     	if Modules.Void then Modules.Void.Name = Value and "Void_Disabled" or "Void" end
     end)
     Toggles.ab_DisableHideVignette:OnChanged(function(Value)
-    	local Vignette = Globals.MainUI:FindFirstChild("HideVignette") or Globals.MainUI.MainFrame:FindFirstChild("HideVignette")
+    	local Vignette = Safe(function() return Globals.MainUI:FindFirstChild("HideVignette") or Globals.MainUI.MainFrame:FindFirstChild("HideVignette") end)
     	if Vignette then Vignette.Image = Value and "Disabled" or "rbxassetid://6100076320" end
     end)
     Toggles.ab_DisableFiredampEffect:OnChanged(function(Value)
@@ -5790,8 +5795,10 @@ local ReichtWindow = Window
     	LocalPlayer:SetAttribute("CurrentRoom", Old)
     end)
     Toggles.ab_DisableEntityJumpscares:OnChanged(function(Value)
-    	local Jumpscares = Globals.MainUI.Initiator.Main_Game.RemoteListener:FindFirstChild("Jumpscares")
-    		or Globals.MainUI.Initiator.Main_Game.RemoteListener:FindFirstChild("Jumpscares_Disabled")
+    	local Jumpscares = Safe(function()
+    		local Listener = Globals.MainUI.Initiator.Main_Game.RemoteListener
+    		return Listener:FindFirstChild("Jumpscares") or Listener:FindFirstChild("Jumpscares_Disabled")
+    	end)
     	if Jumpscares then
     		Jumpscares.Name = Value and "Jumpscares_Disabled" or "Jumpscares"
     		for _, Object in Objects.JumpscareModules do
@@ -7021,10 +7028,13 @@ local ReichtWindow = Window
     	DoubleClick = false,
     	Tooltip = "Copies the death farm loadstring to your clipboard.",
     	Func = function()
-    		toclipboard([==[
-    			loadstring(game:HttpGet("https://raw.githubusercontent.com/bocaj111004/Abysall/refs/heads/main/Scripts/DeathFarm.luau"))()
-    		]==])
-    		Library:Notify("Loadstring has been copied to your clipboard.")
+    		-- Not every executor ships toclipboard; the button used to error and look dead.
+    		local Copied = pcall(function()
+    			toclipboard([==[
+    				loadstring(game:HttpGet("https://raw.githubusercontent.com/bocaj111004/Abysall/refs/heads/main/Scripts/DeathFarm.luau"))()
+    			]==])
+    		end)
+    		Library:Notify(Copied and "Loadstring has been copied to your clipboard." or "This executor has no toclipboard.")
     	end,
 
     	Disabled = not Functions.CheckCompatability({"fireproximityprompt", "firesignal"}),
@@ -7167,17 +7177,33 @@ local ReichtWindow = Window
     		end
     	end
 
-    	while not LocalPlayer.PlayerGui:FindFirstChild("MainUI") do
-    		task.wait()
-    	end
+    	-- No blocking wait. The old loop parked here until PlayerGui.MainUI appeared, and
+    	-- when the folder never came (slow mobile join, or the game simply does not ship
+    	-- one) it starved every connection below it: door scan, entity handlers, the ESP
+    	-- feed. The menu still opened, so it read as "ESP dead, half the toggles dead".
+    	-- Resolve what is there now and let a late folder arrive in the background.
 
     	Character = NewCharacter
-    	Humanoid = NewCharacter:WaitForChild("Humanoid", 9e9)
+    	Humanoid = NewCharacter:WaitForChild("Humanoid", 20) or NewCharacter:FindFirstChildOfClass("Humanoid")
+    	if not Humanoid then
+    		warn("[Reicht] character has no Humanoid yet; character features stay off")
+    		return
+    	end
     	RootPart = NewCharacter:FindFirstChild("HumanoidRootPart")
     	Camera   = Services.Workspace.CurrentCamera
 
     	Globals.OldCamera = Camera
-    	Globals.MainUI = LocalPlayer.PlayerGui.MainUI
+    	Globals.MainUI = LocalPlayer.PlayerGui:FindFirstChild("MainUI")
+    	if not Globals.MainUI then
+    		warn("[Reicht] MainUI absent; game-UI extras stay off, everything else runs")
+    		task.spawn(function()
+    			for _ = 1, 40 do
+    				task.wait(0.25)
+    				local Late = LocalPlayer.PlayerGui:FindFirstChild("MainUI")
+    				if Late then Globals.MainUI = Late break end
+    			end
+    		end)
+    	end
 
     	Collision = NewCharacter:WaitForChild("Collision")
     	CollisionPart  = NewCharacter:FindFirstChild("CollisionPart") or NewCharacter:FindFirstChild("Collision")
@@ -7206,8 +7232,8 @@ local ReichtWindow = Window
     	if Toggles.ab_EnableCharacterJump.Value  then Character:SetAttribute("CanJump",  true) end
     	if Toggles.ab_EnableCharacterSlide.Value then Character:SetAttribute("CanSlide", true) end
 
-    	if Functions.CheckCompatability({"require"}) then
-    		Main_Game = Abysall.Environment.require(Globals.MainUI.Initiator.Main_Game)
+    	if Globals.MainUI and Functions.CheckCompatability({"require"}) then
+    		Main_Game = Safe(function() return Abysall.Environment.require(Globals.MainUI.Initiator.Main_Game) end)
     	end
 
     	if Main_Game and Toggles.ab_RemoveCameraBobbing.Value then
@@ -7253,34 +7279,38 @@ local ReichtWindow = Window
 
     	Globals.AnticheatDisabled = false
 
-    	local UIModules = Globals.MainUI.Initiator.Main_Game.RemoteListener.Modules
-    	Modules.A90             = UIModules:FindFirstChild("A90")
-    	Modules.Screech         = UIModules.Screech
-    	Modules.Dread           = UIModules:FindFirstChild("Dread")
-    	Modules.SpiderJumpscare = UIModules.SpiderJumpscare
+    	-- UIModules lives inside the game's own MainUI. When MainUI is absent the first
+    	-- index here used to throw and take the rest of the layer with it.
+    	local UIModules = Safe(function() return Globals.MainUI.Initiator.Main_Game.RemoteListener.Modules end)
+    	if UIModules then
+    		Modules.A90             = UIModules:FindFirstChild("A90")
+    		Modules.Screech         = UIModules:FindFirstChild("Screech")
+    		Modules.Dread           = UIModules:FindFirstChild("Dread")
+    		Modules.SpiderJumpscare = UIModules:FindFirstChild("SpiderJumpscare")
+    	end
 
-    	if Toggles.ab_RemoveScreech.Value    then Modules.Screech.Name = "Screech_Disabled" print ("screech gone") end
+    	if Toggles.ab_RemoveScreech.Value and Modules.Screech then Modules.Screech.Name = "Screech_Disabled" end
     	if Toggles.ab_RemoveA90.Value and Modules.A90   then Modules.A90.Name = "A90_Disabled" end
     	if Toggles.ab_RemoveDread.Value and Modules.Dread then Modules.Dread.Name = "Dread_Disabled" end
-    	if Toggles.ab_DisableTimothyJumpscare.Value then Modules.SpiderJumpscare.Name = "SpiderJumpscare_Disabled" end
+    	if Toggles.ab_DisableTimothyJumpscare.Value and Modules.SpiderJumpscare then Modules.SpiderJumpscare.Name = "SpiderJumpscare_Disabled" end
 
-    	if Toggles.ab_DisableHideVignette.Value then
-    		local Vignette = Globals.MainUI:FindFirstChild("HideVignette") or Globals.MainUI.MainFrame:FindFirstChild("HideVignette")
+    	if Globals.MainUI and Toggles.ab_DisableHideVignette.Value then
+    		local Vignette = Safe(function() return Globals.MainUI:FindFirstChild("HideVignette") or Globals.MainUI.MainFrame:FindFirstChild("HideVignette") end)
     		if Vignette then Vignette.Image = "Disabled" end
     	end
-    	if Toggles.ab_RemoveInteractingSounds.Value then
+    	if Globals.MainUI and Toggles.ab_RemoveInteractingSounds.Value then
     		local PS = Globals.MainUI.Initiator.Main_Game.PromptService
     		PS.Triggered.Volume = 0
     		PS.Holding.Volume   = 0
     		PS.Notification.Volume = 0
     		Globals.MainUI.Initiator.Main_Game.Reminder.Caption.Volume = 0
     	end
-    	if Toggles.ab_DisableEntityJumpscares.Value then
+    	if Globals.MainUI and Toggles.ab_DisableEntityJumpscares.Value then
     		local JS = Globals.MainUI.Initiator.Main_Game.RemoteListener:FindFirstChild("Jumpscares")
     		if JS then JS.Name = "Jumpscares_Disabled" end
     	end
-        local Cutscenes = Globals.MainUI.Initiator.Main_Game.RemoteListener.Cutscenes
-        for _, Object in pairs(Cutscenes:GetChildren()) do
+        local Cutscenes = Safe(function() return Globals.MainUI.Initiator.Main_Game.RemoteListener.Cutscenes end)
+        for _, Object in pairs(Cutscenes and Cutscenes:GetChildren() or {}) do
             if table.find(CutsceneNames, Object.Name) and Object:IsA("ModuleScript") then
                 Object:SetAttribute("OriginalName", Object.Name)
                 if Toggles.ab_RemoveCutscenes.Value then
@@ -7439,7 +7469,7 @@ local ReichtWindow = Window
     		end
     	end)
 
-    	local JumpButton = Globals.MainUI.MainFrame.MobileButtons:FindFirstChild("JumpButton")
+    	local JumpButton = Safe(function() return Globals.MainUI.MainFrame.MobileButtons:FindFirstChild("JumpButton") end)
     	if JumpButton then
     		Connections.InfiniteJumpsConnection2 = JumpButton.MouseButton1Down:Connect(function()
     			if Toggles.ab_InfiniteJumps.Value then
@@ -7543,7 +7573,7 @@ local ReichtWindow = Window
     	local RayParams = RaycastParams.new()
     	RayParams.FilterType = Enum.RaycastFilterType.Exclude
 
-    	local MainFrame = Globals.MainUI:FindFirstChild("MainFrame")
+    	local MainFrame = Globals.MainUI and Globals.MainUI:FindFirstChild("MainFrame")
     	if MainFrame and MainFrame:FindFirstChild("SurgeVignette") then
     		Globals.SurgeFrame = MainFrame.SurgeVignette
     		if Toggles.ab_RemoveSurge.Value then
@@ -7778,7 +7808,7 @@ local ReichtWindow = Window
     		RemotesFolder.Crouch:FireServer(true, true)
     	end
 
-    	local Jam = Globals.MainUI.Initiator.Main_Game.Health:FindFirstChild("Jam")
+    	local Jam = Safe(function() return Globals.MainUI.Initiator.Main_Game.Health:FindFirstChild("Jam") end)
     	if Jam and Toggles.ab_RemoveJamminMusic.Value then
     		Jam.Volume = 0
     		Globals.JamMuffle.Enabled = false
@@ -8877,7 +8907,7 @@ local ReichtWindow = Window
     	end
 
     	if Prompt.Name == "HerbPrompt" then
-    		local Effects = Globals.MainUI.MainFrame.Healthbar:FindFirstChild("Effects")
+    		local Effects = Safe(function() return Globals.MainUI.MainFrame.Healthbar:FindFirstChild("Effects") end)
     		if Effects and Effects.HerbGreenEffect.Visible then return end
     	end
 
@@ -9204,7 +9234,7 @@ local ReichtWindow = Window
     	end
     	Services.Lighting.FogEnd = Globals.OldFog
 
-    	local Vignette = Globals.MainUI:FindFirstChild("HideVignette") or Globals.MainUI.MainFrame:FindFirstChild("HideVignette")
+    	local Vignette = Safe(function() return Globals.MainUI:FindFirstChild("HideVignette") or Globals.MainUI.MainFrame:FindFirstChild("HideVignette") end)
     	if Vignette then Vignette.Image = "rbxassetid://6100076320" end
 
     	local ModuleRestores = {
@@ -9297,6 +9327,13 @@ local ReichtWindow = Window
 
     -- settings tab: Reicht ships its own
     Functions.Notify({ Title = "Successfully loaded in " .. math.floor((tick() - LoadStart) * 1000) / 1000 .. " seconds." , Body = "Press '" .. tostring(Options.MenuKeybind and Options.MenuKeybind.Value or "RightShift") .. "' to toggle the UI."})
+    -- Init reached the end. In the live game that is the difference between "the menu
+    -- opened" and "the features are wired": the layer used to park or throw halfway and
+    -- the menu still looked fine. Read getgenv().reicht_layer_ready to check.
+    getgenv().reicht_layer_ready = true
+    if not Globals.MainUI then
+        warn("[Reicht] layer ready without MainUI; game-UI extras stay off")
+    end
 
 end
 -- ===== ABYSALL FEATURE LAYER END =====
