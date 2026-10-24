@@ -747,8 +747,11 @@ Abysall.Environment.setclipboard = passthrough("setclipboard")
 Abysall.Environment.writefile = passthrough("writefile")
 Abysall.Environment.readfile = passthrough("readfile")
 Abysall.Environment.isfile = passthrough("isfile")
+local LocalESP = ESPLibrary.ESP
 local ESP = {
 Objects = {},
+ColorTable = {},
+TextTable = {},
 Settings = {
 Rainbow = false, Tracers = false, ShowDistance = false, Arrows = false,
 TextTransparency = 0, FillTransparency = 0.75, OutlineTransparency = 0,
@@ -761,62 +764,82 @@ local S = ESP.Settings
 local function setter(key)
 return function(_, value) S[key] = value end
 end
-ESP.SetRainbow = setter("Rainbow")
-ESP.SetTracers = setter("Tracers")
-ESP.SetShowDistance = setter("ShowDistance")
-ESP.SetArrows = setter("Arrows")
-ESP.SetTextTransparency = setter("TextTransparency")
-ESP.SetFillTransparency = setter("FillTransparency")
-ESP.SetOutlineTransparency = setter("OutlineTransparency")
-ESP.SetTextOutlineTransparency = setter("TextOutlineTransparency")
-ESP.SetFadeTime = setter("FadeTime")
-ESP.SetRenderLimit = setter("RenderLimit")
-ESP.SetTracerSize = setter("TracerSize")
-ESP.SetArrowRadius = setter("ArrowRadius")
-ESP.SetTextSize = setter("TextSize")
-ESP.SetDistanceSizeRatio = setter("DistanceSizeRatio")
-ESP.SetFont = setter("Font")
-ESP.SetTracerOrigin = setter("TracerOrigin")
-ESP.SetTracersOrigin = setter("TracerOrigin")
-ESP.GenerateRandomString = function(_, len)
+for _, key in ipairs({
+"Rainbow", "Tracers", "ShowDistance", "Arrows", "TextTransparency",
+"FillTransparency", "OutlineTransparency", "TextOutlineTransparency", "FadeTime",
+"RenderLimit", "TracerSize", "ArrowRadius", "TextSize", "DistanceSizeRatio",
+"Font", "TracerOrigin",
+}) do
+ESP["Set" .. key] = setter(key)
+end
+ESP.SetTracersOrigin = ESP.SetTracerOrigin
+ESP.SetRainbow = function(_, value)
+S.Rainbow = value
+ESPLibrary.Rainbow.Set(value)
+end
+ESP.SetTracers = function(_, value)
+S.Tracers = value
+ESPLibrary.Tracers.Set(value)
+end
+ESP.SetShowDistance = function(_, value)
+S.ShowDistance = value
+ESPLibrary.Distance.Set(value)
+end
+ESP.SetTracerSize = function(_, value)
+S.TracerSize = value
+ESPLibrary.Thickness.Set(value)
+end
+ESP.GenerateRandomString = function(_, length)
 local out = {}
-for i = 1, (len or 8) do out[i] = string.char(math.random(97, 122)) end
+for i = 1, (length or 8) do out[i] = string.char(math.random(97, 122)) end
 return table.concat(out)
 end
-ESP.ColorTable = function(_, color)
-return { Color = color, Rainbow = false, Transparency = 0 }
+ESP.SetColorTable = function(_, name, color)
+ESP.ColorTable[name] = color
 end
-ESP.UpdateObjectColor = function(_, object, color)
+ESP.UpdateObjectText = function(_, object, text)
 local entry = ESP.Objects[object]
 if not entry then return end
-if entry.Highlight then entry.Highlight.FillColor = color; entry.Highlight.OutlineColor = color end
-if entry.Label then entry.Label.TextColor3 = color end
+ESP.TextTable[object] = text
+if entry.Instance and entry.Instance.Label then entry.Instance.Label.Text = tostring(text or "") end
 end
-ESP.AddESP = function(_, object, options)
+ESP.UpdateObjectColor = function(_, object, color)
+ESP.ColorTable[object] = color
+local entry = ESP.Objects[object]
+if entry and entry.Instance then entry.Instance:Update({ FillColor = color }) end
+end
+ESP.AddESP = function(_, parameters)
+parameters = type(parameters) == "table" and parameters or nil
+if not parameters then return end
+local object = parameters.Object
 if not object or ESP.Objects[object] then return end
-options = options or {}
-local entry = {}
-local okHighlight, highlight = pcall(function()
-local h = Instance.new("Highlight")
-h.Name = "ReichtAbysallESP"
-h.FillColor = options.Color or Color3.fromRGB(255, 255, 255)
-h.OutlineColor = options.Color or Color3.fromRGB(255, 255, 255)
-h.FillTransparency = options.FillTransparency or S.FillTransparency
-h.OutlineTransparency = options.OutlineTransparency or S.OutlineTransparency
-h.Adornee = object
-h.Parent = object
-return h
+local color = parameters.Color
+or ESP.ColorTable[object]
+or Color3.fromRGB(255, 255, 255)
+local text = parameters.Text or ""
+local instance = Safe(function()
+return LocalESP.Highlight({
+Model = object,
+FillColor = color,
+FillTransparency = parameters.FillTransparency or S.FillTransparency,
+OutlineTransparency = parameters.OutlineTransparency or S.OutlineTransparency,
+Text = text,
+Name = text,
+TextSize = S.TextSize,
+})
 end)
-if okHighlight then entry.Highlight = highlight end
-ESP.Objects[object] = entry
-return entry
+if not instance then return end
+ESP.Objects[object] = { Instance = instance }
+ESP.ColorTable[object] = color
+ESP.TextTable[object] = text
 end
 ESP.RemoveESP = function(_, object)
 local entry = ESP.Objects[object]
 if not entry then return end
-if entry.Highlight then pcall(function() entry.Highlight:Destroy() end) end
-if entry.Label then pcall(function() entry.Label:Destroy() end) end
 ESP.Objects[object] = nil
+ESP.ColorTable[object] = nil
+ESP.TextTable[object] = nil
+if entry.Instance then Safe(function() entry.Instance:Remove() end) end
 end
 ESP.Unload = function()
 for object in pairs(ESP.Objects) do ESP.RemoveESP(ESP, object) end

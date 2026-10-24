@@ -2317,8 +2317,12 @@ DOORS_PROOFS = {
     "crouch spoof rewrites Humanoid.HipHeight": ("write", "Humanoid|HipHeight", 1),
     # The layer's own ESP library builds Highlight instances; the shared Reicht ESP
     # path is gone, so this is the only thing that can make one.
+    # The bridge no longer builds its own Highlight: it hands the object to the shared
+    # Reicht renderer, so the write lands on `ReichtESP`, not on a private
+    # `ReichtAbysallESP`. Keying the row on the old name made the check pass on a
+    # renderer that had already been replaced.
     "abysall ESP builds a highlight": ("made", "Highlight", 1),
-    "abysall ESP fills the highlight": ("write", "ReichtAbysallESP|FillColor", 1),
+    "abysall ESP fills the highlight": ("write", "ReichtESP|FillColor", 1),
     # Auto interact has to reach the executor's prompt primitive. Both rows were red
     # before: the layer threw on `Prompt.parent` for every prompt it touched, so the
     # trace recorded no fire at all while the attribute-write rows above stayed green.
