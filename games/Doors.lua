@@ -241,7 +241,6 @@ local HidingPlaceName = {
 }
 setmetatable(HidingPlaceName, { __index = function() return "Hiding Spot" end })
 local RBXGeneral = TextChatService.TextChannels.RBXGeneral
-local firePrompt = ExecutorSupport["fireproximityprompt"] and fireproximityprompt or _fireproximityprompt
 local camera = workspace.CurrentCamera
 local localPlayer = Players.LocalPlayer
 local playerGui = localPlayer.PlayerGui
@@ -709,6 +708,7 @@ local function has(name)
 return type(rawget(getfenv(0), name) or rawget(_G, name)) == "function"
 end
 local function passthrough(name)
+if not has(name) then return nil end
 return function(...)
 local fn = rawget(getfenv(0), name) or rawget(_G, name)
 if type(fn) ~= "function" then return nil end
@@ -2408,7 +2408,7 @@ for _, AutoLibraryPromptDescendant in ipairs(AutoLibraryLiveHintBook:GetDescenda
 if AutoLibraryPromptDescendant:IsA("ProximityPrompt")
 and AutoLibraryIsInRoom50(AutoLibraryPromptDescendant)
 and AutoLibraryIsActuallyInRoom50() then
-fireproximityprompt(AutoLibraryPromptDescendant)
+Functions.FirePrompt(AutoLibraryPromptDescendant)
 end
 end
 task.wait(0.05)
@@ -2450,7 +2450,7 @@ for _, AutoLibraryPromptDescendant in ipairs(AutoLibraryHintPaper:GetDescendants
 if AutoLibraryPromptDescendant:IsA("ProximityPrompt")
 and AutoLibraryIsInRoom50(AutoLibraryPromptDescendant)
 and AutoLibraryIsActuallyInRoom50() then
-fireproximityprompt(AutoLibraryPromptDescendant)
+Functions.FirePrompt(AutoLibraryPromptDescendant)
 end
 end
 task.wait(0.05)
@@ -2511,12 +2511,12 @@ if not AutoBreakerRoomObject then
 return
 end
 if AutoBreakerRoomObject:IsA("ProximityPrompt") then
-fireproximityprompt(AutoBreakerRoomObject)
+Functions.FirePrompt(AutoBreakerRoomObject)
 return
 end
 for _, AutoBreakerRoomDescendant in ipairs(AutoBreakerRoomObject:GetDescendants()) do
 if AutoBreakerRoomDescendant:IsA("ProximityPrompt") then
-fireproximityprompt(AutoBreakerRoomDescendant)
+Functions.FirePrompt(AutoBreakerRoomDescendant)
 end
 end
 end
@@ -2769,7 +2769,7 @@ Character:PivotTo(AutoHotelKeyObtain:GetPivot())
 end
 for _, AutoHotelDesc in ipairs(AutoHotelKeyObtain:GetDescendants()) do
 if AutoHotelDesc:IsA("ProximityPrompt") then
-fireproximityprompt(AutoHotelDesc)
+Functions.FirePrompt(AutoHotelDesc)
 end
 end
 task.wait(0.12)
@@ -2859,7 +2859,7 @@ AutoHotelHRP.CFrame = AutoHotelCF
 end
 for _, AutoHotelPrompt in ipairs(AutoHotelBook:GetDescendants()) do
 if AutoHotelPrompt:IsA("ProximityPrompt") then
-fireproximityprompt(AutoHotelPrompt)
+Functions.FirePrompt(AutoHotelPrompt)
 end
 end
 task.wait(0.08)
@@ -2887,7 +2887,7 @@ end
 end
 for _, AutoHotelPrompt in ipairs(AutoHotelPaper:GetDescendants()) do
 if AutoHotelPrompt:IsA("ProximityPrompt") then
-fireproximityprompt(AutoHotelPrompt)
+Functions.FirePrompt(AutoHotelPrompt)
 end
 end
 task.wait(0.08)
@@ -3498,7 +3498,7 @@ local DepositPart = Deposit:IsA("BasePart") and Deposit or Deposit:FindFirstChil
 if DepositPart and (HumanoidRootPart.Position - DepositPart.Position).Magnitude <= 10 then
 local Prompt = Deposit:FindFirstChildWhichIsA("ProximityPrompt", true)
 if Prompt then
-fireproximityprompt(Prompt)
+Functions.FirePrompt(Prompt)
 end
 end
 end
@@ -4184,8 +4184,8 @@ if HumanoidRootPart then
 HumanoidRootPart.CFrame = Model:GetPivot() + Vector3.new(0, 5, 0)
 for Index = 1, #Data.Prompts do
 local Prompt = Data.Prompts[Index]
-if Prompt.Parent and Prompt.Enabled and fireproximityprompt then
-fireproximityprompt(Prompt)
+if Prompt.Parent and Prompt.Enabled then
+Functions.FirePrompt(Prompt)
 end
 end
 if keypress and keyrelease then
@@ -4639,7 +4639,7 @@ return
 end
 local InfCrucifixPrompt = InfCrucifixDropped:FindFirstChildOfClass("ProximityPrompt")
 if InfCrucifixPrompt then
-fireproximityprompt(InfCrucifixPrompt)
+Functions.FirePrompt(InfCrucifixPrompt)
 end
 end)
 print ("hi")
@@ -7523,8 +7523,7 @@ local T1 = 0
 while not Shown and T1 < 5 do T1 += 1 task.wait() end
 local T2 = 0
 while not Fired and T2 < 5 do
-Prompt:InputHoldBegin()
-Prompt:InputHoldEnd()
+pcall(function() Prompt:InputHoldBegin() Prompt:InputHoldEnd() end)
 T2 += 1 task.wait()
 end
 Prompt.MaxActivationDistance = OldDist
@@ -7647,25 +7646,25 @@ if (Prompt.Parent.Name == "LibraryHintPaper" or Prompt.Parent.Name == "PickupIte
 if Prompt.Parent.Name == "AlarmClock" and Functions.HasItem("AlarmClock") then return end
 if Prompt.Parent.Name == "KeyObtainFake" or Prompt.Parent.Name == "TithingPlate" then return end
 if Prompt.Parent.Name == "StarBottle" then return end
-if Prompt.parent.Name == "ArchivesStorageBox" then return end
+if Prompt.Parent.Name == "ArchivesStorageBox" then return end
 if Prompt.Parent.Name == "Briefcase" then return end
 if Prompt.Name == "SinkPrompt" or Prompt.Parent.Name == "Faucet" then return end
 if Prompt.Parent.Name == "PaperPlanePickup" or Prompt.Parent.Name == "PaperPlane" then return end
 if Prompt.Name == "ManualOpenPrompt" or Prompt.Name == "EntryPrompt" then return end
-if Prompt.Parent.Parent.Name == "ArchivesLargePrinter" then return end
+if Prompt.Parent.Parent and Prompt.Parent.Parent.Name == "ArchivesLargePrinter" then return end
 if Prompt.Name == "TrashcanPrompt" then return end
 if Prompt.Parent.Name == "Keyboard" then return end
-if Prompt.Name == "CartPrompt" or Prompt.Parent.Parent.Name == "ArchivesOfficeChair" then return end
+if Prompt.Name == "CartPrompt" or (Prompt.Parent.Parent and Prompt.Parent.Parent.Name == "ArchivesOfficeChair") then return end
 if Prompt.Parent.Name == "ArchivesTerminal" then return end
 if Prompt.Name == "VendorPrompt" then return end
 if Prompt.Parent.Name == "SeatPart" or Prompt.Name == "SeatPrompt" then return end
 if Prompt.Parent.Name == "StairwellScrapper" then return end
 if Prompt.Name == "PortraitDupePrompt" or Prompt.Parent.Name == "MirrorTool" then return end
 if Prompt.Name == "LaptopPrompt" or Prompt.Parent.Name == "SecretLaptop" then return end
-if Prompt.Parent.Name == "StairwellFireAlarm" or Prompt.Parent.Parent.Name == "StairwellFireAlarm" then return end
-if Prompt.Parent.name == "CobblerFriendly" then return end
+if Prompt.Parent.Name == "StairwellFireAlarm" or (Prompt.Parent.Parent and Prompt.Parent.Parent.Name == "StairwellFireAlarm") then return end
+if Prompt.Parent.Name == "CobblerFriendly" then return end
 if Prompt.Parent.Name == "StairwellTerminal" then return end
-if Prompt.Parent.Parent.Name == "MeldChord" then return end
+if Prompt.Parent.Parent and Prompt.Parent.Parent.Name == "MeldChord" then return end
 Functions.FirePrompt(Prompt)
 TriggerDebounce = true
 if Floor == "OldHotel" then task.wait() end
@@ -7995,7 +7994,7 @@ shared.Hastelepasta = false
 end)
 do local MainUIDeadline = os.clock() + 5
 for _ = 1, 300 do if Globals.MainUI then break end task.wait() end end
-Functions.Notify({ Title = "Successfully loaded in " .. math.floor((tick() - LoadStart) * 1000) / 1000 .. " seconds." , Body = "Press '" .. tostring(Options.MenuKeybind.Value) .. "' to toggle the UI."})
+Functions.Notify({ Title = "Successfully loaded in " .. math.floor((tick() - LoadStart) * 1000) / 1000 .. " seconds." , Body = "Press '" .. tostring(Options.MenuKeybind and Options.MenuKeybind.Value or "RightShift") .. "' to toggle the UI."})
 end
 local function Run()
 __abysallLayer(Library, Window)

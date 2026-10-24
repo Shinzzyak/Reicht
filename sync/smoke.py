@@ -392,6 +392,14 @@ OBJ.m_FireServer = function(self, ...)
     bump(TRACE.fire, key)
 end
 OBJ.m_Invoke = function(self) return {} end
+-- ProximityPrompt:InputHoldBegin()/End() is the engine's own activation path, so a
+-- payload without fireproximityprompt fires prompts through it. The mock has to expose
+-- both and record the begin, or that fallback looks dead when it is only untested.
+OBJ.m_InputHoldBegin = function(self)
+    local p = rawget(self, "_p")
+    bump(TRACE.fire, tostring(type(p) == "table" and p.Name or "prompt") .. "|InputHoldBegin")
+end
+OBJ.m_InputHoldEnd = function(self) end
 -- Real executors expose fireproximityprompt. The payload probes the global
 -- (ExecutorSupport) and routes auto interact through that branch; with the global absent
 -- the harness could only ever exercise the distance-gated fallback, which is the path
@@ -402,6 +410,10 @@ fireproximityprompt = function(prompt)
     if okName and type(n) == "string" and n ~= "" then name = n end
     bump(TRACE.fire, name .. "|prompt")
 end
+-- REICHT_NO_FPP=1 drops the global, which is what an executor without the function
+-- looks like. Every capability gate in the payload then has to read false on its own,
+-- and the prompt fallback has to carry the feature.
+if __NO_FPP__ then fireproximityprompt = nil end
 -- Server functions answer with a table in the real game; leaving InvokeServer as a
 -- nil method made every profile read throw and a hub that guards on
 -- `type(profile) == "table"` then re-raised "profile unavailable". Shaped per remote
@@ -634,6 +646,15 @@ lp:SetAttribute("OfflineSeconds", 900)
 lp.PlayerGui = newInstance("PlayerGui", "PlayerGui")
 lp.PlayerScripts = newInstance("PlayerScripts", "PlayerScripts")
 players.LocalPlayer = lp
+-- The lock-prompt path demands a key in the bag and a room number that matches the
+-- prompt's ParentRoom before it fires anything. Plant both in the fallback run, or that
+-- run only proves the layer loads without the global -- not that it can still open a door.
+lp.Backpack = newInstance("Folder", "Backpack")
+lp.Backpack._p.Parent = lp
+local keyTool = newInstance("Tool", "Key")
+keyTool._p.Parent = lp.Backpack
+table.insert(lp.Backpack._p.Children, keyTool)
+lp:SetAttribute("CurrentRoom", 0)
 players.GetPlayers = function() return { lp } end
 players.GetPlayerFromCharacter = function() return lp end
 players.GetUserIdFromNameAsync = function() return 1 end
@@ -1917,55 +1938,63 @@ if LIB and type(LIB.Options) == "table" then
     -- force ExecutorSupport["fireproximityprompt"] = false, so every beat took the
     -- distance-gated fallback and the feature needed a manual press. Drive the switch and
     -- let the heartbeat pump below run it; the proof reads the recorded fire.
-    local autoInteract = LIB.Toggles.AutoInteract
-    if type(autoInteract) == "table" and type(autoInteract.SetValue) == "function" then
+    -- Widget ids are part of the contract. After the hub was reduced to one feature
+    -- source these three lookups pointed at host widgets that no longer exist, so every
+    -- drive below silently did nothing while the sweep still reported PASS. A missing
+    -- id now prints DRIVE-MISS and turns the proof table red.
+    local DRIVE_MISS = 0
+    local function widget(kind, id)
+        local group = LIB[kind]
+        local found = type(group) == "table" and group[id] or nil
+        if type(found) ~= "table" or type(found.SetValue) ~= "function" then
+            DRIVE_MISS += 1
+            _PRINT("DRIVE-MISS|" .. tostring(kind) .. "|" .. tostring(id))
+            return nil
+        end
+        return found
+    end
+
+    local autoInteract = widget("Toggles", "ab_AutoInteractToggle")
+    if autoInteract then
         try("auto interact on", function() autoInteract:SetValue(true) end)
     end
 
-    -- Item filter, both branches on the same prompt and the same tool: the list must
-    -- drop the key when it is not named, and act when it is.
-    local infOpt = LIB.Options.InfItemsFilter
-    local infToggle = LIB.Toggles.InfItems
-    local promptService = get("ProximityPromptService")
-    -- __index on a Permissive container fabricates a child for unknown names, so the
-    -- real prompt has to come from FindFirstChild or the handler gets a dummy.
-    local lockPrompt = lockModel:FindFirstChild("UnlockPrompt")
-    if type(infOpt) == "table" and type(infOpt.SetValue) == "function" and lockPrompt then
-        if infToggle and type(infToggle.SetValue) == "function" then
-            try("inf items on", function() infToggle:SetValue(true) end)
-        end
-        try("inf filter blocks unlisted tool", function()
-            infOpt:SetValue("lockpick")
-            promptService.PromptTriggered:Fire(lockPrompt, lp)
-        end)
-        try("inf filter allows listed tool", function()
-            infOpt:SetValue("candle")
-            promptService.PromptTriggered:Fire(lockPrompt, lp)
-        end)
+    -- Instant prompts is what makes every prompt reachable in one beat; drive it with
+    -- the reach multiplier off so the range gate is exercised, not bypassed.
+    local instantPrompts = widget("Toggles", "ab_InstantPrompts")
+    if instantPrompts then
+        try("instant prompts on", function() instantPrompts:SetValue(true) end)
     end
+    local ignoreList = widget("Options", "ab_AutoInteractIgnoreList")
+    if ignoreList then
+        try("auto interact ignore list", function() ignoreList:SetValue({}) end)
+    end
+    _PRINT("drive targets: " .. tostring(3 - DRIVE_MISS) .. "/3")
+    -- The layer drains one queued workspace object per RenderStepped frame, so the
+    -- frame budget has to clear the whole tree before any seeded prompt is registered.
+    _PRINT("ws descendants: " .. tostring(#ws:GetDescendants()))
 
     -- A prompt seeded before the payload loads never reaches PromptTable.GamePrompts --
     -- workspace.ChildAdded is the only entry point -- so the auto interact scan had
     -- nothing to fire here no matter what the switch said. Add one while the payload is
     -- live and park its part on the character.
     try("late unlock prompt", function()
-        lockPart.Position = Vector3.new(0, 0, 0)
+        -- Attach to the real Lock, never to DoorFake: the payload drops prompts whose
+        -- grandparent is DoorFake/FakeDoor, so a fake-door seed proves nothing about
+        -- auto interact -- it only proves the guard works.
+        local lockBody = newInstance("Part", "LockBody")
+        lockBody.Position = Vector3.new(0, 0, 0)
+        addChild(lockModel, lockBody)
         local latePrompt = newInstance("ProximityPrompt", "UnlockPrompt")
         latePrompt.MaxActivationDistance = 99999
         latePrompt.HoldDuration = 0
         latePrompt.Enabled = true
-        addChild(lockPart, latePrompt)
+        addChild(lockBody, latePrompt)
         -- The registration handler hangs off workspace.ChildAdded, and a prompt nested
         -- under a part never raises it; fire the signal the way the game would when the
         -- room streams the prompt in.
         ws.ChildAdded:Fire(latePrompt)
     end)
-
-    -- Language switch has to reach labels that already exist, not only new spawns.
-    local langOpt = LIB.Options.EntityLanguage
-    if type(langOpt) == "table" and type(langOpt.SetValue) == "function" then
-        try("entity language switch", function() langOpt:SetValue("ID") end)
-    end
 
     if type(LIB.Buttons) == "table" then
         local pressed = 0
@@ -2042,7 +2071,7 @@ for name, svc in pairs(services) do
         end
     end
 end
-for round = 1, 60 do
+for round = 1, __FRAMES__ do
     if MAIN and coroutine.status(MAIN) == "suspended" then
         local ok, err = coroutine.resume(MAIN)
         if not ok then table.insert(errors, "main -> " .. tostring(err)); MAIN = nil end
@@ -2236,6 +2265,13 @@ DOORS_PROOFS = {
     # path is gone, so this is the only thing that can make one.
     "abysall ESP builds a highlight": ("made", "Highlight", 1),
     "abysall ESP fills the highlight": ("write", "ReichtAbysallESP|FillColor", 1),
+    # Auto interact has to reach the executor's prompt primitive. Both rows were red
+    # before: the layer threw on `Prompt.parent` for every prompt it touched, so the
+    # trace recorded no fire at all while the attribute-write rows above stayed green.
+    # A green here means the whole chain ran -- heartbeat, distance gate, TriggerPrompt,
+    # drain loop, prompt fire -- not just that a prompt was seeded.
+    "auto interact fires the door lock prompt": ("fire", "UnlockPrompt|prompt", 1),
+    "auto interact fires the room prompt": ("fire", "RoomPrompt|prompt", 1),
 }
 
 
@@ -2429,6 +2465,10 @@ def main() -> int:
     lua_pairs = "{" + ", ".join('{"%s", "%s"}' % (f, n) for f, n in pairs) + "}"
     script = script.replace("__REMOTE_PAIRS__", lua_pairs)
     script = script.replace("__STRICT_WFC__", "true" if os.environ.get("REICHT_STRICT_WFC") == "1" else "false")
+    script = script.replace("__NO_FPP__", "true" if os.environ.get("REICHT_NO_FPP") == "1" else "false")
+    # Frame budget. A hub that drains a queue one object per frame needs more frames
+    # than the default before its later handlers are reachable at all.
+    script = script.replace("__FRAMES__", os.environ.get("REICHT_FRAMES", "60"))
     miss = [n.strip() for n in os.environ.get("REICHT_WFC_MISS", "").split(",") if n.strip()]
     script = script.replace("__WFC_MISS__", "{" + ", ".join('["%s"] = true' % n for n in miss) + "}")
     script = script.replace("__HTTP_BLOCK__", '"%s"' % os.environ.get("REICHT_UI_BLOCK", "").replace('"', ''))

@@ -292,7 +292,6 @@ setmetatable(HidingPlaceName, { __index = function() return "Hiding Spot" end })
 local RBXGeneral = TextChatService.TextChannels.RBXGeneral
 
 --// Exploits Variables \\--
-local firePrompt = ExecutorSupport["fireproximityprompt"] and fireproximityprompt or _fireproximityprompt
 
 --// Player Variables \\--
 local camera = workspace.CurrentCamera
@@ -876,7 +875,16 @@ do
     local function has(name)
         return type(rawget(getfenv(0), name) or rawget(_G, name)) == "function"
     end
+    -- A capability shim must read as absent when the capability is absent.
+    -- Abysall gates twenty features on CheckCompatability({...}), which only asks
+    -- whether Abysall.Environment[name] is non-nil. A shim that always handed back a
+    -- function made every gate pass on executors that have no such function, so the
+    -- layer took its fireproximityprompt path: Functions.FirePrompt became a silent
+    -- no-op (the real fallback below never ran) and the lock-prompt branch moved the
+    -- real door prompt into the hidden PromptContainer, leaving a client-side clone
+    -- on the door. Doors then could not be opened by hand even with the key in hand.
     local function passthrough(name)
+        if not has(name) then return nil end
         return function(...)
             local fn = rawget(getfenv(0), name) or rawget(_G, name)
             if type(fn) ~= "function" then return nil end
@@ -2851,7 +2859,7 @@ local ReichtWindow = Window
     							and AutoLibraryIsInRoom50(AutoLibraryPromptDescendant)
     							and AutoLibraryIsActuallyInRoom50() then
 
-    							fireproximityprompt(AutoLibraryPromptDescendant)
+    							Functions.FirePrompt(AutoLibraryPromptDescendant)
     						end
     					end
 
@@ -2907,7 +2915,7 @@ local ReichtWindow = Window
     							and AutoLibraryIsInRoom50(AutoLibraryPromptDescendant)
     							and AutoLibraryIsActuallyInRoom50() then
 
-    							fireproximityprompt(AutoLibraryPromptDescendant)
+    							Functions.FirePrompt(AutoLibraryPromptDescendant)
     						end
     					end
 
@@ -2983,13 +2991,13 @@ local ReichtWindow = Window
     			end
 
     			if AutoBreakerRoomObject:IsA("ProximityPrompt") then
-    				fireproximityprompt(AutoBreakerRoomObject)
+    				Functions.FirePrompt(AutoBreakerRoomObject)
     				return
     			end
 
     			for _, AutoBreakerRoomDescendant in ipairs(AutoBreakerRoomObject:GetDescendants()) do
     				if AutoBreakerRoomDescendant:IsA("ProximityPrompt") then
-    					fireproximityprompt(AutoBreakerRoomDescendant)
+    					Functions.FirePrompt(AutoBreakerRoomDescendant)
     				end
     			end
     		end
@@ -3309,7 +3317,7 @@ local ReichtWindow = Window
 
     		for _, AutoHotelDesc in ipairs(AutoHotelKeyObtain:GetDescendants()) do
     			if AutoHotelDesc:IsA("ProximityPrompt") then
-    				fireproximityprompt(AutoHotelDesc)
+    				Functions.FirePrompt(AutoHotelDesc)
     			end
     		end
 
@@ -3418,7 +3426,7 @@ local ReichtWindow = Window
 
     				for _, AutoHotelPrompt in ipairs(AutoHotelBook:GetDescendants()) do
     					if AutoHotelPrompt:IsA("ProximityPrompt") then
-    						fireproximityprompt(AutoHotelPrompt)
+    						Functions.FirePrompt(AutoHotelPrompt)
     					end
     				end
     				task.wait(0.08)
@@ -3450,7 +3458,7 @@ local ReichtWindow = Window
 
     				for _, AutoHotelPrompt in ipairs(AutoHotelPaper:GetDescendants()) do
     					if AutoHotelPrompt:IsA("ProximityPrompt") then
-    						fireproximityprompt(AutoHotelPrompt)
+    						Functions.FirePrompt(AutoHotelPrompt)
     					end
     				end
     				task.wait(0.08)
@@ -4126,7 +4134,7 @@ local ReichtWindow = Window
     				if DepositPart and (HumanoidRootPart.Position - DepositPart.Position).Magnitude <= 10 then
     					local Prompt = Deposit:FindFirstChildWhichIsA("ProximityPrompt", true)
     					if Prompt then
-    						fireproximityprompt(Prompt)
+    						Functions.FirePrompt(Prompt)
     					end
     				end
     			end
@@ -4938,8 +4946,8 @@ local ReichtWindow = Window
     						for Index = 1, #Data.Prompts do
     							local Prompt = Data.Prompts[Index]
 
-    							if Prompt.Parent and Prompt.Enabled and fireproximityprompt then
-    								fireproximityprompt(Prompt)
+    							if Prompt.Parent and Prompt.Enabled then
+    								Functions.FirePrompt(Prompt)
     							end
     						end
 
@@ -5470,7 +5478,7 @@ local ReichtWindow = Window
 
     				local InfCrucifixPrompt = InfCrucifixDropped:FindFirstChildOfClass("ProximityPrompt")
     				if InfCrucifixPrompt then
-    					fireproximityprompt(InfCrucifixPrompt)
+    					Functions.FirePrompt(InfCrucifixPrompt)
     				end
     			end)
     			print ("hi")
@@ -8689,8 +8697,11 @@ local ReichtWindow = Window
 
     			local T2 = 0
     			while not Fired and T2 < 5 do
-    				Prompt:InputHoldBegin()
-    				Prompt:InputHoldEnd()
+    				-- InputHoldBegin/End is the engine's own activation path, so it needs no
+    				-- executor function at all. pcall it: a prompt that refuses (destroyed,
+    				-- disabled by the server, hold interrupted) must not take the drain loop
+    				-- down with it, or every later prompt stops firing too.
+    				pcall(function() Prompt:InputHoldBegin() Prompt:InputHoldEnd() end)
     				T2 += 1 task.wait()
     			end
 
@@ -8833,15 +8844,15 @@ local ReichtWindow = Window
     	if Prompt.Parent.Name == "KeyObtainFake" or Prompt.Parent.Name == "TithingPlate" then return end
     	if Prompt.Parent.Name == "StarBottle" then return end
         -- archives
-    	if Prompt.parent.Name == "ArchivesStorageBox" then return end
+    	if Prompt.Parent.Name == "ArchivesStorageBox" then return end
     	if Prompt.Parent.Name == "Briefcase" then return end
     	if Prompt.Name == "SinkPrompt" or Prompt.Parent.Name == "Faucet" then return end
     	if Prompt.Parent.Name == "PaperPlanePickup" or Prompt.Parent.Name == "PaperPlane" then return end
     	if Prompt.Name == "ManualOpenPrompt" or Prompt.Name == "EntryPrompt" then return end
-    	if Prompt.Parent.Parent.Name == "ArchivesLargePrinter" then return end
+    	if Prompt.Parent.Parent and Prompt.Parent.Parent.Name == "ArchivesLargePrinter" then return end
     	if Prompt.Name == "TrashcanPrompt" then return end
     	if Prompt.Parent.Name == "Keyboard" then return end
-    	if Prompt.Name == "CartPrompt" or Prompt.Parent.Parent.Name == "ArchivesOfficeChair" then return end
+    	if Prompt.Name == "CartPrompt" or (Prompt.Parent.Parent and Prompt.Parent.Parent.Name == "ArchivesOfficeChair") then return end
     	if Prompt.Parent.Name == "ArchivesTerminal" then return end
     	if Prompt.Name == "VendorPrompt" then return end
         if Prompt.Parent.Name == "SeatPart" or Prompt.Name == "SeatPrompt" then return end
@@ -8851,10 +8862,10 @@ local ReichtWindow = Window
     	if Prompt.Parent.Name == "StairwellScrapper" then return end
     	if Prompt.Name == "PortraitDupePrompt" or Prompt.Parent.Name == "MirrorTool" then return end
     	if Prompt.Name == "LaptopPrompt" or Prompt.Parent.Name == "SecretLaptop" then return end
-    	if Prompt.Parent.Name == "StairwellFireAlarm" or Prompt.Parent.Parent.Name == "StairwellFireAlarm" then return end
-    	if Prompt.Parent.name == "CobblerFriendly" then return end
+    	if Prompt.Parent.Name == "StairwellFireAlarm" or (Prompt.Parent.Parent and Prompt.Parent.Parent.Name == "StairwellFireAlarm") then return end
+    	if Prompt.Parent.Name == "CobblerFriendly" then return end
     	if Prompt.Parent.Name == "StairwellTerminal" then return end
-    	if Prompt.Parent.Parent.Name == "MeldChord" then return end
+    	if Prompt.Parent.Parent and Prompt.Parent.Parent.Name == "MeldChord" then return end
 
     	Functions.FirePrompt(Prompt)
     	TriggerDebounce = true
@@ -9243,7 +9254,7 @@ local ReichtWindow = Window
        for _ = 1, 300 do if Globals.MainUI then break end task.wait() end end
 
     -- settings tab: Reicht ships its own
-    Functions.Notify({ Title = "Successfully loaded in " .. math.floor((tick() - LoadStart) * 1000) / 1000 .. " seconds." , Body = "Press '" .. tostring(Options.MenuKeybind.Value) .. "' to toggle the UI."})
+    Functions.Notify({ Title = "Successfully loaded in " .. math.floor((tick() - LoadStart) * 1000) / 1000 .. " seconds." , Body = "Press '" .. tostring(Options.MenuKeybind and Options.MenuKeybind.Value or "RightShift") .. "' to toggle the UI."})
 
 end
 -- ===== ABYSALL FEATURE LAYER END =====
