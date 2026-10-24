@@ -644,6 +644,18 @@ lp.Idled = newSignal()
 -- returns before it ever reaches the remote.
 lp:SetAttribute("OfflineSeconds", 900)
 lp.PlayerGui = newInstance("PlayerGui", "PlayerGui")
+-- DOORS parks its HUD under PlayerGui.MainUI and its character setup blocks on that
+-- folder before it hands out Humanoid -- so a missing MainUI silences speed, crouch and
+-- auto interact all at once. The payload only ever got past that block because
+-- WaitForChild on a permissive stand-in fabricated the child; now that lookups no longer
+-- fabricate, the real folder has to exist on the PlayerGui the payload captures. (A
+-- later block replaces PlayerGui entirely, which is too late: the payload has already
+-- cached this instance.)
+local bootMainUI = newInstance("Folder", "MainUI")
+bootMainUI._p.ClassName = "Folder"
+bootMainUI._p.Permissive = true
+table.insert(rawget(lp.PlayerGui, "_p").Children, bootMainUI)
+bootMainUI._p.Parent = lp.PlayerGui
 lp.PlayerScripts = newInstance("PlayerScripts", "PlayerScripts")
 players.LocalPlayer = lp
 -- The lock-prompt path demands a key in the bag and a room number that matches the
@@ -718,6 +730,10 @@ addRemote("UseEventModule", bricksFolder)
 local remotesFolder = addChild(rs, newInstance("Folder", "RemotesFolder"))
 remotesFolder.Permissive = true
 addRemote("DropItem", remotesFolder)
+-- Knob farm drives these two by name. Without real remotes the folder's Permissive
+-- index hands back a fabricated child and the trace cannot tell a claim from a no-op.
+addRemote("Statistics", remotesFolder)
+addRemote("PlayAgain", remotesFolder)
 
 -- Ride A Pet resolves every remote through GameLib.Remote, which walks
 -- ReplicatedStorage.Remotes.Game.<name>, then Remotes.Reusable.<name>, then
@@ -1859,7 +1875,6 @@ local function valueFor(kind, spec)
 end
 local TRACE_WIDGETS = rawget(_G, "SMOKE_TRACE")
 local fired = 0
-
 -- Real-library mode: drive every option the shipped ui.lua registered. The mock
 -- recorder only sees widgets built through the stand-in library.
 local LIB = CAPTURED.Library
@@ -1869,7 +1884,15 @@ if LIB and type(LIB.Options) == "table" then
     -- that a later widget assumes the earlier one ran (profile fetch, config load).
     -- Sorting the ids drove them out of that order and surfaced mock gaps as crashes.
     local ids = {}
-    for id in pairs(LIB.Options) do table.insert(ids, id) end
+    -- Destructive options are driven last. The knob farm kills the character, and every
+    -- Humanoid-driven handler that runs afterwards sees a dead character and does
+    -- nothing -- so driving it mid-pass made the whole sweep depend on pairs() order,
+    -- which is not stable between runs. Deferring it keeps the pass deterministic.
+    local deferred = {}
+    for id in pairs(LIB.Options) do
+        if id == "ab_KnobFarm" then table.insert(deferred, id) else table.insert(ids, id) end
+    end
+    for _, id in ipairs(deferred) do table.insert(ids, id) end
     for _, id in ipairs(ids) do
         local opt = LIB.Options[id]
         total += 1
@@ -2010,6 +2033,25 @@ if LIB and type(LIB.Options) == "table" then
             _PRINT(string.format("BTN|%s|%s", tostring(info.Text or info.Title or "?"),
                 tostring(type(info.Func or info.Callback) == "function")))
         end
+    end
+
+    -- Knob farm needs two things from the harness before its cycle can run: the switch,
+    -- and the Start button (the switch alone only prints a hint). Both are driven here so
+    -- the proof reads a real Statistics/PlayAgain fire instead of an untested code path.
+    local knobFarm = widget("Toggles", "ab_KnobFarm")
+    if knobFarm then
+        try("knob farm on", function() knobFarm:SetValue(true) end)
+    end
+    do
+        local started = 0
+        for _, button in ipairs(LIB.Buttons or {}) do
+            local info = button.Info or {}
+            if (info.Text or info.Title) == "Start Knob Farm" and type(button.Click) == "function" then
+                try("start knob farm", function() button:Click() end)
+                started += 1
+            end
+        end
+        _PRINT("knob farm start button: " .. tostring(started))
     end
     local wtabs = (type(LIB.Tabs) == "table" and LIB.Tabs)
         or (LIB.Window and type(LIB.Window.Tabs) == "table" and LIB.Window.Tabs)
@@ -2272,6 +2314,11 @@ DOORS_PROOFS = {
     # drain loop, prompt fire -- not just that a prompt was seeded.
     "auto interact fires the door lock prompt": ("fire", "UnlockPrompt|prompt", 1),
     "auto interact fires the room prompt": ("fire", "RoomPrompt|prompt", 1),
+    # Knob farm: the claim and the re-queue are the two remotes the game rewards. The old
+    # body fired neither, so a green here is the difference between "the toggle lights up"
+    # and "the cycle actually pays out".
+    "knob farm claims the room reward": ("fire", "Statistics|nil", 1),
+    "knob farm asks for the next run": ("fire", "PlayAgain|nil", 1),
 }
 
 

@@ -335,11 +335,27 @@ local collisionClone
 local velocityLimiter
 
 --// DOORS Variables \\\--
-local entityModules = ReplicatedStorage:WaitForChild("ClientModules", 3) or Inert("Folder", "ClientModules")
-entityModules = entityModules:WaitForChild("EntityModules", 3) or Inert("Folder", "EntityModules")
+-- A three-second deadline turned a slow mobile load into a "missing object" report,
+-- because these folders really do exist and only arrive late. Poll instead of giving
+-- up: the placeholder is for an object that never shows, not for one that is late.
+-- Attempt-capped, never clock-capped: a tick() deadline turns into a poll storm on any
+-- environment whose clock does not advance with task.wait, and that storm blocks the
+-- character setup every Humanoid feature depends on. Sixteen attempts at a quarter second
+-- is four seconds of patience -- enough for a slow mobile join, short enough that the menu
+-- is not held hostage by a folder that is never coming.
+local function WaitChild(parent, name)
+    if not parent then return nil end
+    local found = parent:FindFirstChild(name)
+    for _ = 1, 16 do
+        if found then break end
+        task.wait(0.25)
+        found = parent:FindFirstChild(name)
+    end
+    return found
+end
 
-local gameData = ReplicatedStorage:WaitForChild("GameData", 3) or Inert("Folder", "GameData")
-local floor = gameData:WaitForChild("Floor", 3) or Inert("StringValue", "Floor")
+local gameData = WaitChild(ReplicatedStorage, "GameData") or Inert("Folder", "GameData")
+local floor = WaitChild(gameData, "Floor") or Inert("StringValue", "Floor")
 
 
 local isMines = floor.Value == "Mines"
@@ -351,11 +367,11 @@ local isFools = floor.Value == "Fools"
 --// Player DOORS Variables \\\--
 local currentRoom = localPlayer:GetAttribute("CurrentRoom") or 0
 
-local mainUI = playerGui:WaitForChild("MainUI", 3) or Inert("Folder", "MainUI")
-local mainGame = mainUI:WaitForChild("Initiator", 3) or Inert("Folder", "Initiator")
-mainGame = mainGame:WaitForChild("Main_Game", 3) or Inert("ModuleScript", "Main_Game")
--- Only require something that really is a module: an inert placeholder would raise
--- and take the whole script down with it.
+-- ClientModules/EntityModules/MainUI/Initiator/Main_Game used to be resolved here and
+-- then never read by anything: they were the leftovers of the stripped host. They were
+-- also the only reason the load path announced "missing game objects" on a slow join,
+-- because each wait gave up after three seconds. Removed rather than re-timed -- an
+-- object nothing consumes is not worth waiting for.
 
 --// Other Variables \\--
 
@@ -422,7 +438,10 @@ end
 -- Say out loud what the live game did not hand us. Silence here is what made the
 -- first report impossible to diagnose: no menu, no error, nothing to read.
 if #Missing > 0 then
-    Alert("Missing game objects: " .. table.concat(Missing, ", ") .. " - menu still opens, features that need them stay off.")
+    -- A console line, not an Alert popup: the report should stay diagnosable without
+    -- interrupting execution or covering the game.
+    warn("[Reicht] missing game objects: " .. table.concat(Missing, ", ") ..
+        " - menu still opens, features that need them stay off.")
 end
 
 -- Three routes to the same file plus a disk cache. A single URL is one rate limit
@@ -7019,23 +7038,43 @@ local ReichtWindow = Window
 
     Globals.KnobFarmActive = false
     Globals.KnobFarmStarted = false
+    -- Knob farm has to do what the run actually rewards, in the order the game expects:
+    -- claim the room reward, die, wait for Alive to come back, then ask for a new run.
+    -- The old body claimed nothing, waited for Alive to be *true* instead of waiting for
+    -- it to come back (it was still true on the frame the kill was sent, so the wait
+    -- broke instantly), and never fired PlayAgain -- so the character just lay dead on
+    -- the death screen. That is the "knob farm mati" report.
     Connections.KnobFarm = Services.RunService.Heartbeat:Connect(function()
     	if Toggles.ab_KnobFarm.Value and Globals.KnobFarmStarted then
     		if not Globals.KnobFarmActive then
     			Globals.KnobFarmActive = true
-    			if Functions.CheckCompatability({"replicatesignal"}) then
-    				Abysall.Environment.replicatesignal(LocalPlayer.Kill)
-    			else
-    				LocalPlayer.Character.Humanoid.Health = 0
-    			end
-    			while task.wait() do
-    				if LocalPlayer:GetAttribute("Alive") then
-    					break
+    			-- 1. claim. Guarded: this remote is not in every remotes layout.
+    			pcall(function()
+    				if RemotesFolder and RemotesFolder:FindFirstChild("Statistics") then
+    					RemotesFolder.Statistics:FireServer()
     				end
+    			end)
+    			-- 2. die.
+    			if Functions.CheckCompatability({"replicatesignal"}) then
+    				pcall(Abysall.Environment.replicatesignal, LocalPlayer.Kill)
     			end
-    			RemotesFolder.Statistics:FireServer()
-    			task.wait(0.25)
-    			Globals.KnobFarmActive = false
+    			pcall(function() LocalPlayer.Character.Humanoid.Health = 0 end)
+    			-- 3. wait for Alive to come back, then 4. ask for the next run. Attempt-capped
+    			-- on purpose: a long clock budget here polls for seconds and starves every other
+    			-- frame-driven feature. A missed flip costs one cycle; the loop retries.
+    			task.spawn(function()
+    				for _ = 1, 30 do
+    					if LocalPlayer:GetAttribute("Alive") == true then break end
+    					task.wait(0.15)
+    				end
+    				pcall(function()
+    					if RemotesFolder and RemotesFolder:FindFirstChild("PlayAgain") then
+    						RemotesFolder.PlayAgain:FireServer()
+    					end
+    				end)
+    				task.wait(0.5)
+    				Globals.KnobFarmActive = false
+    			end)
     		end
     	end
     end)

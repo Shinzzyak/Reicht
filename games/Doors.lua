@@ -268,18 +268,23 @@ local rootPart: BasePart
 local collision
 local collisionClone
 local velocityLimiter
-local entityModules = ReplicatedStorage:WaitForChild("ClientModules", 3) or Inert("Folder", "ClientModules")
-entityModules = entityModules:WaitForChild("EntityModules", 3) or Inert("Folder", "EntityModules")
-local gameData = ReplicatedStorage:WaitForChild("GameData", 3) or Inert("Folder", "GameData")
-local floor = gameData:WaitForChild("Floor", 3) or Inert("StringValue", "Floor")
+local function WaitChild(parent, name)
+if not parent then return nil end
+local found = parent:FindFirstChild(name)
+for _ = 1, 16 do
+if found then break end
+task.wait(0.25)
+found = parent:FindFirstChild(name)
+end
+return found
+end
+local gameData = WaitChild(ReplicatedStorage, "GameData") or Inert("Folder", "GameData")
+local floor = WaitChild(gameData, "Floor") or Inert("StringValue", "Floor")
 local isMines = floor.Value == "Mines"
 local isRooms = floor.Value == "Rooms"
 local isBackdoor = floor.Value == "Backdoor"
 local isFools = floor.Value == "Fools"
 local currentRoom = localPlayer:GetAttribute("CurrentRoom") or 0
-local mainUI = playerGui:WaitForChild("MainUI", 3) or Inert("Folder", "MainUI")
-local mainGame = mainUI:WaitForChild("Initiator", 3) or Inert("Folder", "Initiator")
-mainGame = mainGame:WaitForChild("Main_Game", 3) or Inert("ModuleScript", "Main_Game")
 type ESP = {
 Color: Color3,
 IsEntity: boolean,
@@ -324,7 +329,8 @@ if ok then return value end
 return nil
 end
 if #Missing > 0 then
-Alert("Missing game objects: " .. table.concat(Missing, ", ") .. " - menu still opens, features that need them stay off.")
+warn("[Reicht] missing game objects: " .. table.concat(Missing, ", ") ..
+" - menu still opens, features that need them stay off.")
 end
 local UI_URLS = {
 "https://raw.githubusercontent.com/Shinzzyak/Reicht/refs/heads/main/ui.lua",
@@ -6003,19 +6009,28 @@ Connections.KnobFarm = Services.RunService.Heartbeat:Connect(function()
 if Toggles.ab_KnobFarm.Value and Globals.KnobFarmStarted then
 if not Globals.KnobFarmActive then
 Globals.KnobFarmActive = true
-if Functions.CheckCompatability({"replicatesignal"}) then
-Abysall.Environment.replicatesignal(LocalPlayer.Kill)
-else
-LocalPlayer.Character.Humanoid.Health = 0
-end
-while task.wait() do
-if LocalPlayer:GetAttribute("Alive") then
-break
-end
-end
+pcall(function()
+if RemotesFolder and RemotesFolder:FindFirstChild("Statistics") then
 RemotesFolder.Statistics:FireServer()
-task.wait(0.25)
+end
+end)
+if Functions.CheckCompatability({"replicatesignal"}) then
+pcall(Abysall.Environment.replicatesignal, LocalPlayer.Kill)
+end
+pcall(function() LocalPlayer.Character.Humanoid.Health = 0 end)
+task.spawn(function()
+for _ = 1, 30 do
+if LocalPlayer:GetAttribute("Alive") == true then break end
+task.wait(0.15)
+end
+pcall(function()
+if RemotesFolder and RemotesFolder:FindFirstChild("PlayAgain") then
+RemotesFolder.PlayAgain:FireServer()
+end
+end)
+task.wait(0.5)
 Globals.KnobFarmActive = false
+end)
 end
 end
 end)
