@@ -2143,7 +2143,6 @@ Toggles.ab_SkipSeekHotel:OnChanged(function(Value)
 if not Value then return end
 if Floor ~= "Hotel" then return end
 task.spawn(function()
-print("started")
 local currentRooms
 repeat
 if not Toggles.ab_SkipSeekHotel.Value or Floor ~= "Hotel" then
@@ -2152,11 +2151,9 @@ end
 currentRooms = workspace:FindFirstChild("CurrentRooms")
 task.wait()
 until currentRooms
-print("got currentrooms")
 local lastTriggerRoom = nil
 while Toggles.ab_SkipSeekHotel.Value and Floor == "Hotel" do
 local triggerRoom = nil
-print("waiting for trigger")
 repeat
 if not Toggles.ab_SkipSeekHotel.Value or Floor ~= "Hotel" then
 return
@@ -2169,7 +2166,6 @@ if room then
 local trigger = room:WaitForChild("TriggerEventCollision", 0.5)
 if trigger then
 triggerRoom = currentRoomNum
-print("found trigger in", triggerRoom)
 end
 end
 end
@@ -2179,37 +2175,46 @@ lastTriggerRoom = triggerRoom
 local roomNum = triggerRoom
 while Toggles.ab_SkipSeekHotel.Value and Floor == "Hotel" do
 roomNum += 1
-print("looking for room", roomNum)
 local room
+local roomTries = 0
 repeat
 if not Toggles.ab_SkipSeekHotel.Value or Floor ~= "Hotel" then
 return
 end
 currentRooms = workspace:FindFirstChild("CurrentRooms")
 room = currentRooms and currentRooms:FindFirstChild(tostring(roomNum))
+roomTries += 1
 task.wait()
-until room
-print("found room", roomNum)
+until room or roomTries > 600
+if not room then
+warn("[Reicht] auto hotel: room " .. tostring(roomNum) .. " never loaded, stopping")
+return
+end
 local hasSeekArm = false
 local assets = room:FindFirstChild("Assets")
 if assets then
 for _, child in ipairs(assets:GetChildren()) do
 if child.Name == "Seek_Arm" then
 hasSeekArm = true
-print("found seek arm")
 break
 end
 end
 end
 local door
+local doorTries = 0
 repeat
 if not Toggles.ab_SkipSeekHotel.Value or Floor ~= "Hotel" then
 return
 end
 door = room:FindFirstChild("Door", true)
+doorTries += 1
 task.wait()
-until door
-print("found door, teleporting")
+until door or doorTries > 600
+if not door then
+warn("[Reicht] auto hotel: room " .. tostring(roomNum) .. " has no door, stopping")
+return
+end
+local doorOpenTries = 0
 repeat
 if not Toggles.ab_SkipSeekHotel.Value or Floor ~= "Hotel" then
 return
@@ -2217,14 +2222,13 @@ end
 if Character then
 Character:PivotTo(door:GetPivot())
 end
+doorOpenTries += 1
 task.wait()
-until door:GetAttribute("Opened") == true
-print("door opened")
+until door:GetAttribute("Opened") == true or doorOpenTries > 600
 if hasSeekArm then
 if not Character then
 return
 end
-print("voiding")
 local voidCFrame = Character:GetPivot() + Vector3.new(0, -2500, 0)
 task.wait(0.25)
 for _ = 1, 20 do
@@ -2241,7 +2245,6 @@ for _ = 1, 10 do
 Character:PivotTo(voidCFrame)
 task.wait()
 end
-print("done voiding")
 break
 end
 end

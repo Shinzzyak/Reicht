@@ -159,6 +159,12 @@ OBJ.__index = function(self, k)
         end
         return def
     end
+    -- Structural Instance members must never be fabricated. `Parent` especially:
+    -- the permissive index used to hand back a brand-new Folder named "Parent" for
+    -- every read, so any `while o and not o:IsA("Model") do o = o.Parent end` walk
+    -- (Doors' GetHidingSpotModel) became an infinite chain that never yields -- the
+    -- run hung at 100% CPU with zero output and looked like a payload deadlock.
+    if k == "Parent" or k == "ClassName" then return nil end
     if rawget(self, "_p").Permissive and not STRICT_WFC then
         -- Detached on purpose: a real container does not grow a child just
         -- because someone read a dot. Caching here made repeated existence
@@ -2312,8 +2318,8 @@ DOORS_PROOFS = {
     # trace recorded no fire at all while the attribute-write rows above stayed green.
     # A green here means the whole chain ran -- heartbeat, distance gate, TriggerPrompt,
     # drain loop, prompt fire -- not just that a prompt was seeded.
-    "auto interact fires the door lock prompt": ("fire", "UnlockPrompt|prompt", 1),
-    "auto interact fires the room prompt": ("fire", "RoomPrompt|prompt", 1),
+    "auto interact fires the door lock prompt": ("fire", ["UnlockPrompt|prompt", "UnlockPrompt|InputHoldBegin"], 1),
+    "auto interact fires the room prompt": ("fire", ["RoomPrompt|prompt", "RoomPrompt|InputHoldBegin"], 1),
     # Knob farm: the claim and the re-queue are the two remotes the game rewards. The old
     # body fired neither, so a green here is the difference between "the toggle lights up"
     # and "the cycle actually pays out".
@@ -2467,7 +2473,12 @@ def check_proofs(out: str, table: dict | None = None) -> tuple[int, int]:
             failed += 1
             print(f"PROOF|FAIL|{label}|unknown trace kind {kind!r}")
             continue
-        got = bucket.get(key, 0)
+        # The key may be a list of acceptable routes. A prompt counts as fired whether
+        # the executor global carried it (`Name|prompt`) or the payload fell back to the
+        # engine's own InputHoldBegin path (`Name|InputHoldBegin`). Pinning the proof to
+        # one route reported a live feature as dead whenever the other route ran.
+        keys = key if isinstance(key, list) else [key]
+        got = sum(bucket.get(k, 0) for k in keys)
         ok = got >= need and (most is None or got <= most)
         passed += ok
         failed += not ok

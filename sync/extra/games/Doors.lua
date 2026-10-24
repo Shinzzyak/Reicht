@@ -2526,7 +2526,6 @@ local ReichtWindow = Window
     	if Floor ~= "Hotel" then return end
 
     	task.spawn(function()
-    		print("started")
 
     		local currentRooms
 
@@ -2538,14 +2537,12 @@ local ReichtWindow = Window
     			task.wait()
     		until currentRooms
 
-    		print("got currentrooms")
 
     		local lastTriggerRoom = nil
 
     		while Toggles.ab_SkipSeekHotel.Value and Floor == "Hotel" do
     			local triggerRoom = nil
 
-    			print("waiting for trigger")
 
     			repeat
     				if not Toggles.ab_SkipSeekHotel.Value or Floor ~= "Hotel" then
@@ -2561,7 +2558,6 @@ local ReichtWindow = Window
     						local trigger = room:WaitForChild("TriggerEventCollision", 0.5)
     						if trigger then
     							triggerRoom = currentRoomNum
-    							print("found trigger in", triggerRoom)
     						end
     					end
     				end
@@ -2575,19 +2571,23 @@ local ReichtWindow = Window
 
     			while Toggles.ab_SkipSeekHotel.Value and Floor == "Hotel" do
     				roomNum += 1
-    				print("looking for room", roomNum)
 
     				local room
+    				local roomTries = 0
     				repeat
     					if not Toggles.ab_SkipSeekHotel.Value or Floor ~= "Hotel" then
     						return
     					end
     					currentRooms = workspace:FindFirstChild("CurrentRooms")
     					room = currentRooms and currentRooms:FindFirstChild(tostring(roomNum))
+    					roomTries += 1
     					task.wait()
-    				until room
+    				until room or roomTries > 600
+    				if not room then
+    					warn("[Reicht] auto hotel: room " .. tostring(roomNum) .. " never loaded, stopping")
+    					return
+    				end
 
-    				print("found room", roomNum)
 
     				local hasSeekArm = false
     				local assets = room:FindFirstChild("Assets")
@@ -2595,23 +2595,28 @@ local ReichtWindow = Window
     					for _, child in ipairs(assets:GetChildren()) do
     						if child.Name == "Seek_Arm" then
     							hasSeekArm = true
-    							print("found seek arm")
     							break
     						end
     					end
     				end
 
     				local door
+    				local doorTries = 0
     				repeat
     					if not Toggles.ab_SkipSeekHotel.Value or Floor ~= "Hotel" then
     						return
     					end
     					door = room:FindFirstChild("Door", true)
+    					doorTries += 1
     					task.wait()
-    				until door
+    				until door or doorTries > 600
+    				if not door then
+    					warn("[Reicht] auto hotel: room " .. tostring(roomNum) .. " has no door, stopping")
+    					return
+    				end
 
-    				print("found door, teleporting")
 
+    				local doorOpenTries = 0
     				repeat
     					if not Toggles.ab_SkipSeekHotel.Value or Floor ~= "Hotel" then
     						return
@@ -2619,17 +2624,16 @@ local ReichtWindow = Window
     					if Character then
     						Character:PivotTo(door:GetPivot())
     					end
+    					doorOpenTries += 1
     					task.wait()
-    				until door:GetAttribute("Opened") == true
+    				until door:GetAttribute("Opened") == true or doorOpenTries > 600
 
-    				print("door opened")
 
     				if hasSeekArm then
     					if not Character then
     						return
     					end
 
-    					print("voiding")
 
     					local voidCFrame = Character:GetPivot() + Vector3.new(0, -2500, 0)
 
@@ -2654,7 +2658,6 @@ local ReichtWindow = Window
     						task.wait()
     					end
 
-    					print("done voiding")
     					break
     				end
     			end
