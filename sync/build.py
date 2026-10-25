@@ -779,6 +779,51 @@ def strip_stats_ui(text):
     )
 
 
+EMBED_RE = re.compile(r'REICHT_EMBED\("([^"]+)"\)')
+
+
+def embed_payloads(stage):
+    """Inline vendored upstream scripts into the artifacts that fall back to them.
+
+    A verbatim layer that fetches from GitHub is only verbatim while GitHub answers.
+    The author's file is vendored under `upstream/ref/`, so the build pastes it into the
+    runner as one long string and the game keeps working when the upstream repo is gone,
+    a route is blocked, or the player is offline.
+
+    Runs AFTER minify on purpose: the payload is a binary-ish blob and must never pass
+    through a line stripper. The compile gate still covers the result.
+    """
+    ref_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "upstream", "ref")
+    games = os.path.join(stage, "games")
+    embedded = []
+    for entry in sorted(os.listdir(games)):
+        if not entry.endswith(".lua"):
+            continue
+        path = os.path.join(games, entry)
+        with open(path, encoding="utf-8", errors="surrogateescape") as handle:
+            text = handle.read()
+        if "REICHT_EMBED(" not in text:
+            continue
+
+        def repl(match):
+            name = match.group(1)
+            ref = os.path.join(ref_dir, name)
+            if not os.path.isfile(ref):
+                raise SystemExit(f"{entry}: embedded payload missing: {ref}")
+            with open(ref, encoding="utf-8", errors="surrogateescape") as handle:
+                payload = handle.read()
+            level = 0
+            while ("]" + "=" * level + "]") in payload:
+                level += 1
+            embedded.append((entry, name, len(payload)))
+            return "[" + "=" * level + "[" + payload + "]" + "=" * level + "]"
+
+        text = EMBED_RE.sub(repl, text)
+        with open(path, "w", encoding="utf-8", errors="surrogateescape") as handle:
+            handle.write(text)
+    return embedded
+
+
 def extra_games():
     """Games authored in this repo: `extra/games.json` maps script stem -> {id, name}."""
     root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "extra")
@@ -904,6 +949,11 @@ def main():
         elif path.endswith(".lua") and os.path.isfile(path):
             saved += shrink(minify, path)
     print(f"minified: saved {saved} bytes")
+
+    # Standalone layer: paste the vendored upstream scripts into the artifact so a dead
+    # route costs freshness, not the feature. After minify, before the compile gate.
+    for entry, ref_name, size in embed_payloads(stage):
+        print(f"  embedded {ref_name} -> {entry} ({size} bytes)")
 
     # Compile gate over the whole staged tree.
     targets = [os.path.join(stage, "loader.lua"), os.path.join(stage, "ui.lua")]

@@ -2378,6 +2378,7 @@ FEATURE_PROOFS = {
     # Draconic's own file is fetched and handed to loadstring untouched; the marker
     # only lands when the fetch cleared the size gate, so this fails on a dead URL.
     "draconic upstream loads the author's script": ("write", "DraconicUpstream|SetAttribute|Loaded=true", 1),
+    "draconic standalone copy is embedded": ("write", "DraconicUpstream|SetAttribute|EmbeddedReady=true", 1),
 }
 
 
@@ -2414,6 +2415,7 @@ DOORS_PROOFS = {
     # The transplant can drift; this row proves the verbatim path still works, so
     # "identical to Abysall" is available even when a port lags behind upstream.
     "abysall upstream loads the author's script": ("write", "AbysallUpstream|SetAttribute|Loaded=true", 1),
+    "abysall standalone copy is embedded": ("write", "AbysallUpstream|SetAttribute|EmbeddedReady=true", 1),
     # Knob farm: the claim and the re-queue are the two remotes the game rewards. The old
     # body fired neither, so a green here is the difference between "the toggle lights up"
     # and "the cycle actually pays out".

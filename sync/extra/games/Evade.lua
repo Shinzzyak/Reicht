@@ -4624,12 +4624,23 @@ DConfiguration.Visual.DraconicUpstream = DConfiguration.Visual.DraconicUpstream 
     Running = false
 }
 
+-- Standalone copy: build.py swaps this call for Draconic's own file as one long string.
+-- The file is wearedevs-obfuscated, so it cannot be ported by hand -- but it does not
+-- need to be, it only needs to be present. Evade keeps its upstream layer when the
+-- Draconic repo is gone or a route is blocked.
+local DraconicEmbedded = REICHT_EMBED("draconic_evade.lua")
+
 function DFunctions.RunDraconicUpstream()
     local U = DConfiguration.Visual.DraconicUpstream
     if U.Running then return false, "already running" end
-    local ok, src = pcall(function() return game:HttpGet(U.Url) end)
-    if not ok or type(src) ~= "string" or #src < 1024 then
-        return false, "fetch failed"
+    local src, origin
+    local ok, fetched = pcall(function() return game:HttpGet(U.Url) end)
+    if ok and type(fetched) == "string" and #fetched >= 1024 then
+        src, origin = fetched, "network"
+    elseif type(DraconicEmbedded) == "string" and #DraconicEmbedded >= 1024 then
+        src, origin = DraconicEmbedded, "embedded"
+    else
+        return false, "fetch failed and the embedded copy is missing"
     end
     local chunk, compileErr = loadstring(src)
     if not chunk then return false, tostring(compileErr) end
@@ -4640,6 +4651,9 @@ function DFunctions.RunDraconicUpstream()
     marker.Name = "DraconicUpstream"
     marker:SetAttribute("Loaded", true)
     marker:SetAttribute("Bytes", #src)
+    marker:SetAttribute("Source", origin)
+    marker:SetAttribute("EmbeddedReady", type(DraconicEmbedded) == "string" and #DraconicEmbedded >= 1024)
+    marker:SetAttribute("EmbeddedBytes", type(DraconicEmbedded) == "string" and #DraconicEmbedded or 0)
     task.spawn(function()
         local ran, err = pcall(chunk)
         if not ran then

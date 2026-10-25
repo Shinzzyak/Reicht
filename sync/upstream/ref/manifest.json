@@ -1,0 +1,16 @@
+{
+  "abysall_doors.luau": {
+    "url": "https://raw.githubusercontent.com/therealcookiemonsterof1966/AbysallContinued/main/Games/Doors/Main.luau",
+    "bytes": 316104,
+    "md5": "2aade615c4d587d69ac3c55e33097c60",
+    "note": "author's own Doors script, vendored byte-for-byte so the verbatim path works offline"
+  },
+  "draconic_evade.lua": {
+    "url": "https://raw.githubusercontent.com/Unknownproooolucky/Draconic-Hub-X/refs/heads/main/files/Evade/Overhaul.lua",
+    "commit": "e499b78f",
+    "bytes": 409777,
+    "md5": "c9e04664b6b2d683ee2ed20ec52abd0d",
+    "obfuscator": "wearedevs v1.0.0",
+    "note": "author's own Evade script (v3.5 Beta payload), vendored byte-for-byte so the verbatim path works offline"
+  }
+}
