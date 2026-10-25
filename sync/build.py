@@ -945,7 +945,10 @@ def extra_games():
         # one universe (a rebrand leaves the old one alive), so one script answers
         # to every id it was published under.
         for gid in entry.get("ids") or [entry["id"]]:
-            table[int(gid)] = entry["name"]
+            # One id, one script. An alternate build of the same game (a clean-room
+            # rewrite, say) still ships as a file, but the loader keeps the first
+            # entry listed in games.json so auto-load stays deterministic.
+            table.setdefault(int(gid), entry["name"])
     for stem in data:
         if not os.path.isfile(os.path.join(root, "games", stem + ".lua")):
             raise SystemExit(f"extra/games.json lists {stem} but extra/games/{stem}.lua is missing")
