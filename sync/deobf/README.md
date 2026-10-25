@@ -83,3 +83,24 @@ Searched for existing WeAreDevs / generic Lua deobfuscators before writing code:
 
 Hence the in-repo decoder: it is the only implementation that decodes this pool, and the
 self-test proves it against a string the payload itself contains.
+
+## Prometheus-DeobfuscatorV2 — actually run, measured
+
+Cloned and executed against this payload. It needs its bundled `Prometheus` sources on
+`LUA_PATH`, otherwise it dies on `module 'prometheus.parser' not found`:
+
+```sh
+cd Prometheus-DeobfuscatorV2
+export LUA_PATH="./Prometheus/src/?.lua;./Prometheus/src/?/init.lua;./src/?.lua;./src/?/init.lua;./?.lua;;"
+lua5.1 src/deob/cli.lua target.lua --out out.lua --no-pretty
+lua5.1 src/deob/cli.lua target.lua --out trace.lua --trace api --emit-snapshots snap/
+```
+
+Result on this payload: every static step reports **+0** (`ConstantArrayDecode`,
+`UndoEncryptStrings`, `UndoSplitStrings`, `UndoVmify`, ...). Its patterns are for the
+Prometheus obfuscator proper, not for this WeAreDevs VM. Dynamic trace with Roblox stubs
+replays only **12 calls** and then the payload aborts inside its own pcall with
+`attempt to perform arithmetic on local 'j' (a string value)`. No feature strings recovered.
+
+Second independent confirmation: the blocker is the payload's own VM needing a live Roblox
+environment, not a missing deobfuscator.
