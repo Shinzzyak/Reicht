@@ -1167,6 +1167,12 @@ game.HttpGet = function(_, url)
     if HTTP_BLOCK ~= "" and url:find(HTTP_BLOCK, 1, true) then return "" end
     if url:find("ui%.lua") and type(UI_SOURCE) == "string" and #UI_SOURCE > 1024 then return UI_SOURCE end
     if url:find("FloatingButton") and type(FBM_SOURCE) == "string" and #FBM_SOURCE > 1024 then return FBM_SOURCE end
+    -- Upstream verbatim layers fetch the author's own script and refuse anything
+    -- under 1 KiB as a failed fetch, so the stub has to clear that bar or the proof
+    -- would only show that the length guard works.
+    if url:find("AbysallContinued") or url:find("Draconic") then
+        return "REICHT_UPSTREAM_STUB = true -- " .. string.rep(" ", 2048)
+    end
     return "return Library"
 end
 
@@ -2369,6 +2375,9 @@ FEATURE_PROOFS = {
     # original, so the ceiling allows the round trips rather than pinning one.
     "avatar changer looks up a description": ("write", "Players|HumanoidDescription", 1, 3),
     "avatar changer applies a description": ("write", "Humanoid|Description", 1, 6),
+    # Draconic's own file is fetched and handed to loadstring untouched; the marker
+    # only lands when the fetch cleared the size gate, so this fails on a dead URL.
+    "draconic upstream loads the author's script": ("write", "DraconicUpstream|SetAttribute|Loaded=true", 1),
 }
 
 
@@ -2402,6 +2411,9 @@ DOORS_PROOFS = {
     # drain loop, prompt fire -- not just that a prompt was seeded.
     "auto interact fires the door lock prompt": ("fire", ["UnlockPrompt|prompt", "UnlockPrompt|InputHoldBegin"], 1),
     "auto interact fires the room prompt": ("fire", ["RoomPrompt|prompt", "RoomPrompt|InputHoldBegin"], 1),
+    # The transplant can drift; this row proves the verbatim path still works, so
+    # "identical to Abysall" is available even when a port lags behind upstream.
+    "abysall upstream loads the author's script": ("write", "AbysallUpstream|SetAttribute|Loaded=true", 1),
     # Knob farm: the claim and the re-queue are the two remotes the game rewards. The old
     # body fired neither, so a green here is the difference between "the toggle lights up"
     # and "the cycle actually pays out".

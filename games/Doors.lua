@@ -8121,8 +8121,58 @@ if not Globals.MainUI then
 warn("[Reicht] layer ready without MainUI; game-UI extras stay off")
 end
 end
+local AbysallUpstreamUrl = "https://raw.githubusercontent.com/therealcookiemonsterof1966/AbysallContinued/main/Games/Doors/Main.luau"
+local function RunAbysallUpstream()
+if getgenv().ReichtAbysallUpstream then
+return false, "already running"
+end
+local ok, src = pcall(function() return game:HttpGet(AbysallUpstreamUrl) end)
+if not ok or type(src) ~= "string" or #src < 1024 then
+return false, "fetch failed"
+end
+local chunk, compileErr = loadstring(src)
+if not chunk then
+return false, tostring(compileErr)
+end
+getgenv().ReichtAbysallUpstream = true
+local marker = Instance.new("Folder")
+marker.Name = "AbysallUpstream"
+marker:SetAttribute("Loaded", true)
+marker:SetAttribute("Bytes", #src)
+task.spawn(function()
+local ran, err = pcall(chunk)
+if not ran then
+getgenv().ReichtAbysallUpstream = false
+marker:SetAttribute("Failed", true)
+warn("[Reicht] Abysall upstream failed: " .. tostring(err))
+end
+end)
+return true, tostring(#src) .. " bytes"
+end
 local function Run()
 __abysallLayer(Library, Window)
+local UpstreamTab = Window:AddTab("Upstream", "link")
+local UpstreamBox = UpstreamTab:AddLeftGroupbox("Abysall (verbatim)")
+UpstreamBox:AddToggle("RunAbysallUpstream", {
+Text = "Run Abysall's own script",
+Default = false,
+Tooltip = "Fetches and runs the author's Doors script as shipped, no porting. It opens its own window.",
+Callback = function(Value)
+if not Value then return end
+local loaded, detail = RunAbysallUpstream()
+if loaded then
+Alert("Abysall upstream running: " .. tostring(detail))
+else
+Alert("Abysall upstream: " .. tostring(detail))
+end
+end
+})
+UpstreamBox:AddButton({
+Text = "Abysall source URL",
+Func = function()
+Alert(AbysallUpstreamUrl)
+end
+})
 Script.Functions.UpdateRPC()
 getgenv().lonelyhub_loaded = true
 end

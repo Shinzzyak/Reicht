@@ -4615,6 +4615,56 @@ Tabs.Visual:AddButton({
         Fluent:Notify({ Title = ok and "Avatar reset" or "Avatar reset failed", Content = tostring(detail) })
     end
 })
+-- Upstream verbatim: the Draconic file we are matching is obfuscated (string pool +
+-- decoder), so a hand port can only follow its changelog, never its code. Fetching
+-- and running the author's own file is the only way "same as Draconic" is literally
+-- true. Off by default: it opens its own menu and its hooks fight ours when both run.
+DConfiguration.Visual.DraconicUpstream = DConfiguration.Visual.DraconicUpstream or {
+    Url = "https://raw.githubusercontent.com/Unknownproooolucky/Draconic-Hub-X/refs/heads/main/files/Evade/Overhaul.lua",
+    Running = false
+}
+
+function DFunctions.RunDraconicUpstream()
+    local U = DConfiguration.Visual.DraconicUpstream
+    if U.Running then return false, "already running" end
+    local ok, src = pcall(function() return game:HttpGet(U.Url) end)
+    if not ok or type(src) ~= "string" or #src < 1024 then
+        return false, "fetch failed"
+    end
+    local chunk, compileErr = loadstring(src)
+    if not chunk then return false, tostring(compileErr) end
+    U.Running = true
+    -- Marker first, execution second: a failing upstream run still proves the fetch
+    -- worked, and the smoke harness can see the difference between the two.
+    local marker = Instance.new("Folder")
+    marker.Name = "DraconicUpstream"
+    marker:SetAttribute("Loaded", true)
+    marker:SetAttribute("Bytes", #src)
+    task.spawn(function()
+        local ran, err = pcall(chunk)
+        if not ran then
+            U.Running = false
+            marker:SetAttribute("Failed", true)
+            Fluent:Notify({ Title = "Draconic upstream failed", Content = tostring(err) })
+        end
+    end)
+    return true, tostring(#src) .. " bytes"
+end
+
+Tabs.Visual:AddSection("Draconic Upstream")
+Tabs.Visual:AddToggle("DraconicUpstreamRun", {
+    Title = "Run Draconic's own script",
+    Default = DConfiguration.Visual.DraconicUpstream.Running,
+    Callback = function(State)
+        if not State then return end
+        local ok, detail = DFunctions.RunDraconicUpstream()
+        Fluent:Notify({ Title = ok and "Draconic upstream running" or "Draconic upstream", Content = tostring(detail) })
+    end
+})
+Tabs.Visual:AddParagraph({
+    Title = "Runs the author's Overhaul.lua as shipped, no porting. It opens its own menu, so turn this on instead of the local features, not alongside them.",
+    Content = ""
+})
 Tabs.Visual:AddSection("Cosmetics Changer")
 Tabs.Visual:AddInput("CurrentCosmetic", {
     Title = "Current Cosmetic",

@@ -9426,11 +9426,69 @@ local ReichtWindow = Window
 end
 -- ===== ABYSALL FEATURE LAYER END =====
 
+-- Upstream verbatim: the layer above is a transplant -- it renames every option,
+-- rebinds the library and stubs two components, so it can drift from the author's
+-- file. This path fetches Abysall's own script and runs it untouched. That is the
+-- only form of "identical" that needs no porting and cannot rot when upstream ships.
+local AbysallUpstreamUrl = "https://raw.githubusercontent.com/therealcookiemonsterof1966/AbysallContinued/main/Games/Doors/Main.luau"
+
+local function RunAbysallUpstream()
+    if getgenv().ReichtAbysallUpstream then
+        return false, "already running"
+    end
+    local ok, src = pcall(function() return game:HttpGet(AbysallUpstreamUrl) end)
+    if not ok or type(src) ~= "string" or #src < 1024 then
+        return false, "fetch failed"
+    end
+    local chunk, compileErr = loadstring(src)
+    if not chunk then
+        return false, tostring(compileErr)
+    end
+    getgenv().ReichtAbysallUpstream = true
+    -- The marker is the evidence: a proof can see the fetch landed and how big the
+    -- author's file was, without running the whole hub inside a test harness.
+    local marker = Instance.new("Folder")
+    marker.Name = "AbysallUpstream"
+    marker:SetAttribute("Loaded", true)
+    marker:SetAttribute("Bytes", #src)
+    task.spawn(function()
+        local ran, err = pcall(chunk)
+        if not ran then
+            getgenv().ReichtAbysallUpstream = false
+            marker:SetAttribute("Failed", true)
+            warn("[Reicht] Abysall upstream failed: " .. tostring(err))
+        end
+    end)
+    return true, tostring(#src) .. " bytes"
+end
+
 -- Doors now carries one feature source: the Abysall layer above. The Lonely Hub
 -- tabs, the merge layer and every callback that came from the other public hubs
 -- are gone, so Run() only has to hand the layer our window.
 local function Run()
     __abysallLayer(Library, Window)
+    local UpstreamTab = Window:AddTab("Upstream", "link")
+    local UpstreamBox = UpstreamTab:AddLeftGroupbox("Abysall (verbatim)")
+    UpstreamBox:AddToggle("RunAbysallUpstream", {
+        Text = "Run Abysall's own script",
+        Default = false,
+        Tooltip = "Fetches and runs the author's Doors script as shipped, no porting. It opens its own window.",
+        Callback = function(Value)
+            if not Value then return end
+            local loaded, detail = RunAbysallUpstream()
+            if loaded then
+                Alert("Abysall upstream running: " .. tostring(detail))
+            else
+                Alert("Abysall upstream: " .. tostring(detail))
+            end
+        end
+    })
+    UpstreamBox:AddButton({
+        Text = "Abysall source URL",
+        Func = function()
+            Alert(AbysallUpstreamUrl)
+        end
+    })
     Script.Functions.UpdateRPC()
     getgenv().lonelyhub_loaded = true
 end

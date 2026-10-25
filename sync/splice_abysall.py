@@ -16,10 +16,14 @@ What this script does:
   * wraps the whole block in `do ... end` so its ~200 locals stay private
 """
 import json
+import os
 import re
 import sys
 
-ABY = '/tmp/doorssrc/abysall_doors.luau'
+# Vendored, not /tmp: the upstream repo is reachable today but the snapshot has to
+# survive a reboot, and a splice that silently reads a missing file ships a Doors
+# with no feature layer at all.
+ABY = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'upstream', 'ref', 'abysall_doors.luau')
 TARGET = '/home/ubuntu/reicht-hub/sync/extra/games/Doors.lua'
 MARK_BEGIN = '-- ===== ABYSALL FEATURE LAYER BEGIN ====='
 MARK_END = '-- ===== ABYSALL FEATURE LAYER END ====='

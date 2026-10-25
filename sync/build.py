@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Build the Reicht hub tree from an upstream snapshot.
 
-Upstream is the third-party hub this repo mirrors. The snapshot directory is
-`$UPSTREAM_DIR` (default /tmp/rsclone): it must contain `loader.lua`, `ui.lua` and
-`All Map/*.lua`, exactly as the raw GitHub URLs serve them.
+Upstream is the third-party hub this repo mirrors. The snapshot lives in
+`sync/upstream/` (override with `$UPSTREAM_DIR`): it must contain `loader.lua`,
+`ui.lua` and `All Map/*.lua`, exactly as the raw GitHub URLs served them.
+
+The snapshot is vendored because the upstream repo is gone (404 since 2026-10-25)
+and /tmp does not survive a reboot. A build that cannot find its snapshot is broken,
+so the default points inside the repo, never at a temp directory.
 
 Two rules govern everything here:
 
@@ -25,7 +29,9 @@ import shutil
 import subprocess
 import sys
 
-SRC = os.environ.get("UPSTREAM_DIR", "/tmp/rsclone")
+SRC = os.environ.get("UPSTREAM_DIR") or os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "upstream"
+)
 DST = os.environ.get("OUT_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 DST = os.path.abspath(DST)
 RAW = "https://raw.githubusercontent.com/Shinzzyak/Reicht/refs/heads/main"
