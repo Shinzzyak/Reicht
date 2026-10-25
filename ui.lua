@@ -73,6 +73,7 @@ Layer = { Window = 10, Watermark = 30, Float = 40, Overlay = 50, Modal = 52, Too
 LayoutPasses = 12,
 MeasureCacheLimit = 4000,
 DragThreshold = 6,
+DragSlop = 10,
 ConfirmWindow = 2,
 TooltipDelay = 0.45,
 TitleWaveInterval = 9,
@@ -5535,8 +5536,17 @@ end
 end
 local start = input.Position
 local begin = move(nil)
+local armed = false
 State.Drag = {
 Move = function(moved)
+if not armed then
+if (moved.Position - start).Magnitude < Config.DragSlop then
+return
+end
+armed = true
+start = moved.Position
+begin = move(nil)
+end
 move(begin, moved.Position - start)
 end,
 }
@@ -6396,6 +6406,23 @@ end
 Anim.Tween(self.Open, { Value = collapsed and 0 or 1 }, Config.Tween.Collapse)
 Anim.Tween(self.Chevron, { Rotation = collapsed and -90 or 0 }, Config.Tween.Collapse)
 end
+function Float.TopFloor()
+if Float.TopInset then
+return Float.TopInset
+end
+local inset = 0
+pcall(function()
+local top = game:GetService("GuiService"):GetGuiInset()
+if typeof(top) == "Vector2" then
+inset = top.Y
+end
+end)
+if State.Touch then
+inset = math.max(inset, 58)
+end
+Float.TopInset = math.max(inset, 0) + 6
+return Float.TopInset
+end
 function Float.Clamp()
 local button = Float.Button
 if not button or not State.Gui then
@@ -6409,8 +6436,9 @@ local pos = button.Position
 local absX = viewport.X * pos.X.Scale + pos.X.Offset
 local absY = viewport.Y * pos.Y.Scale + pos.Y.Offset
 local size = Float.Size or 48
+local floorY = Float.TopFloor()
 local clampedX = math.clamp(absX, 6, math.max(6, viewport.X - size - 6))
-local clampedY = math.clamp(absY, 6, math.max(6, viewport.Y - size - 6))
+local clampedY = math.clamp(absY, floorY, math.max(floorY, viewport.Y - size - 6))
 button.Position = UDim2.fromOffset(math.floor(clampedX + 0.5), math.floor(clampedY + 0.5))
 end
 function Float.Build()

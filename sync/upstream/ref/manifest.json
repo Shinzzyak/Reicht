@@ -62,8 +62,8 @@
     "url": "https://raw.githubusercontent.com/Shinzzyak/Reicht/refs/heads/main/FloatingButton.lua"
   },
   "reicht_ui.lua": {
-    "bytes": 298262,
-    "md5": "be03a19339aae3adf2b21d68a6fc04d2",
+    "bytes": 298825,
+    "md5": "4510e6af2b0ebb0fe7c36038641a65b4",
     "note": "hub's own menu library; network is tried first so a UI hotfix needs no rebuild, this copy is the floor under it. Refresh with: cp ui.lua sync/upstream/ref/reicht_ui.lua",
     "url": "https://raw.githubusercontent.com/Shinzzyak/Reicht/refs/heads/main/ui.lua"
   }

@@ -77,6 +77,113 @@ def resub(text, pattern, repl, where, required=True, flags=0, quiet=False):
     return new_text
 
 
+def indented_patch(text, needle, repl, where):
+    """Replace one block, ignoring how deep the source happens to be indented.
+
+    Upstream ships ui.lua indented; the writer dedents it later. A patch bolted to
+    either shape silently fails the day the other one shows up, so anchor on the
+    stripped lines and re-apply the captured indentation to the replacement.
+    """
+    lines = [line.strip() for line in needle.splitlines()]
+    pattern = r"(?m)^([ \t]*)" + r"[ \t]*\n[ \t]*".join(re.escape(line) for line in lines)
+    hits = []
+
+    def sub(match):
+        hits.append(match.group(0))
+        indent = match.group(1)
+        return "\n".join(indent + line for line in repl.splitlines())
+
+    new_text = re.sub(pattern, sub, text)
+    if len(hits) != 1:
+        raise PatchMiss(f"{where}: block matched {len(hits)} times")
+    applied.append(f"{where}: block x1")
+    return new_text
+
+
+def float_tap_fix(text):
+    """Make the floating menu button clickable on a phone.
+
+    Two separate defects on the same control:
+
+    1. Zero-slop dragging. The button followed the finger from the first pixel, and
+       Roblox cancels Activated when the handle moves between press and release. A
+       finger never holds still, so most taps nudged the button and never opened the
+       menu. Nothing moves until the pointer clears DragSlop; past it, drag as before.
+    2. Parked under Roblox's own menu button. State.Gui sets IgnoreGuiInset = true, so
+       offset zero is inside the topbar. Clamping to y=6 left the button underneath
+       CoreGui, where the tap is swallowed and the button looks dead. Clamp with a
+       touch-sized floor below the bar instead.
+    """
+    text = resub(
+        text,
+        r"DragThreshold = (\d+),",
+        lambda m: f"DragThreshold = {m.group(1)},\nDragSlop = 10,",
+        "ui float drag slop const",
+    )
+    text = indented_patch(
+        text,
+        """local start = input.Position
+local begin = move(nil)
+State.Drag = {
+Move = function(moved)
+move(begin, moved.Position - start)
+end,
+}""",
+        """local start = input.Position
+local begin = move(nil)
+local armed = false
+State.Drag = {
+Move = function(moved)
+if not armed then
+if (moved.Position - start).Magnitude < Config.DragSlop then
+return
+end
+armed = true
+start = moved.Position
+begin = move(nil)
+end
+move(begin, moved.Position - start)
+end,
+}""",
+        "ui float drag dead zone",
+    )
+    text = indented_patch(
+        text,
+        """function Float.Clamp()""",
+        """function Float.TopFloor()
+if Float.TopInset then
+return Float.TopInset
+end
+local inset = 0
+pcall(function()
+local top = game:GetService("GuiService"):GetGuiInset()
+if typeof(top) == "Vector2" then
+inset = top.Y
+end
+end)
+if State.Touch then
+inset = math.max(inset, 58)
+end
+Float.TopInset = math.max(inset, 0) + 6
+return Float.TopInset
+end
+function Float.Clamp()""",
+        "ui float topbar floor helper",
+    )
+    text = indented_patch(
+        text,
+        """local size = Float.Size or 48
+local clampedX = math.clamp(absX, 6, math.max(6, viewport.X - size - 6))
+local clampedY = math.clamp(absY, 6, math.max(6, viewport.Y - size - 6))""",
+        """local size = Float.Size or 48
+local floorY = Float.TopFloor()
+local clampedX = math.clamp(absX, 6, math.max(6, viewport.X - size - 6))
+local clampedY = math.clamp(absY, floorY, math.max(floorY, viewport.Y - size - 6))""",
+        "ui float clamp floor call",
+    )
+    return text
+
+
 def add_press_mode(text):
     """Teach the keybind picker a fourth mode, `Press`.
 
@@ -905,6 +1012,7 @@ def main():
     ui_text = minimal_ui(ui_text)
     ui_text = defensive_ui(ui_text)
     ui_text = strip_stats_ui(ui_text)
+    ui_text = float_tap_fix(ui_text)
     open(os.path.join(stage, "ui.lua"), "w", encoding="utf-8").write(ui_text)
 
     built = []
