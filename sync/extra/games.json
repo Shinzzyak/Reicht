@@ -1,4 +1,12 @@
 {
+  "Army Commander Tycoon": {
+    "ids": [
+      119263815547952,
+      10768458048
+    ],
+    "name": "Army Commander Tycoon",
+    "note": "Original build (place 119263815547952, universe 10768458048). Discovery-driven: reads ProximityPrompts / ClickDetectors / cash parts / capture points at runtime, so it does not depend on the key-gated loaders whose Luraph payloads are dead. Harness: lua5.1 headless, 19 toggles / 12 sliders, prompts and clicks fired, 0 failures."
+  },
   "Doors": {
     "id": 2440500124,
     "name": "Doors"
