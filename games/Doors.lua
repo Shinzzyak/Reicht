@@ -781,9 +781,6 @@ local S = ESP.Settings
 local function setter(key)
 return function(_, value) S[key] = value end
 end
--- ponytail: Arrows/ArrowRadius need triangle drawings, DistanceSizeRatio needs per-frame
--- distance rescaling, FadeTime needs a fade pass after removal -- the shared engine has
--- none of those primitives yet, so these three stay stored-only.
 for _, key in ipairs({ "Arrows", "ArrowRadius", "FadeTime", "DistanceSizeRatio" }) do
 ESP["Set" .. key] = setter(key)
 end

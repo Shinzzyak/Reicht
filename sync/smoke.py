@@ -2033,13 +2033,21 @@ if LIB and type(LIB.Options) == "table" then
 
     if type(LIB.Buttons) == "table" then
         local pressed = 0
+        -- Unload and Rejoin tear the library down or teleport away, so pressing them
+        -- mid-run proves nothing and kills every feature check that follows.
+        local skip = { ["Unload"] = true, ["Rejoin"] = true, ["Unload UI"] = true, ["Rejoin Server"] = true }
+        local skipped = 0
         for _, button in ipairs(LIB.Buttons) do
-            if type(button.Click) == "function" then
-                try("button " .. tostring(button.Info and (button.Info.Text or button.Info.Title)), function() button:Click() end)
+            local info = button.Info or {}
+            local label = tostring(info.Text or info.Title or "")
+            if type(button.Click) == "function" and not skip[label] then
+                try("button " .. label, function() button:Click() end)
                 pressed += 1
+            elseif skip[label] then
+                skipped += 1
             end
         end
-        _PRINT("buttons pressed: " .. tostring(pressed) .. " / " .. tostring(#LIB.Buttons))
+        _PRINT("buttons pressed: " .. tostring(pressed) .. " / " .. tostring(#LIB.Buttons) .. " (skipped destructive: " .. tostring(skipped) .. ")")
         for _, button in ipairs(LIB.Buttons) do
             local info = button.Info or {}
             _PRINT(string.format("BTN|%s|%s", tostring(info.Text or info.Title or "?"),

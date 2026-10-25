@@ -5558,8 +5558,6 @@ end
 local self = setmetatable({
 Title = options.Title or "Reicht",
 SubTitle = options.SubTitle or "",
-Footer = options.Footer or "",
-CornerRadius = options.CornerRadius,
 Desired = size,
 Size = size,
 Tabs = {},
@@ -5590,7 +5588,7 @@ return self
 end
 function Window:BuildFrame()
 local shadow = Config.Window.Shadow
-local radius = self.CornerRadius or Config.Window.Radius
+local radius = Config.Window.Radius
 self.Root = Draw.New("Frame", { Name = "Window", BackgroundTransparency = 1, AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0.5), Visible = false, ZIndex = Config.Layer.Window, Parent = State.Gui })
 self.UserScale = Draw.New("UIScale", { Parent = self.Root })
 self.Pop = Draw.New("Frame", { BackgroundTransparency = 1, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromScale(1, 1), Parent = self.Root })
@@ -5831,9 +5829,6 @@ end)
 self.UserName = Draw.Text({ Text = LocalPlayer.DisplayName, Position = UDim2.fromOffset(56, 11), Size = UDim2.new(1, -62, 0, 18), TextTruncate = Enum.TextTruncate.AtEnd, Parent = card }, "Body", 14, "SidebarText")
 self.UserTag = Draw.Text({ Text = "@" .. LocalPlayer.Name, Position = UDim2.fromOffset(56, 29), Size = UDim2.new(1, -62, 0, 16), TextTruncate = Enum.TextTruncate.AtEnd, Parent = card }, "Desc", 12, "SidebarMuted")
 self.Avatar = avatar
-if self.Footer ~= "" then
-self.FooterLabel = Draw.Text({ Text = self.Footer, AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 12, 0, -Config.Window.UserCard - 6), Size = UDim2.new(1, -24, 0, 14), TextTruncate = Enum.TextTruncate.AtEnd, Parent = sidebar }, "Desc", 11, "SidebarMuted")
-end
 end
 function Window:BuildMain()
 local header = Config.Window.Header
@@ -7938,57 +7933,6 @@ end
 return ok, reason
 end)
 end })
-end
-function Window:AddInfoTab()
-local tab = self:AddTab("Info", "star", "Hub, build and executor status")
-local hub = tab:AddLeftGroupbox("Hub", "star")
-hub:AddLabel(string.format("%s v%s", self.Title, tostring(Library.Version)))
-if self.SubTitle ~= "" then
-hub:AddLabel(self.SubTitle)
-end
-hub:AddLabel(string.format("Place %s | Job %s", tostring(game.PlaceId), tostring(game.JobId)))
-hub:AddLabel(string.format("Device: %s", State.Touch and "Mobile" or "PC"))
-local exec = tab:AddLeftGroupbox("Executor", "shield")
-local execName = "unknown"
-if type(identifyexecutor) == "function" then
-local ok, name = pcall(identifyexecutor)
-if ok and type(name) == "string" then
-execName = name
-end
-end
-exec:AddLabel(string.format("Executor: %s", execName))
-local names = {}
-for name in pairs(Compat.Probes) do
-table.insert(names, name)
-end
-table.sort(names)
-for _, name in ipairs(names) do
-local ok, value = pcall(function() return Compat.Caps[name] end)
-exec:AddLabel(string.format("%s %s", (ok and value) and "+" or "-", name))
-end
-local links = tab:AddRightGroupbox("Links", "qblock")
-if self.Footer ~= "" and self.Footer:find("[%./]") then
-links:AddButton({ Text = "Copy invite", Func = function()
-if type(setclipboard) == "function" then
-setclipboard(self.Footer)
-end
-Library:Notify(self.Title, "Invite copied", 3, "Info")
-end })
-end
-links:AddButton({ Text = "Copy Job ID", Func = function()
-if type(setclipboard) == "function" then
-setclipboard(tostring(game.JobId))
-end
-end })
-links:AddButton({ Text = "Copy Place ID", Func = function()
-if type(setclipboard) == "function" then
-setclipboard(tostring(game.PlaceId))
-end
-end })
-local about = tab:AddRightGroupbox("About", "star")
-about:AddLabel("Feature source: Abysall Hub Continued")
-about:AddLabel(string.format("Menu key: %s", Keybinds.Short(State.MenuKey)))
-return tab
 end
 function Window:AddSettingsTab()
 local tab = self:AddTab(Lang.Strings.Settings, "gear", Lang.Strings.SettingsDesc)
