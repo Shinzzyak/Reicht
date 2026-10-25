@@ -531,6 +531,13 @@ lastReleaseTick = 0.1,
 },
 },
 Visual = {
+AvatarChanger = {
+UserId = "",
+Applied = false,
+Keep = true,
+Original = nil,
+hooked = false,
+},
 OriginalCosmetics = {
 Cosmetics1 = "",
 Cosmetics2 = "",
@@ -1871,13 +1878,14 @@ desiredFriction = S.Acceleration or -0.2
 end
 end
 end
-if desiredFriction ~= BHOP.lastFriction then
 if desiredFriction ~= nil then
 MovementValueSet("Friction", desiredFriction)
-else
-MovementValueSet("Friction", DConfiguration.Misc.PlayerAdjustment.Default.Friction)
-end
 BHOP.lastFriction = desiredFriction
+BHOP.frictionHeld = true
+elseif BHOP.frictionHeld then
+MovementValueSet("Friction", DConfiguration.Misc.PlayerAdjustment.Default.Friction)
+BHOP.lastFriction = nil
+BHOP.frictionHeld = false
 end
 if (state == "WallrunRight" or state == "WallrunLeft") and S.SpiderHop then
 pcall(function() self:AttemptJump() end)
@@ -2083,26 +2091,152 @@ updateBhopEnabled()
 MovementValueSet("Friction", DConfiguration.Misc.PlayerAdjustment.Default.Friction)
 BHOP.lastFriction = nil
 end
+local CrouchModes = { Spam = "Spam", Air = "Air", Classic = "Classic" }
+local CrouchLegacy = { Rapid = "Spam", Normal = "Classic", Ground = "Classic" }
+function DFunctions.CrouchMode()
+local raw = tostring(DConfiguration.Misc.MovementModification.Crouch.Type or "Spam")
+return CrouchModes[raw] or CrouchLegacy[raw] or "Spam"
+end
+local CROUCH_EVENT_CACHE = nil
+function DFunctions.GetCrouchEvent()
+if CROUCH_EVENT_CACHE and CROUCH_EVENT_CACHE.Parent then return CROUCH_EVENT_CACHE end
+CROUCH_EVENT_CACHE = nil
+local services = ReplicatedStorage:FindFirstChild("Services")
+local client = services and services:FindFirstChild("Client")
+local keybindService = client and client:FindFirstChild("KeybindService")
+local event = keybindService and keybindService:FindFirstChild("SendKeybindEvent")
+CROUCH_EVENT_CACHE = event
+return event
+end
+function DFunctions.FireCrouch(down)
+local ev = DFunctions.GetCrouchEvent()
+if not ev then return false end
+pcall(function() ev:Fire({ Down = down and true or false, Key = "Crouching" }) end)
+return true
+end
+function DFunctions.ReleaseCrouch()
+local Config = DConfiguration.Misc.MovementModification.Crouch
+if Config.isHolding then
+DFunctions.FireCrouch(false)
+Config.isHolding = false
+end
+end
 function DFunctions.CrouchFunction()
 local Config = DConfiguration.Misc.MovementModification.Crouch
 local now = tick()
 Config.isHolding = Config.isHolding or false
-Config.lastTick = Config.lastTick or 0
 Config.debounce = Config.debounce or 0.1
-local SendKeybindEvent = ReplicatedStorage:FindFirstChild("Services")
-and ReplicatedStorage.Services:FindFirstChild("Client")
-and ReplicatedStorage.Services.Client:FindFirstChild("KeybindService")
-and ReplicatedStorage.Services.Client.KeybindService:FindFirstChild("SendKeybindEvent")
-if not SendKeybindEvent then return end
-if not Config.isHolding and (now - Config.lastTick) >= Config.debounce then
-SendKeybindEvent:Fire({ Down = true, Key = "Crouching" })
-Config.isHolding = true
-Config.lastTick = now
-elseif Config.isHolding and (now - Config.lastTick) >= Config.debounce then
-SendKeybindEvent:Fire({ Down = false, Key = "Crouching" })
-Config.isHolding = false
-Config.lastTick = now
+Config.nextAllowed = Config.nextAllowed or 0
+if Config.nextAllowed > now + Config.debounce then Config.nextAllowed = 0 end
+if not DFunctions.GetCrouchEvent() then return end
+local mode = DFunctions.CrouchMode()
+if mode == "Classic" then
+if not Config.isHolding then
+if DFunctions.FireCrouch(true) then Config.isHolding = true end
 end
+return
+end
+if mode == "Air" then
+local character = LocalPlayer.Character
+local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+local material = humanoid and humanoid.FloorMaterial
+local airborne = material == Enum.Material.Air or material == nil
+if airborne then
+if not Config.isHolding then
+if DFunctions.FireCrouch(true) then
+Config.isHolding = true
+Config.nextAllowed = now + Config.debounce
+end
+end
+else
+DFunctions.ReleaseCrouch()
+end
+return
+end
+if now < Config.nextAllowed then return end
+Config.nextAllowed = now + Config.debounce
+if Config.isHolding then
+DFunctions.FireCrouch(false)
+Config.isHolding = false
+else
+DFunctions.FireCrouch(true)
+Config.isHolding = true
+end
+end
+function DFunctions.GetAvatarHumanoid()
+local character = LocalPlayer.Character
+return character and character:FindFirstChildOfClass("Humanoid") or nil
+end
+function DFunctions.HookAvatarRespawn()
+local AC = DConfiguration.Visual.AvatarChanger
+if AC.hooked then return end
+AC.hooked = true
+LocalPlayer.CharacterAdded:Connect(function()
+if not DConfiguration.Visual.AvatarChanger.Keep then return end
+if not DConfiguration.Visual.AvatarChanger.Applied then return end
+local wanted = DConfiguration.Visual.AvatarChanger.UserId
+if wanted == "" or wanted == nil then return end
+task.wait(1)
+DFunctions.ApplyAvatar(wanted)
+end)
+end
+function DFunctions.CaptureOriginalAvatar()
+local AC = DConfiguration.Visual.AvatarChanger
+if AC.Original then return end
+local humanoid = DFunctions.GetAvatarHumanoid()
+if not humanoid then return end
+local ok, desc = pcall(function() return humanoid:GetAppliedDescription() end)
+if ok and desc then AC.Original = desc end
+end
+function DFunctions.ApplyAvatar(userId)
+userId = tonumber(userId)
+if not userId then return false, "no user id" end
+local humanoid = DFunctions.GetAvatarHumanoid()
+if not humanoid then return false, "no character" end
+DFunctions.CaptureOriginalAvatar()
+DFunctions.HookAvatarRespawn()
+local ok, desc = pcall(function() return Players:GetHumanoidDescriptionFromUserId(userId) end)
+if not ok or not desc then return false, "lookup failed" end
+local applied = pcall(function() humanoid:ApplyDescription(desc) end)
+if not applied then return false, "apply failed" end
+local AC = DConfiguration.Visual.AvatarChanger
+AC.UserId = userId
+AC.Applied = true
+return true, "avatar " .. tostring(userId)
+end
+function DFunctions.ResetAvatar()
+local AC = DConfiguration.Visual.AvatarChanger
+AC.Applied = false
+local humanoid = DFunctions.GetAvatarHumanoid()
+if not humanoid or not AC.Original then return false, "nothing saved" end
+local ok = pcall(function() humanoid:ApplyDescription(AC.Original) end)
+return ok, ok and "original avatar" or "apply failed"
+end
+function DFunctions.RandomAvatar()
+local pool = {}
+for _, plr in ipairs(Players:GetPlayers()) do
+if plr ~= LocalPlayer and plr.UserId then table.insert(pool, plr.UserId) end
+end
+if #pool == 0 then return false, "no other players" end
+return DFunctions.ApplyAvatar(pool[math.random(1, #pool)])
+end
+function DFunctions.StartCrouchLoop()
+local C = DConfiguration.Misc.MovementModification.Crouch
+if C.looping then return end
+C.looping = true
+task.spawn(function()
+while C.FloatingButton or C.Keybind do
+DFunctions.CrouchFunction()
+task.wait(0.05)
+end
+C.looping = false
+DFunctions.ReleaseCrouch()
+end)
+end
+function DFunctions.StopCrouchLoop()
+local C = DConfiguration.Misc.MovementModification.Crouch
+if C.FloatingButton or C.Keybind then return end
+DFunctions.ReleaseCrouch()
 end
 function DFunctions.Normalize(input) return (input or ""):lower():gsub("%s+", "") end
 function DFunctions.FindRealName(folder, userInput)
@@ -4254,20 +4388,16 @@ Tabs.Misc:AddParagraph({Title = " ", Content = ""})
 local Toggle = Tabs.Misc:AddToggle("AutoCrouch", {Title = "Auto Crouch (Button)", Default = false })
 Toggle:OnChanged(function(State)
 if State then
-DFunctions.CreateButton("AutoCrouchGui", "Auto Crouch: OFF", 0.15 + DConfiguration.Settings.GuiScale.AutoCrouch, 0.1 + DConfiguration.Settings.GuiScale.AutoCrouch, function(btn)
+DFunctions.CreateButton("AutoCrouchGui", "Auto Crouch: ON", 0.15 + DConfiguration.Settings.GuiScale.AutoCrouch, 0.1 + DConfiguration.Settings.GuiScale.AutoCrouch, function(btn)
 DConfiguration.Misc.MovementModification.Crouch.FloatingButton = not DConfiguration.Misc.MovementModification.Crouch.FloatingButton
 btn.Text = DConfiguration.Misc.MovementModification.Crouch.FloatingButton and "Auto Crouch: ON" or "Auto Crouch: OFF"
-if DConfiguration.Misc.MovementModification.Crouch.FloatingButton then
-task.spawn(function()
-while DConfiguration.Misc.MovementModification.Crouch.FloatingButton do
-DFunctions.CrouchFunction()
-task.wait(0.05)
-end
+DFunctions.StartCrouchLoop()
 end)
-end
-end)
+DConfiguration.Misc.MovementModification.Crouch.FloatingButton = true
+DFunctions.StartCrouchLoop()
 else
 DConfiguration.Misc.MovementModification.Crouch.FloatingButton = false
+DFunctions.StopCrouchLoop()
 DFunctions.DestroyButton("AutoCrouchGui")
 end
 end)
@@ -4278,12 +4408,9 @@ Default = "RightControl",
 Callback = function(Bool)
 DConfiguration.Misc.MovementModification.Crouch.Keybind = Bool
 if Bool then
-task.spawn(function()
-while DConfiguration.Misc.MovementModification.Crouch.Keybind do
-DFunctions.CrouchFunction()
-task.wait(0.05)
-end
-end)
+DFunctions.StartCrouchLoop()
+else
+DFunctions.StopCrouchLoop()
 end
 end,
 })
@@ -4304,12 +4431,13 @@ DFunctions.UpdateButton("AutoCrouchGui", 0.15 + DConfiguration.Settings.GuiScale
 end
 })
 local Dropdown = Tabs.Misc:AddDropdown("CrouchType", {
-Title = "Select Crouch Type",
-Values = {"Rapid", "Ground", "Air", "Normal"},
+Title = "Crouch Mode",
+Values = { "Spam", "Air", "Classic" },
 Multi = false,
-Default = 1,
+Default = DFunctions.CrouchMode(),
 })
 Dropdown:OnChanged(function(Value)
+DFunctions.ReleaseCrouch()
 DConfiguration.Misc.MovementModification.Crouch.Type = Value
 end)
 Tabs.Misc:AddInput("CrouchDebounce", {
@@ -4329,6 +4457,48 @@ Content = ""
 Tabs.Visual:AddParagraph({
 Title = "To change it back to the original, please rejoin.",
 Content = ""
+})
+Tabs.Visual:AddSection("Avatar Changer")
+Tabs.Visual:AddInput("AvatarUserId", {
+Title = "Avatar User ID",
+Default = tostring(DConfiguration.Visual.AvatarChanger.UserId or ""),
+Placeholder = "1234567",
+Numeric = true,
+Finished = true,
+Callback = function(Value)
+DConfiguration.Visual.AvatarChanger.UserId = tonumber(Value) or ""
+end
+})
+Tabs.Visual:AddToggle("AvatarKeep", {
+Title = "Reapply After Respawn",
+Default = DConfiguration.Visual.AvatarChanger.Keep,
+Callback = function(State)
+DConfiguration.Visual.AvatarChanger.Keep = State and true or false
+end
+})
+Tabs.Visual:AddButton({
+Title = "Apply Avatar",
+Description = "Loads that user id's avatar onto your character",
+Callback = function()
+local ok, detail = DFunctions.ApplyAvatar(DConfiguration.Visual.AvatarChanger.UserId)
+Fluent:Notify({ Title = ok and "Avatar applied" or "Avatar failed", Content = tostring(detail) })
+end
+})
+Tabs.Visual:AddButton({
+Title = "Random Player Avatar",
+Description = "Copies the look of a random player in the server",
+Callback = function()
+local ok, detail = DFunctions.RandomAvatar()
+Fluent:Notify({ Title = ok and "Avatar applied" or "Avatar failed", Content = tostring(detail) })
+end
+})
+Tabs.Visual:AddButton({
+Title = "Reset Avatar",
+Description = "Puts your own avatar back",
+Callback = function()
+local ok, detail = DFunctions.ResetAvatar()
+Fluent:Notify({ Title = ok and "Avatar reset" or "Avatar reset failed", Content = tostring(detail) })
+end
 })
 Tabs.Visual:AddSection("Cosmetics Changer")
 Tabs.Visual:AddInput("CurrentCosmetic", {

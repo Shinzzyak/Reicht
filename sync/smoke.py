@@ -44,6 +44,10 @@ local function mkEnum()
         setmetatable(sub, { __index = function(_, name)
             local item = mkItem(name, #items + 1)
             table.insert(items, item)
+            -- Cache the item on first touch. Without this every read of Enum.Material.Air
+            -- built a new table, so `humanoid.FloorMaterial == Enum.Material.Air` was
+            -- always false and no enum comparison in any game could ever match.
+            rawset(_, name, item)
             return item
         end })
         rawset(t, k, sub)
@@ -398,6 +402,27 @@ OBJ.m_FireServer = function(self, ...)
     bump(TRACE.fire, key)
 end
 OBJ.m_Invoke = function(self) return {} end
+-- BindableEvent press. Crouch and the other keybind features do not go through a
+-- remote: they call KeybindService.SendKeybindEvent:Fire({ Down = bool, Key = name }).
+-- Without this method the whole crouch path dies on a nil call and looks like a
+-- feature that "just does nothing".
+OBJ.m_Fire = function(self, ...)
+    local arg = select(1, ...)
+    local tag = type(arg) == "table" and tostring(rawget(arg, "Key") or "table")
+        or tostring(type(arg) == "string" and arg or type(arg))
+    bump(TRACE.fire, tostring(rawget(self, "_p").Name) .. "|" .. tag)
+end
+-- Humanoid description round trip used by the avatar changer.
+OBJ.m_GetAppliedDescription = function(self)
+    return newInstance("HumanoidDescription", "AppliedDescription")
+end
+OBJ.m_ApplyDescription = function(self, desc)
+    bump(TRACE.wrote, "Humanoid|Description")
+end
+OBJ.m_GetHumanoidDescriptionFromUserId = function(self, userId)
+    bump(TRACE.wrote, "Players|HumanoidDescription")
+    return newInstance("HumanoidDescription", "LookupDescription")
+end
 -- ProximityPrompt:InputHoldBegin()/End() is the engine's own activation path, so a
 -- payload without fireproximityprompt fires prompts through it. The mock has to expose
 -- both and record the begin, or that fallback looks dead when it is only untested.
@@ -679,12 +704,36 @@ local keyTool = newInstance("Tool", "Key")
 keyTool._p.Parent = lp.Backpack
 table.insert(lp.Backpack._p.Children, keyTool)
 lp:SetAttribute("CurrentRoom", 0)
-players.GetPlayers = function() return { lp } end
+-- A second body in the server so the avatar changer's random-player route has a real
+-- target to look up. No Character on purpose: player-scanning features skip it, so this
+-- only widens the pool and does not invent a body for anything else.
+local avatarTarget = newInstance("Player", "AvatarTarget")
+avatarTarget.UserId = 2
+avatarTarget.Character = nil
+players.GetPlayers = function() return { lp, avatarTarget } end
 players.GetPlayerFromCharacter = function() return lp end
 players.GetUserIdFromNameAsync = function() return 1 end
 
 local rs = get("ReplicatedStorage")
 rs.Permissive = true
+-- Movement features press keys through the game's own bindable: Crouch walks
+-- ReplicatedStorage.Services.Client.KeybindService.SendKeybindEvent and bails out
+-- when the chain is missing, so an unseeded tree made every crouch mode look like a
+-- no-op. Seed the real path instead of stubbing the lookup.
+do
+    local services = newInstance("Folder", "Services")
+    services._p.Parent = rs
+    table.insert(rs._p.Children, services)
+    local client = newInstance("Folder", "Client")
+    client._p.Parent = services
+    table.insert(services._p.Children, client)
+    local keybindService = newInstance("Folder", "KeybindService")
+    keybindService._p.Parent = client
+    table.insert(client._p.Children, keybindService)
+    local sendKeybind = newInstance("BindableEvent", "SendKeybindEvent")
+    sendKeybind._p.Parent = keybindService
+    table.insert(keybindService._p.Children, sendKeybind)
+end
 -- Emote source. The payload resolves an emote two ways: a folder scan under
 -- ReplicatedStorage.Items.Emotes (ModuleScripts carrying an "ID" attribute) and the
 -- registry's GetByCategory. With neither seeded, the emote proof used to pass only
@@ -1621,6 +1670,12 @@ end
 local char = newInstance("Model", "Tester")
 local hum = newInstance("Humanoid", "Humanoid")
 hum.WalkSpeed = 16; hum.JumpPower = 50; hum.JumpHeight = 7.2; hum.HipHeight = 2
+-- Crouch's Air mode gates on the floor material; without the field every read is nil
+-- and the "airborne" branch can never be taken or cleared.
+-- Airborne on purpose: a parkour body spends most of a round in the air, and the
+-- crouch Air mode only presses while FloorMaterial reads Air. Grounding the stub made
+-- that branch unreachable and the crouch proof read 0 fires for a live feature.
+hum.FloorMaterial = Enum.Material.Air
 hum.Health = 100; hum.MaxHealth = 100
 hum.MoveDirection = Vector3.new(0, 0, 0)
 hum.GetState = function() return Enum.HumanoidStateType.Running end
@@ -2305,6 +2360,15 @@ FEATURE_PROOFS = {
     "ESP builds a Highlight": ("made", "Highlight", 1),
     "player ESP paints FillColor": ("write", "PlayerHighlight_D|FillColor", 1),
     "noclip writes CanCollide": ("write", "HumanoidRootPart|CanCollide", 1),
+    # Crouch presses the game's own keybind bindable; Spam mode taps it on the input
+    # debounce, so the ceiling catches a per-frame runaway rather than a count.
+    "crouch presses the crouch keybind": ("fire", "SendKeybindEvent|Crouching", 1, 30),
+    # Avatar changer looks the id up through Players and applies the description onto
+    # the humanoid. Two separate writes, so a lookup that returns nothing fails here.
+    # The button sweep presses Apply / Random / Reset, and Reset re-applies the saved
+    # original, so the ceiling allows the round trips rather than pinning one.
+    "avatar changer looks up a description": ("write", "Players|HumanoidDescription", 1, 3),
+    "avatar changer applies a description": ("write", "Humanoid|Description", 1, 6),
 }
 
 
