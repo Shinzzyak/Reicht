@@ -1,16 +1,70 @@
 {
+  "abysall_16notice.luau": {
+    "bytes": 9733,
+    "md5": "578945aa49710d3a221c45988bbe8f6a",
+    "note": "component the Abysall payload fetches itself; served from the same hook",
+    "url": "https://raw.githubusercontent.com/therealcookiemonsterof1966/AbysallContinued/main/Components/16Notice.luau"
+  },
+  "abysall_analytics.luau": {
+    "bytes": 6290,
+    "md5": "7cfeb522655d80f4e16327880b0f806f",
+    "note": "component the Abysall payload fetches itself; served from the same hook",
+    "url": "https://raw.githubusercontent.com/therealcookiemonsterof1966/AbysallContinued/main/Components/Analytics.luau"
+  },
+  "abysall_deathfarm.luau": {
+    "bytes": 5162,
+    "md5": "1441038a4a8fd3fac1d22994cf802080",
+    "note": "fetched only when the DeathFarm button is pressed; served from the same hook",
+    "url": "https://raw.githubusercontent.com/bocaj111004/Abysall/refs/heads/main/Scripts/DeathFarm.luau"
+  },
   "abysall_doors.luau": {
-    "url": "https://raw.githubusercontent.com/therealcookiemonsterof1966/AbysallContinued/main/Games/Doors/Main.luau",
     "bytes": 316104,
     "md5": "2aade615c4d587d69ac3c55e33097c60",
-    "note": "author's own Doors script, vendored byte-for-byte so the verbatim path works offline"
+    "note": "author's own Doors script, vendored byte-for-byte so the verbatim path works offline",
+    "url": "https://raw.githubusercontent.com/therealcookiemonsterof1966/AbysallContinued/main/Games/Doors/Main.luau"
+  },
+  "abysall_env.luau": {
+    "bytes": 20604,
+    "md5": "b38c35b0f5acfb791c2a06fc610e60de",
+    "note": "component the Abysall payload fetches itself; served from an HttpGet hook keyed on its exact URL",
+    "url": "https://raw.githubusercontent.com/therealcookiemonsterof1966/AbysallContinued/main/Components/Environment.luau"
+  },
+  "abysall_esp.luau": {
+    "bytes": 17870,
+    "md5": "d2b99356c1c120aa6a75a9a3ff7af25f",
+    "note": "component the Abysall payload fetches itself; served from the same hook",
+    "url": "https://raw.githubusercontent.com/therealcookiemonsterof1966/AbysallContinued/main/Components/ESP.luau"
+  },
+  "abysall_interface.luau": {
+    "bytes": 5210,
+    "md5": "e857593b771f8d2fecfea595486ccb94",
+    "note": "component the Abysall payload fetches itself; served from the same hook",
+    "url": "https://raw.githubusercontent.com/therealcookiemonsterof1966/AbysallContinued/main/Components/Interface.luau"
+  },
+  "abysall_stx.luau": {
+    "bytes": 8796,
+    "md5": "88e6cfb634b0334a0ddb9d4ad1c3aedb",
+    "note": "fetched at load time by the Abysall payload via loadstring(HttpGet(...)); served from the same hook",
+    "url": "https://raw.githubusercontent.com/bocaj111004/Abysall/refs/heads/main/Components/STX.luau"
   },
   "draconic_evade.lua": {
-    "url": "https://raw.githubusercontent.com/Unknownproooolucky/Draconic-Hub-X/refs/heads/main/files/Evade/Overhaul.lua",
-    "commit": "e499b78f",
     "bytes": 409777,
+    "commit": "e499b78f",
     "md5": "c9e04664b6b2d683ee2ed20ec52abd0d",
+    "note": "author's own Evade script (v3.5 Beta payload), vendored byte-for-byte so the verbatim path works offline",
     "obfuscator": "wearedevs v1.0.0",
-    "note": "author's own Evade script (v3.5 Beta payload), vendored byte-for-byte so the verbatim path works offline"
+    "url": "https://raw.githubusercontent.com/Unknownproooolucky/Draconic-Hub-X/refs/heads/main/files/Evade/Overhaul.lua"
+  },
+  "reicht_floating.lua": {
+    "bytes": 8586,
+    "md5": "54de7b4d45c913fbcdb0dd916c963f6d",
+    "note": "hub's own floating-button manager; network is tried first, this is the fallback copy",
+    "url": "https://raw.githubusercontent.com/Shinzzyak/Reicht/refs/heads/main/FloatingButton.lua"
+  },
+  "reicht_ui.lua": {
+    "bytes": 298262,
+    "md5": "be03a19339aae3adf2b21d68a6fc04d2",
+    "note": "hub's own menu library; network is tried first so a UI hotfix needs no rebuild, this copy is the floor under it. Refresh with: cp ui.lua sync/upstream/ref/reicht_ui.lua",
+    "url": "https://raw.githubusercontent.com/Shinzzyak/Reicht/refs/heads/main/ui.lua"
   }
 }

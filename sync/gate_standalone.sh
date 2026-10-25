@@ -25,3 +25,23 @@ for g in Doors Evade; do
   echo "$out" | grep -E 'standalone copy is embedded|upstream loads the author' | sed 's/^/  /'
   echo "$out" | grep -E '^WROTE\|(Abysall|Draconic)Upstream\|SetAttribute\|(Source|Bytes|EmbeddedBytes)=' | sed 's/^/  /'
 done
+
+echo "=== hub's own layer offline (Shinzzyak/Reicht unreachable) ==="
+# ui.lua, FloatingButton.lua and the seven Abysall components all live on other
+# people's repos. This is the section that proves the menu still opens when every
+# one of those is gone -- the whole point of baking them into the artifact.
+for g in Doors Evade; do
+  out=$(REICHT_UI_BLOCK="Shinzzyak" python3 sync/smoke.py "games/$g.lua" 2>&1)
+  echo "$g: $(echo "$out" | grep -E '^SMOKE' | tail -1)"
+  echo "$out" | grep -E 'ui source:|floating button source:' | sed 's/^/  /'
+  echo "$out" | grep -E '^WROTE\|AbysallUpstream\|SetAttribute\|Component' | sed 's/^/  /'
+  echo "$out" | grep -c 'PROOF|FAIL' | sed 's/^/  proof_fails=/'
+done
+
+for g in Doors Evade; do
+  out=$(REICHT_UI_BLOCK="Shinzzyak" python3 sync/smoke.py "games/$g.lua" 2>&1)
+  if ! echo "$out" | grep -q 'ui source: embedded'; then
+    echo "FAIL: $g did not fall back to the embedded menu"; exit 1
+  fi
+done
+echo "hub layer offline: PASS (both games served the menu from the artifact)"

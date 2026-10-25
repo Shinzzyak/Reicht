@@ -444,35 +444,47 @@ if #Missing > 0 then
         " - menu still opens, features that need them stay off.")
 end
 
--- Three routes to the same file plus a disk cache. A single URL is one rate limit
--- or one 404 away from "the menu failed to load", and the operator has no way to
--- tell that apart from a broken script.
+-- Three routes to the same file, then the copy baked into this build, then a disk
+-- cache. A single URL is one rate limit or one 404 away from "the menu failed to
+-- load", and the operator has no way to tell that apart from a broken script.
 local UI_URLS = {
     "https://raw.githubusercontent.com/Shinzzyak/Reicht/refs/heads/main/ui.lua",
     "https://cdn.jsdelivr.net/gh/Shinzzyak/Reicht@main/ui.lua",
     "https://raw.gitmirror.com/Shinzzyak/Reicht/main/ui.lua",
 }
 local UI_CACHE = "Reicht/ui.lua"
+-- Standalone copy: build.py swaps this call for the library file itself as one long
+-- string. Network stays first so a UI hotfix needs no rebuild; this is the floor
+-- under it, so a dead or renamed repo costs freshness instead of the whole menu.
+local UI_EMBEDDED = REICHT_EMBED("reicht_ui.lua")
 
 local function LoadUiSource()
     for _, url in ipairs(UI_URLS) do
         local ok, src = pcall(game.HttpGet, game, url)
         if ok and type(src) == "string" and #src > 1024 then
             if writefile then pcall(writefile, UI_CACHE, src) end
-            return src
+            return src, "network"
         end
+    end
+    if type(UI_EMBEDDED) == "string" and #UI_EMBEDDED > 1024 then
+        return UI_EMBEDDED, "embedded"
     end
     if isfile and readfile and isfile(UI_CACHE) then
         local ok, src = pcall(readfile, UI_CACHE)
         if ok and type(src) == "string" and #src > 1024 then
-            return src
+            return src, "cache"
         end
     end
-    return nil
+    return nil, "none"
 end
 
+-- Which route actually supplied the library. Kept visible because "the menu is
+-- blank" and "the fetch was blocked" are otherwise the same screenshot.
+local UiOrigin = "none"
+
 local Library = Safe(function()
-    local src = LoadUiSource()
+    local src, origin = LoadUiSource()
+    UiOrigin = origin or "none"
     if type(src) ~= "string" or #src < 1024 then return nil end
     local chunk = loadstring(src)
     if not chunk then return nil end
@@ -484,6 +496,11 @@ if type(Library) ~= "table" then
     Alert("The menu failed to load on this executor.")
     return
 end
+getgenv().ReichtUiSource = UiOrigin
+warn(string.format("[Reicht] ui source: %s (embedded ready: %s, %d bytes)",
+    tostring(UiOrigin),
+    tostring(type(UI_EMBEDDED) == "string" and #UI_EMBEDDED > 1024),
+    type(UI_EMBEDDED) == "string" and #UI_EMBEDDED or 0))
 
 local Window = Library:CreateWindow({
     Title = "Reicht",
@@ -9435,6 +9452,59 @@ local AbysallUpstreamUrl = "https://raw.githubusercontent.com/therealcookiemonst
 -- so Abysall's repo dying costs refresh age, not the feature. Same bytes, same md5,
 -- no network involved. Doors keeps working on a dead route.
 local AbysallEmbedded = REICHT_EMBED("abysall_doors.luau")
+-- The payload fetches five of its own components by absolute URL while it runs, so
+-- vendoring Main.luau alone still leaves the layer half-dead when his repo goes.
+-- These seven are baked in and served from an HttpGet hook keyed on the exact URL:
+-- identical bytes on a match, plain passthrough for every other request.
+local ABYSALL_COMPONENT_BASE = "https://raw.githubusercontent.com/therealcookiemonsterof1966/AbysallContinued/main/Components/"
+-- Two of them come from a different repo than the rest: the payload still points at
+-- the older bocaj111004/Abysall for STX (needed at load) and DeathFarm (button only).
+local ABYSALL_LEGACY_BASE = "https://raw.githubusercontent.com/bocaj111004/Abysall/refs/heads/main/"
+local ABYSALL_COMPONENTS = {
+    [ABYSALL_COMPONENT_BASE .. "Environment.luau"] = REICHT_EMBED("abysall_env.luau"),
+    [ABYSALL_COMPONENT_BASE .. "ESP.luau"] = REICHT_EMBED("abysall_esp.luau"),
+    [ABYSALL_COMPONENT_BASE .. "Interface.luau"] = REICHT_EMBED("abysall_interface.luau"),
+    [ABYSALL_COMPONENT_BASE .. "16Notice.luau"] = REICHT_EMBED("abysall_16notice.luau"),
+    [ABYSALL_COMPONENT_BASE .. "Analytics.luau"] = REICHT_EMBED("abysall_analytics.luau"),
+    [ABYSALL_LEGACY_BASE .. "Components/STX.luau"] = REICHT_EMBED("abysall_stx.luau"),
+    [ABYSALL_LEGACY_BASE .. "Scripts/DeathFarm.luau"] = REICHT_EMBED("abysall_deathfarm.luau"),
+}
+local AbysallComponentServed = 0
+local AbysallComponentMarker = nil
+
+local function CountEmbeddedComponents()
+    local total = 0
+    for _, body in pairs(ABYSALL_COMPONENTS) do
+        if type(body) == "string" and #body >= 1024 then total = total + 1 end
+    end
+    return total
+end
+
+local function EmbedAbysallComponents(marker)
+    if type(ABYSALL_COMPONENTS) ~= "table" then return false end
+    if marker then AbysallComponentMarker = marker end
+    if getgenv().ReichtAbysallComponentHook then return true end
+    local origin = game.HttpGet
+    if type(origin) ~= "function" then return false end
+    local hooked = function(self, url, ...)
+        if type(url) == "string" then
+            local body = ABYSALL_COMPONENTS[url]
+            if type(body) == "string" and #body >= 1024 then
+                AbysallComponentServed = AbysallComponentServed + 1
+                if AbysallComponentMarker then
+                    AbysallComponentMarker:SetAttribute("ComponentServed", AbysallComponentServed)
+                end
+                return body
+            end
+        end
+        return origin(self, url, ...)
+    end
+    if pcall(function() game.HttpGet = hooked end) then
+        getgenv().ReichtAbysallComponentHook = true
+        return true
+    end
+    return false
+end
 
 local function RunAbysallUpstream()
     if getgenv().ReichtAbysallUpstream then
@@ -9463,6 +9533,11 @@ local function RunAbysallUpstream()
     marker:SetAttribute("Source", origin)
     marker:SetAttribute("EmbeddedReady", type(AbysallEmbedded) == "string" and #AbysallEmbedded >= 1024)
     marker:SetAttribute("EmbeddedBytes", type(AbysallEmbedded) == "string" and #AbysallEmbedded or 0)
+    -- Five components the payload fetches itself while it runs. The hook is installed
+    -- before the chunk goes, so his Components/ URLs never leave the machine.
+    local componentHook = EmbedAbysallComponents(marker)
+    marker:SetAttribute("ComponentEmbeds", CountEmbeddedComponents())
+    marker:SetAttribute("ComponentHook", componentHook)
     task.spawn(function()
         local ran, err = pcall(chunk)
         if not ran then

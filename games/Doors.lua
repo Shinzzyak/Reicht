@@ -338,24 +338,8267 @@ local UI_URLS = {
 "https://raw.gitmirror.com/Shinzzyak/Reicht/main/ui.lua",
 }
 local UI_CACHE = "Reicht/ui.lua"
+local UI_EMBEDDED = [[local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+local TextService = game:GetService("TextService")
+local CoreGui = game:GetService("CoreGui")
+local Stats = game:GetService("Stats")
+local Workspace = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
+local Library = {
+Version = "1.0",
+Options = {},
+Buttons = {},
+Toggles = {},
+Unloaded = false,
+Window = nil,
+}
+local Config = {
+GuiAttribute = "MarioHubUI",
+Root = "mariohub",
+AssetDir = "mariohub/assets",
+ConfigRoot = "mariohub/configs",
+DefaultAssets = {
+},
+SeasonTheme = "Halloween",
+FontDir = "mariohub/fonts",
+HttpTimeout = 8,
+FontTimeout = 20,
+PreloadTimeout = 5,
+ThaiFont = {
+Family = "MarioKanit",
+Source = "https://raw.githubusercontent.com/google/fonts/main/ofl/kanit/Kanit-%s.ttf",
+Weights = { [400] = "Regular", [500] = "Medium", [600] = "SemiBold" },
+},
+ThaiSizeBonus = { Body = 2, Desc = 2, Display = 1, Strong = 1 },
+Text = { Title = 26, Header = 22, Group = 16, Label = 15, Desc = 13, Small = 12, Button = 15, Watermark = 13, Section = 13 },
+Window = {
+Width = 820, Height = 560, MinWidth = 520, MinHeight = 360,
+TouchMinWidth = 320, TouchMinHeight = 260,
+Topbar = 56, Sidebar = 196, SidebarCompact = 64, Header = 62, Ground = 24, UserCard = 58,
+CompactBreakpoint = 640, TwoColumnMin = 540, Margin = 24, TouchMargin = 10,
+Radius = 12, Stroke = 3, Shadow = 6,
+},
+Metrics = {
+Desktop = { Row = 32, Box = 32, Item = 30, Track = 10, Knob = 18, Switch = Vector2.new(42, 22), SwitchKnob = 16, Tab = 38, Check = 22, Icon = 18, Depth = 4, Radius = 8 },
+Touch = { Row = 38, Box = 36, Item = 36, Track = 12, Knob = 24, Switch = Vector2.new(50, 26), SwitchKnob = 20, Tab = 44, Check = 26, Icon = 20, Depth = 4, Radius = 8 },
+},
+Motion = {
+Speed = { Fast = 28, Normal = 20, Soft = 14, Slow = 10 },
+Damping = 0.72,
+BounceDamping = 0.46,
+SquashDamping = 0.44,
+},
+Selectable = { PadX = 10, Bar = 4, BarWidth = 4, Radius = 8, HoverAlpha = 0.35 },
+Button = { PadX = 14, IconGap = 6, Depth = 4, HoverLighten = 0.14 },
+Group = { Header = 36, PadX = 12, PadY = 10, Shadow = 4, Radius = 12, Stroke = 2 },
+Gap = { X = 8, Y = 6, Column = 12 },
+Page = { Pad = 14, ScrollBar = 6 },
+Dropdown = { MaxVisible = 7, SearchThreshold = 8, MinWidth = 170 },
+ColorPicker = { Field = 150, Hue = 14 },
+Notify = { Width = 300, TouchWidth = 260, Duration = 4, Gap = 8 },
+Tween = { Fast = 0.15, Normal = 0.2, Slide = 0.28, Pop = 0.32, Collapse = 0.24, Notify = 0.42 },
+Ease = {
+Out = { Enum.EasingStyle.Quint, Enum.EasingDirection.Out },
+Back = { Enum.EasingStyle.Back, Enum.EasingDirection.Out },
+In = { Enum.EasingStyle.Quad, Enum.EasingDirection.In },
+Sine = { Enum.EasingStyle.Sine, Enum.EasingDirection.InOut },
+Linear = { Enum.EasingStyle.Linear, Enum.EasingDirection.InOut },
+Bounce = { Enum.EasingStyle.Bounce, Enum.EasingDirection.Out },
+},
+Layer = { Window = 10, Watermark = 30, Float = 40, Overlay = 50, Modal = 52, Tooltip = 55, Notify = 60, Intro = 70 },
+LayoutPasses = 12,
+MeasureCacheLimit = 4000,
+DragThreshold = 6,
+ConfirmWindow = 2,
+TooltipDelay = 0.45,
+TitleWaveInterval = 9,
+ScaleRange = { Min = 0.7, Max = 1.4 },
+Particles = { Count = 10, MinTime = 7, MaxTime = 13 },
+MouseNames = {
+[Enum.UserInputType.MouseButton1] = "MB1",
+[Enum.UserInputType.MouseButton2] = "MB2",
+[Enum.UserInputType.MouseButton3] = "MB3",
+},
+TitleColors = { "Accent", "Coin", "Good", "Blue" },
+}
+local function rgb(hex)
+return Color3.fromRGB(tonumber(hex:sub(1, 2), 16), tonumber(hex:sub(3, 4), 16), tonumber(hex:sub(5, 6), 16))
+end
+local function Palette(spec)
+local palette = {}
+for token, value in pairs(spec) do
+if token == "Logo" then
+palette.Logo = value
+elseif token == "Particle" then
+local glyphs = type(value[1]) == "table" and value[1] or { value[1] }
+palette.ParticleGlyph, palette.ParticleGlyphs, palette.ParticleFall, palette.ParticleColor = glyphs[1], glyphs, value[2], rgb(value[3])
+elseif token == "Decor" then
+palette.Decor, palette.DecorGlyph, palette.DecorColor = value[1], value[2] or "✦", rgb(value[3] or "FFFFFF")
+elseif type(value) == "string" then
+palette[token] = rgb(value)
+else
+palette[token] = value
+end
+end
+return palette
+end
+local Themes = {
+Order = { "Overworld", "Halloween", "Light", "Dark", "Underground", "Castle", "Ghost House", "Star Road", "Desert", "Ice Land", "Jungle", "Sky World" },
+Overworld = Palette({
+Backdrop = "C4D6EC", BackdropAlt = "E2E9F2", Topbar = "7092CC", Sidebar = "96563E", SidebarAlt = "804834",
+SidebarText = "FCF2E6", SidebarMuted = "E2C4B0", TabActive = "FAF4E9", TabActiveText = "B84034",
+Panel = "FAF6EE", PanelHeader = "F1E7D4", Element = "FFFCF6", Hover = "EEE2CA",
+Outline = "3E384A", Shadow = "7880A0", Text = "3A3028", SubText = "76685A", Muted = "A09484", Track = "DED4C4",
+Cloud = "FFFFFF", CloudAlpha = 0.25, Accent = "D64C40", AccentDark = "A0342C", Grass = "74B45C", GrassDark = "4E8840", Brick = "A46042", BrickDark = "683A28", Decor = { "Clouds" },
+Particle = { "✦", false, "F6D878" },
+}),
+Halloween = Palette({
+Backdrop = "1A1226", BackdropAlt = "2A1838", Topbar = "2B1A3E", Sidebar = "3A2150", SidebarAlt = "2C1840",
+SidebarText = "FFF1E2", SidebarMuted = "C9A9D8", TabActive = "F28A2E", TabActiveText = "1E1024",
+Panel = "241830", PanelHeader = "301F40", Element = "2E2140", Hover = "3C2A52",
+Outline = "0B0610", Shadow = "0B0610", Text = "FFF1E2", SubText = "D7BFD9", Muted = "9C85A8", Track = "4A3460",
+Cloud = "B98CFF", CloudAlpha = 0.85, Accent = "F28A2E", AccentDark = "B85E14", Grass = "7A3FA8", GrassDark = "4E2470", Brick = "4A2E60", BrickDark = "1E1028", Decor = { "Halloween", "✦", "FFB347" },
+Glow = "F28A2E", Fog = "8E5CD0", Logo = "logo_halloween",
+Particle = { { "✦", "✦", "•", "✧" }, false, "FFB347" },
+}),
+Light = Palette({
+Backdrop = "F2EEE6", BackdropAlt = "FAF8F3", Topbar = "EDE4D4", TopbarText = "4A3F35", Sidebar = "EAE2D4", SidebarAlt = "DDD3C2",
+SidebarText = "4A3F35", SidebarMuted = "9B8E7E", TabActive = "D64C40", TabActiveText = "FFFFFF",
+Panel = "FFFFFF", PanelHeader = "F6F1E8", Element = "FBF9F5", Hover = "F0E8DA",
+Outline = "4A4458", Shadow = "CFC7BA", Text = "3A3028", SubText = "7C6E60", Muted = "ABA092", Track = "E6DED2",
+Cloud = "C8D8EC", CloudAlpha = 0, Accent = "D64C40", AccentDark = "A0342C", Grass = "8CC47A", GrassDark = "62A052", Brick = "D8B48E", BrickDark = "AE8A64", Decor = { "Clouds" },
+Particle = { "•", false, "D64C40" },
+}),
+Dark = Palette({
+Backdrop = "1E1F26", BackdropAlt = "25262F", Topbar = "17181E", Sidebar = "22232B", SidebarAlt = "1B1C22",
+SidebarText = "E8E6F0", SidebarMuted = "8D8A9C", TabActive = "D64C40", TabActiveText = "FFFFFF",
+Panel = "2A2B34", PanelHeader = "31323C", Element = "353743", Hover = "3E404D",
+Outline = "0E0E12", Shadow = "0E0E12", Text = "ECEAF4", SubText = "A9A6B8", Muted = "7B788C", Track = "454756",
+Cloud = "FFFFFF", CloudAlpha = 0.9, Accent = "E0584C", AccentDark = "A83A30", Grass = "5A5C6E", GrassDark = "3E3F4C", Brick = "2E2F39", BrickDark = "17181E", Decor = { "Stars", "✦", "F0C448" },
+Particle = { "✦", false, "F0C448" },
+}),
+Underground = Palette({
+Backdrop = "141A36", BackdropAlt = "1E2750", Topbar = "0E1330", Sidebar = "22327A", SidebarAlt = "1A2762",
+SidebarText = "ECF0FF", SidebarMuted = "98A8E0", TabActive = "F0C448", TabActiveText = "1E1B2E",
+Panel = "1F2749", PanelHeader = "27305A", Element = "2C3666", Hover = "36417A",
+Outline = "05060F", Shadow = "05060F", Text = "F2F4FF", SubText = "AEB6E2", Muted = "7C86B8", Track = "3C4780",
+Cloud = "96AAFF", CloudAlpha = 0.8, Accent = "5B8CF0", AccentDark = "3A62C0", Grass = "3A5BC8", GrassDark = "2A469E", Brick = "2F4AA8", BrickDark = "142058", Decor = { "Stars", "✦", "8FA8FF" },
+Particle = { "✦", false, "8FA8FF" },
+}),
+Castle = Palette({
+Backdrop = "1E1818", BackdropAlt = "33201C", Topbar = "150F0F", Sidebar = "4A4040", SidebarAlt = "3A3232",
+SidebarText = "FFF1E6", SidebarMuted = "C8B0A4", TabActive = "E8703A", TabActiveText = "FFFFFF",
+Panel = "2B2323", PanelHeader = "352B2B", Element = "3D3232", Hover = "4A3D3D",
+Outline = "0A0707", Shadow = "0A0707", Text = "FFF1E6", SubText = "D9BFB0", Muted = "9F8579", Track = "524242",
+Cloud = "FF8A50", CloudAlpha = 0.85, Accent = "E8703A", AccentDark = "B04A1E", Grass = "FF7A2E", GrassDark = "C8481A", Brick = "5A5050", BrickDark = "2A2222", Decor = { "Stars", "•", "FF8A3C" },
+Particle = { "•", false, "FF8A3C" },
+}),
+["Ghost House"] = Palette({
+Backdrop = "1C2226", BackdropAlt = "232B30", Topbar = "151A1E", Sidebar = "2C3A3A", SidebarAlt = "223030",
+SidebarText = "E6F2EE", SidebarMuted = "8FB0A8", TabActive = "B8E0D2", TabActiveText = "1C2126",
+Panel = "242C31", PanelHeader = "2B353B", Element = "303B42", Hover = "39454D",
+Outline = "0B0E10", Shadow = "0B0E10", Text = "EAF4F1", SubText = "A3BDB6", Muted = "71898A", Track = "3E4B52",
+Cloud = "CFF5E7", CloudAlpha = 0.85, Accent = "4FB89C", AccentDark = "348A72", Grass = "6B5040", GrassDark = "4A362A", Brick = "5A4334", BrickDark = "2E2219", Decor = { "Stars", "•", "B8F0DC" },
+Particle = { "•", false, "9FE8D0" },
+}),
+["Star Road"] = Palette({
+Backdrop = "1C1236", BackdropAlt = "2D1C54", Topbar = "130B28", Sidebar = "3B2475", SidebarAlt = "2D1A5C",
+SidebarText = "FFF7FF", SidebarMuted = "CDB9F2", TabActive = "F0C448", TabActiveText = "26144A",
+Panel = "251749", PanelHeader = "2E1D5A", Element = "34225F", Hover = "412A72",
+Outline = "07030F", Shadow = "07030F", Text = "FFF7FF", SubText = "CDB9F2", Muted = "9580C4", Track = "4A3480",
+Cloud = "FFE680", CloudAlpha = 0.8, Accent = "E85CA8", AccentDark = "B03C7E", Grass = "F0C448", GrassDark = "BA8C28", Brick = "5A38A8", BrickDark = "2A1858", Decor = { "Stars", "★", "FFD95A" },
+Particle = { "★", false, "FFD95A" },
+}),
+Desert = Palette({
+Backdrop = "E8DABD", BackdropAlt = "F4EBD8", Topbar = "C99A62", Sidebar = "B07E4E", SidebarAlt = "966A40",
+SidebarText = "FFF6E8", SidebarMuted = "EED4B2", TabActive = "FFF8EC", TabActiveText = "B0502C",
+Panel = "FFF9EE", PanelHeader = "F4E6CC", Element = "FFFCF6", Hover = "F0DFC0",
+Outline = "5A4632", Shadow = "C2A07A", Text = "4A3828", SubText = "86705A", Muted = "B09A80", Track = "E6D6BC",
+Cloud = "FFFFFF", CloudAlpha = 0.3, Accent = "C8643A", AccentDark = "964626", Grass = "EACB8C", GrassDark = "C9A866", Brick = "C08A5A", BrickDark = "8A5E38", Decor = { "Clouds" },
+Particle = { "•", false, "C9964E" },
+}),
+["Ice Land"] = Palette({
+Backdrop = "D8E8F4", BackdropAlt = "EDF4FA", Topbar = "86B0D2", Sidebar = "6A96BA", SidebarAlt = "5A82A4",
+SidebarText = "F4FAFF", SidebarMuted = "CFE3F2", TabActive = "F6FBFF", TabActiveText = "3A78A8",
+Panel = "F8FCFF", PanelHeader = "E6F0F8", Element = "FFFFFF", Hover = "DCEAF5",
+Outline = "3E4F63", Shadow = "A6BACE", Text = "2E3D4D", SubText = "62788E", Muted = "95A8BA", Track = "D4E1EC",
+Cloud = "FFFFFF", CloudAlpha = 0.2, Accent = "3A8AC8", AccentDark = "2A6698", Grass = "FFFFFF", GrassDark = "CFE3F2", Brick = "7FA8CC", BrickDark = "4F7699", Decor = { "Clouds" },
+Particle = { "❄", true, "FFFFFF" },
+}),
+Jungle = Palette({
+Backdrop = "1F2E23", BackdropAlt = "293C2D", Topbar = "17231A", Sidebar = "2F4A33", SidebarAlt = "253B29",
+SidebarText = "EEF7EA", SidebarMuted = "A3C29C", TabActive = "F0C84A", TabActiveText = "1F2A1F",
+Panel = "26382A", PanelHeader = "2E4332", Element = "334A37", Hover = "3D5641",
+Outline = "0C120D", Shadow = "0C120D", Text = "EEF6EA", SubText = "AFC6A8", Muted = "7E957A", Track = "445C47",
+Cloud = "D8F5C8", CloudAlpha = 0.85, Accent = "E08A3A", AccentDark = "A86024", Grass = "5AAE4E", GrassDark = "3A7A34", Brick = "5A4A32", BrickDark = "30261A", Decor = { "Stars", "•", "D8F07A" },
+Particle = { "•", false, "D8F07A" },
+}),
+["Sky World"] = Palette({
+Backdrop = "E6EEFC", BackdropAlt = "F6F9FF", Topbar = "A4BEEA", Sidebar = "8AA4D6", SidebarAlt = "7A92C4",
+SidebarText = "FFFFFF", SidebarMuted = "E3EBFA", TabActive = "FFFFFF", TabActiveText = "4A6FB5",
+Panel = "FFFFFF", PanelHeader = "EEF3FC", Element = "FFFFFF", Hover = "E4ECFA",
+Outline = "46506A", Shadow = "B6C2DA", Text = "333C52", SubText = "6A7590", Muted = "9AA4BC", Track = "DCE3F0",
+Cloud = "FFFFFF", CloudAlpha = 0.1, Accent = "4A6FB5", AccentDark = "34528A", Grass = "FFFFFF", GrassDark = "DCE6F8", Brick = "C4D4F0", BrickDark = "98AED8", Decor = { "Clouds" },
+Particle = { "✦", false, "FFFFFF" },
+}),
+Shared = Palette({
+Accent = "D64C40", AccentDark = "A0342C", OnAccent = "FFFFFF", Danger = "D64C40", DangerDark = "A0342C",
+Blue = "468AC4", BlueDark = "326496", Good = "60AA62", GoodDark = "427E46",
+Coin = "F0C448", CoinDark = "BA8C28", Risky = "E28046", RiskyDark = "A8562C",
+Brick = "A46042", BrickDark = "683A28", Grass = "74B45C", GrassDark = "4E8840",
+Knob = "FFFFFF", Ink = "2E2838", White = "FFFFFF", Black = "000000",
+}),
+}
+local State = {
+Gui = nil,
+Overlay = nil,
+Window = nil,
+Popup = nil,
+Drag = nil,
+Binding = nil,
+MenuKey = "LeftControl",
+ThemeName = "Overworld",
+Language = "EN",
+UserScale = 1,
+Touch = false,
+KeyPickers = {},
+Connections = {},
+Tasks = {},
+UnloadHooks = {},
+Fps = 60,
+StartTime = os.clock(),
+}
+local Util = {}
+local Anim = {}
+local Motion = {}
+local Fx = {}
+local Reactive = {}
+local Tailwind = {}
+local Draw = {}
+local Sprite = {}
+local Assets = { Overrides = {}, Cache = {} }
+local Fonts = { Texts = {}, Thai = nil }
+local Particles = { Pool = {}, Enabled = true }
+local Lang = { Bound = {}, Listeners = setmetatable({}, { __mode = "k" }), InstanceListeners = {} }
+local Theme = { Colors = {}, Bound = {}, Renderers = setmetatable({}, { __mode = "k" }), InstanceRenderers = {} }
+local Layout = { Dirty = {}, All = setmetatable({}, { __mode = "k" }), Measured = {}, MeasuredCount = 0 }
+local Icons = {}
+local Creator = {}
+local Gui = { Stack = {} }
+local Popup = {}
+local Dialog = {}
+local Sheet = {}
+local Tooltip = {}
+local Notify = {}
+local Watermark = {}
+local Float = {}
+local Keybinds = {}
+local Configs = { Folder = Config.ConfigRoot .. "/default" }
+local Intro = {}
+local Widget = {}
+local Row = {}
+local Container = {}
+Container.__index = Container
+local Toggle = setmetatable({}, { __index = Widget })
+Toggle.__index = Toggle
+local Slider = setmetatable({}, { __index = Widget })
+Slider.__index = Slider
+local Dropdown = setmetatable({}, { __index = Widget })
+Dropdown.__index = Dropdown
+local Input = setmetatable({}, { __index = Widget })
+Input.__index = Input
+local Button = {}
+Button.__index = Button
+local KeyPicker = setmetatable({}, { __index = Widget })
+KeyPicker.__index = KeyPicker
+local ColorPicker = setmetatable({}, { __index = Widget })
+ColorPicker.__index = ColorPicker
+local Label = {}
+Label.__index = Label
+local Selectable = setmetatable({}, { __index = Widget })
+Selectable.__index = Selectable
+local ListBox = setmetatable({}, { __index = Widget })
+ListBox.__index = ListBox
+local Progress = setmetatable({}, { __index = Widget })
+Progress.__index = Progress
+local Stepper = setmetatable({}, { __index = Widget })
+Stepper.__index = Stepper
+local RangeSlider = setmetatable({}, { __index = Widget })
+RangeSlider.__index = RangeSlider
+local Segmented = setmetatable({}, { __index = Widget })
+Segmented.__index = Segmented
+local MultiChips = setmetatable({}, { __index = Widget })
+MultiChips.__index = MultiChips
+local StatWidget = setmetatable({}, { __index = Widget })
+StatWidget.__index = StatWidget
+local StatusWidget = setmetatable({}, { __index = Widget })
+StatusWidget.__index = StatusWidget
+local TableWidget = setmetatable({}, { __index = Widget })
+TableWidget.__index = TableWidget
+local Window = {}
+Window.__index = Window
+local Tab = {}
+Tab.__index = Tab
+local Groupbox = setmetatable({}, { __index = Container })
+Groupbox.__index = Groupbox
+Reactive.Stack = {}
+Reactive.BatchDepth = 0
+Reactive.Pending = {}
+Reactive.Disposers = {}
+function Reactive.Track(subscribers)
+local active = Reactive.Stack[#Reactive.Stack]
+if not active then
+return
+end
+subscribers[active] = true
+active.Deps[subscribers] = true
+end
+function Reactive.Trigger(subscribers)
+for effect in pairs(subscribers) do
+if Reactive.BatchDepth > 0 then
+Reactive.Pending[effect] = true
+else
+Reactive.RunEffect(effect)
+end
+end
+end
+function Reactive.CleanupEffect(effect)
+if effect.Cleanup then
+pcall(effect.Cleanup)
+effect.Cleanup = nil
+end
+for dep in pairs(effect.Deps) do
+dep[effect] = nil
+end
+table.clear(effect.Deps)
+end
+function Reactive.RunEffect(effect)
+if effect.Disposed or Library.Unloaded then
+return
+end
+Reactive.CleanupEffect(effect)
+table.insert(Reactive.Stack, effect)
+local ok, cleanup = pcall(effect.Runner)
+table.remove(Reactive.Stack)
+if ok and type(cleanup) == "function" then
+effect.Cleanup = cleanup
+end
+end
+function Reactive.Effect(runner)
+local effect = { Runner = runner, Deps = {}, Disposed = false, Cleanup = nil }
+local function Dispose()
+if effect.Disposed then
+return
+end
+effect.Disposed = true
+Reactive.CleanupEffect(effect)
+end
+table.insert(Reactive.Disposers, Dispose)
+Reactive.RunEffect(effect)
+return Dispose
+end
+function Reactive.Batch(callback)
+Reactive.BatchDepth += 1
+pcall(callback)
+Reactive.BatchDepth -= 1
+if Reactive.BatchDepth > 0 then
+return
+end
+local queued = {}
+for effect in pairs(Reactive.Pending) do
+table.insert(queued, effect)
+end
+table.clear(Reactive.Pending)
+for _, effect in ipairs(queued) do
+Reactive.RunEffect(effect)
+end
+end
+local RefMethods = {}
+function RefMethods:Get()
+Reactive.Track(self._subs)
+return self._current
+end
+function RefMethods:Set(nextValue)
+if self._current == nextValue and type(nextValue) ~= "table" then
+return
+end
+local previous = self._current
+self._current = nextValue
+Reactive.Trigger(self._subs)
+for _, listener in ipairs(self._listeners) do
+pcall(listener, nextValue, previous)
+end
+end
+function RefMethods:Update(transform)
+self:Set(transform(self._current))
+end
+function RefMethods:Subscribe(listener, immediate)
+table.insert(self._listeners, listener)
+if immediate then
+pcall(listener, self._current, nil)
+end
+return function()
+local index = table.find(self._listeners, listener)
+if index then
+table.remove(self._listeners, index)
+end
+end
+end
+local RefMeta = {
+__index = function(self, key)
+if key == "Value" then
+Reactive.Track(self._subs)
+return self._current
+end
+return RefMethods[key]
+end,
+__newindex = function(self, key, nextValue)
+if key == "Value" then
+RefMethods.Set(self, nextValue)
+return
+end
+rawset(self, key, nextValue)
+end,
+}
+function Reactive.IsRef(candidate)
+return type(candidate) == "table" and rawget(candidate, "_isRef") == true
+end
+function Reactive.Ref(initial)
+return setmetatable({
+_isRef = true,
+_current = initial,
+_subs = {},
+_listeners = {},
+}, RefMeta)
+end
+function Reactive.Computed(getter)
+local derived = Reactive.Ref(nil)
+Reactive.Effect(function()
+local ok, evaluated = pcall(getter)
+if ok then
+derived:Set(evaluated)
+end
+end)
+return derived
+end
+function Reactive.Watch(source, callback, options)
+options = options or {}
+if type(source) == "string" and Library.Options[source] then
+source = Library.Options[source]
+end
+if type(source) == "table" and source.Ref then
+return source.Ref:Subscribe(callback, options.Immediate)
+end
+if Reactive.IsRef(source) then
+return source:Subscribe(callback, options.Immediate)
+end
+if type(source) == "function" then
+local computed = Reactive.Computed(source)
+return computed:Subscribe(callback, options.Immediate)
+end
+return function() end
+end
+local StoreProto = {}
+StoreProto.__index = StoreProto
+function StoreProto:Ref(key)
+local slot = self._refs[key]
+if not slot then
+slot = Reactive.Ref(nil)
+self._refs[key] = slot
+end
+return slot
+end
+function StoreProto:Get(key)
+return self:Ref(key):Get()
+end
+function StoreProto:Set(key, nextValue)
+self:Ref(key):Set(nextValue)
+end
+function StoreProto:Update(key, transform)
+local slot = self:Ref(key)
+slot:Set(transform(slot:Get()))
+end
+function StoreProto:Watch(key, callback, immediate)
+return self:Ref(key):Subscribe(callback, immediate)
+end
+function Reactive.Store(initialState)
+local store = setmetatable({ _refs = {}, State = {} }, StoreProto)
+for key, initial in pairs(initialState or {}) do
+store._refs[key] = Reactive.Ref(initial)
+end
+setmetatable(store.State, {
+__index = function(_, key)
+return store:Get(key)
+end,
+__newindex = function(_, key, nextValue)
+store:Set(key, nextValue)
+end,
+})
+return store
+end
+function Reactive.DisposeAll()
+for _, dispose in ipairs(Reactive.Disposers) do
+pcall(dispose)
+end
+table.clear(Reactive.Disposers)
+table.clear(Reactive.Pending)
+table.clear(Reactive.Stack)
+end
+function Util.Try(callback, ...)
+if type(callback) ~= "function" then
+return false
+end
+local ok, message = pcall(callback, ...)
+if not ok then
+warn("[Reicht] " .. tostring(message))
+end
+return ok, message
+end
+function Util.Connect(signal, callback)
+local connection = signal:Connect(callback)
+table.insert(State.Connections, connection)
+return connection
+end
+function Util.Every(interval, callback)
+table.insert(State.Tasks, { Interval = interval, Elapsed = 0, Run = callback })
+end
+function Util.Metric(name)
+return Config.Metrics[State.Touch and "Touch" or "Desktop"][name]
+end
+function Util.TextSize(kind)
+return Config.Text[kind] + (State.Touch and 1 or 0)
+end
+function Util.IsPointer(input)
+return input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch
+end
+function Util.IsMove(input)
+return input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch
+end
+function Util.InputName(input)
+if input.UserInputType == Enum.UserInputType.Keyboard then
+return input.KeyCode.Name
+end
+return Config.MouseNames[input.UserInputType]
+end
+function Util.KeyName(key)
+if typeof(key) == "EnumItem" then
+return key.Name
+end
+return type(key) == "string" and key or nil
+end
+function Util.Inside(guiObject, position)
+local origin, size = guiObject.AbsolutePosition, guiObject.AbsoluteSize
+return position.X >= origin.X and position.X <= origin.X + size.X and position.Y >= origin.Y and position.Y <= origin.Y + size.Y
+end
+function Util.GuiParent()
+if type(gethui) == "function" then
+local ok, hidden = pcall(gethui)
+if ok and typeof(hidden) == "Instance" then
+return hidden
+end
+end
+local ok = pcall(function()
+local probe = Instance.new("Folder")
+probe.Parent = CoreGui
+probe:Destroy()
+end)
+return ok and CoreGui or LocalPlayer:WaitForChild("PlayerGui", 10) or LocalPlayer:FindFirstChildOfClass("PlayerGui")
+end
+function Util.Await(timeout, callback, ...)
+local box = { done = false }
+local args = table.pack(...)
+task.spawn(function()
+box.values = table.pack(pcall(callback, table.unpack(args, 1, args.n)))
+box.done = true
+end)
+local started = os.clock()
+while not box.done and os.clock() - started < timeout do
+task.wait(0.05)
+end
+if not box.done or not box.values[1] then
+return false
+end
+return true, table.unpack(box.values, 2, box.values.n)
+end
+local function FetchBody(url)
+local ok, body = pcall(game.HttpGet, game, url)
+if ok and type(body) == "string" then
+return body
+end
+local requester = (type(request) == "function" and request) or (type(http_request) == "function" and http_request) or (syn and syn.request)
+if not requester then
+return nil
+end
+local sent, response = pcall(requester, { Url = url, Method = "GET" })
+return sent and type(response) == "table" and response.Body or nil
+end
+function Util.HttpGet(url)
+local finished, body = Util.Await(Config.HttpTimeout, FetchBody, url)
+return finished and type(body) == "string" and body or nil
+end
+function Util.CustomAsset(path)
+if type(getcustomasset) ~= "function" then
+return nil
+end
+local ok, asset = pcall(getcustomasset, path)
+return ok and type(asset) == "string" and asset:find("^rbxasset") and asset or nil
+end
+function Util.Exists(path)
+if type(isfile) ~= "function" then
+return false
+end
+local ok, value = pcall(isfile, path)
+return ok and value == true
+end
+local function SafeFile(fn, ...)
+if type(fn) ~= "function" then
+return nil
+end
+local ok, value = pcall(fn, ...)
+if not ok then
+return nil
+end
+return value == nil and true or value
+end
+function Util.Clipboard(text)
+local setter = setclipboard or toclipboard or (syn and syn.write_clipboard)
+if type(setter) ~= "function" then
+return false
+end
+return (pcall(setter, text))
+end
+function Util.FileApi()
+return type(writefile) == "function" and type(readfile) == "function" and type(isfile) == "function"
+end
+function Util.EnsureFolder(path)
+if type(makefolder) ~= "function" or type(isfolder) ~= "function" then
+return
+end
+local built = ""
+for part in path:gmatch("[^/]+") do
+built = built == "" and part or built .. "/" .. part
+local okCheck, exists = pcall(isfolder, built)
+if not (okCheck and exists == true) and not pcall(makefolder, built) then
+return false
+end
+end
+return true
+end
+function Util.Sanitize(name)
+local clean = tostring(name):gsub('[%c/\\:%*%?"<>|]', ""):gsub("^%s+", ""):gsub("%s+$", "")
+return clean ~= "" and clean or "config"
+end
+function Util.Round(value, decimals)
+local factor = 10 ^ (decimals or 0)
+return math.floor(value * factor + 0.5) / factor
+end
+function Util.ToSet(value)
+local set = {}
+if type(value) ~= "table" then
+return set
+end
+for key, entry in pairs(value) do
+if type(key) == "number" then
+set[entry] = true
+elseif entry then
+set[key] = true
+end
+end
+return set
+end
+function Util.PlayerNames()
+local names = {}
+for _, player in ipairs(Players:GetPlayers()) do
+if player ~= LocalPlayer then
+table.insert(names, player.Name)
+end
+end
+table.sort(names)
+return names
+end
+function Util.Lighten(color, amount)
+return color:Lerp(Color3.new(1, 1, 1), amount)
+end
+function Util.Hex(color)
+return string.format("#%02X%02X%02X", math.floor(color.R * 255 + 0.5), math.floor(color.G * 255 + 0.5), math.floor(color.B * 255 + 0.5))
+end
+function Util.FromHex(text)
+local hex = tostring(text):gsub("#", "")
+if not hex:match("^%x%x%x%x%x%x$") then
+return nil
+end
+return Color3.fromRGB(tonumber(hex:sub(1, 2), 16), tonumber(hex:sub(3, 4), 16), tonumber(hex:sub(5, 6), 16))
+end
+Anim.Loops = {}
+Anim.GroupState = {}
+Anim.NoopSignal = {
+Once = function(_, fn)
+if type(fn) == "function" then
+task.defer(fn)
+end
+end,
+}
+Anim.NoopTween = { Completed = Anim.NoopSignal, Cancel = function() end, Pause = function() end, Play = function() end }
+function Anim.Info(duration, ease, repeatCount, reverses, delay)
+local style = Config.Ease[ease or "Out"]
+return TweenInfo.new(duration or Config.Tween.Normal, style[1], style[2], repeatCount or 0, reverses or false, delay or 0)
+end
+function Anim.Tween(inst, goal, duration, ease, repeatCount, reverses, delay)
+if duration == 0 and (repeatCount or 0) == 0 and (delay or 0) == 0 then
+for prop, val in pairs(goal) do
+inst[prop] = val
+end
+return Anim.NoopTween
+end
+local tween = TweenService:Create(inst, Anim.Info(duration, ease, repeatCount, reverses, delay), goal)
+tween:Play()
+if repeatCount == -1 then
+inst.Destroying:Once(function()
+tween:Cancel()
+end)
+end
+return tween
+end
+function Anim.Loop(group, inst, goal, duration, ease, reverses, delay)
+local tween = TweenService:Create(inst, Anim.Info(duration, ease, -1, reverses, delay), goal)
+local list = Anim.Loops[group]
+if not list then
+list = {}
+Anim.Loops[group] = list
+end
+local active = Anim.GroupState[group] ~= false
+local entry = { Tween = tween, Inst = inst, Playing = active }
+table.insert(list, entry)
+if active then
+tween:Play()
+end
+inst.Destroying:Once(function()
+tween:Cancel()
+entry.Dead = true
+end)
+return tween
+end
+function Anim.SetGroupActive(group, active)
+active = active == true
+if Anim.GroupState[group] == active then
+return
+end
+Anim.GroupState[group] = active
+local list = Anim.Loops[group]
+if not list then
+return
+end
+for index = #list, 1, -1 do
+local entry = list[index]
+if entry.Dead or not entry.Inst or not entry.Inst.Parent then
+table.remove(list, index)
+elseif active and not entry.Playing then
+entry.Playing = true
+entry.Tween:Play()
+elseif not active and entry.Playing then
+entry.Playing = false
+entry.Tween:Pause()
+end
+end
+end
+function Anim.Pop(scale, from)
+scale.Scale = from or 0.85
+return Anim.Tween(scale, { Scale = 1 }, Config.Tween.Pop, "Back")
+end
+function Anim.Bump(frame, rise)
+if frame:GetAttribute("Bumping") then
+return
+end
+frame:SetAttribute("Bumping", true)
+local base = frame.Position
+local tween = Anim.Tween(frame, { Position = base - UDim2.fromOffset(0, rise or 6) }, 0.09, "Out", 0, true)
+tween.Completed:Once(function()
+frame.Position = base
+frame:SetAttribute("Bumping", nil)
+end)
+end
+function Anim.Shake(frame)
+local base = frame.Position
+task.spawn(function()
+for _, offset in ipairs({ -7, 6, -4, 3, 0 }) do
+if not frame.Parent then
+return
+end
+Anim.Tween(frame, { Position = base + UDim2.fromOffset(offset, 0) }, 0.04, "Linear")
+task.wait(0.04)
+end
+frame.Position = base
+end)
+end
+function Anim.Fade(root, alpha, duration)
+local targets = root:GetDescendants()
+table.insert(targets, root)
+for _, inst in ipairs(targets) do
+if inst:IsA("GuiObject") and inst.BackgroundTransparency < 1 then
+Anim.Tween(inst, { BackgroundTransparency = alpha }, duration)
+end
+if inst:IsA("TextLabel") or inst:IsA("TextButton") then
+Anim.Tween(inst, { TextTransparency = alpha }, duration)
+elseif inst:IsA("ImageLabel") then
+Anim.Tween(inst, { ImageTransparency = alpha }, duration)
+elseif inst:IsA("UIStroke") then
+Anim.Tween(inst, { Transparency = alpha }, duration)
+end
+end
+end
+function Anim.CoinPop(parent, origin, size)
+local coin = Sprite.New(parent, "coin", size or 20)
+coin.AnchorPoint = Vector2.new(0.5, 1)
+coin.Position = origin
+coin.ZIndex = 5
+local rise = Anim.Tween(coin, { Position = origin - UDim2.fromOffset(0, 42) }, 0.35, "Out")
+Anim.Tween(coin, { Size = UDim2.fromOffset(2, coin.Size.Y.Offset) }, 0.12, "Sine", 3, true)
+rise.Completed:Once(function()
+Anim.Fade(coin, 1, 0.18)
+task.delay(0.2, function()
+coin:Destroy()
+end)
+end)
+end
+function Theme.Apply(name)
+if name == "Order" or name == "Shared" or not Themes[name] then
+name = "Overworld"
+end
+local palette = Themes[name]
+State.ThemeName = name
+Theme.Colors.Logo, Theme.Colors.Glow, Theme.Colors.Fog, Theme.Colors.ParticleGlyphs = nil, nil, nil, nil
+Theme.Colors.TopbarText = Themes.Shared.White
+for token, color in pairs(Themes.Shared) do
+Theme.Colors[token] = color
+end
+for token, color in pairs(palette) do
+Theme.Colors[token] = color
+end
+for inst, map in pairs(Theme.Bound) do
+if inst.Parent then
+Theme.Paint(inst, map)
+else
+Theme.Bound[inst] = nil
+end
+end
+for owner, render in pairs(Theme.Renderers) do
+Util.Try(render)
+end
+for inst, render in pairs(Theme.InstanceRenderers) do
+if inst.Parent then
+Util.Try(render)
+else
+Theme.InstanceRenderers[inst] = nil
+end
+end
+end
+function Theme.Prune()
+for _, registry in ipairs({ Theme.Bound, Theme.InstanceRenderers, Lang.Bound, Lang.InstanceListeners, Fonts.Texts }) do
+for inst in pairs(registry) do
+if not inst.Parent then
+registry[inst] = nil
+end
+end
+end
+end
+function Theme.UnbindTree(root)
+if not root then
+return
+end
+local list = root:GetDescendants()
+table.insert(list, root)
+for _, inst in ipairs(list) do
+Theme.Bound[inst] = nil
+Theme.InstanceRenderers[inst] = nil
+Lang.Bound[inst] = nil
+Lang.InstanceListeners[inst] = nil
+Fonts.Texts[inst] = nil
+end
+end
+function Theme.Paint(inst, map)
+for property, token in pairs(map) do
+local color = Theme.Colors[token]
+if color ~= nil and inst[property] ~= color then
+inst[property] = color
+end
+end
+end
+function Theme.Bind(inst, map)
+local existing = Theme.Bound[inst]
+if existing then
+for property, token in pairs(map) do
+existing[property] = token
+end
+else
+Theme.Bound[inst] = map
+end
+Theme.Paint(inst, map)
+return inst
+end
+function Theme.OnRender(owner, render)
+local registry = typeof(owner) == "Instance" and Theme.InstanceRenderers or Theme.Renderers
+registry[owner] = render
+Util.Try(render)
+end
+Lang.Strings = {
+Search = { EN = "Search...", TH = "ค้นหา..." },
+Confirm = { EN = "Click again to confirm", TH = "กดอีกครั้งเพื่อยืนยัน" },
+None = { EN = "None", TH = "ไม่มี" },
+NoResults = { EN = "No matches", TH = "ไม่พบรายการ" },
+Settings = { EN = "Settings", TH = "ตั้งค่า" },
+SettingsDesc = { EN = "Interface, language and configs", TH = "หน้าตา ภาษา และคอนฟิก" },
+Interface = { EN = "Interface", TH = "หน้าตา" },
+Language = { EN = "Language", TH = "ภาษา" },
+ThemeName = { EN = "Theme", TH = "ธีม" },
+Scale = { EN = "UI scale", TH = "ขนาด UI" },
+MenuKey = { EN = "Menu key", TH = "ปุ่มเปิดเมนู" },
+Watermark = { EN = "Watermark", TH = "วอเตอร์มาร์ก" },
+WatermarkDesc = { EN = "Hub name, FPS, ping and play time", TH = "ชื่อฮับ FPS ปิง และเวลาที่เล่น" },
+FloatButton = { EN = "Mobile button", TH = "ปุ่มลอยมือถือ" },
+FloatDesc = { EN = "Floating block that opens the menu", TH = "กล่อง ? ลอยสำหรับเปิดปิดเมนู" },
+Configs = { EN = "Configs", TH = "คอนฟิก" },
+ConfigName = { EN = "Config name", TH = "ชื่อคอนฟิก" },
+SavedConfigs = { EN = "Saved configs", TH = "คอนฟิกที่บันทึกไว้" },
+Save = { EN = "Save", TH = "บันทึก" },
+Load = { EN = "Load", TH = "โหลด" },
+Delete = { EN = "Delete", TH = "ลบ" },
+Refresh = { EN = "Refresh", TH = "รีเฟรช" },
+SetAutoload = { EN = "Load on start", TH = "โหลดอัตโนมัติ" },
+Autoload = { EN = "Autoload: %s", TH = "โหลดอัตโนมัติ: %s" },
+PickConfig = { EN = "Type or select a config name first", TH = "พิมพ์หรือเลือกชื่อคอนฟิกก่อน" },
+NoFileApi = { EN = "This executor cannot save files", TH = "executor นี้บันทึกไฟล์ไม่ได้" },
+ConfigMissing = { EN = "Config not found", TH = "ไม่พบคอนฟิก" },
+ConfigBroken = { EN = "Config file is damaged", TH = "ไฟล์คอนฟิกเสีย" },
+About = { EN = "About", TH = "เกี่ยวกับ" },
+Unload = { EN = "Unload hub", TH = "ปิดสคริปต์" },
+Rejoin = { EN = "Rejoin", TH = "เข้าเซิร์ฟใหม่" },
+IntroSteps = {
+EN = { "Warming up the warp pipe...", "Collecting coins...", "Building the castle...", "Let's-a go!" },
+TH = { "กำลังอุ่นท่อวาร์ป...", "กำลังเก็บเหรียญ...", "กำลังสร้างปราสาท...", "ลุยกันเลย!" },
+},
+Ready = { EN = "Ready. Press %s to toggle the menu.", TH = "พร้อมแล้ว กด %s เพื่อเปิดปิดเมนู" },
+ReadyTouch = { EN = "Ready. Tap the ? block to toggle the menu.", TH = "พร้อมแล้ว แตะกล่อง ? เพื่อเปิดปิดเมนู" },
+Hidden = { EN = "Menu hidden. Press %s to open.", TH = "ซ่อนเมนูแล้ว กด %s เพื่อเปิด" },
+Session = { EN = "TIME", TH = "เวลา" },
+Empty = { EN = "Nothing here yet", TH = "ยังไม่มีรายการ" },
+Particles = { EN = "Ambient particles", TH = "ละอองตกแต่ง" },
+ParticlesDesc = { EN = "Floating sparkles behind the menu", TH = "ประกายลอยด้านหลังเมนู" },
+Device = { EN = "Device: %s", TH = "อุปกรณ์: %s" },
+}
+function Lang.HasThai(text)
+return text:find("\224[\184\185]") ~= nil
+end
+function Lang.Resolve(spec)
+if type(spec) == "table" then
+return spec[State.Language] or spec.EN or spec.TH or ""
+end
+if type(spec) ~= "string" then
+return spec == nil and "" or tostring(spec)
+end
+local english, thai = spec:match("^(.-)%s+·%s+(.+)$")
+if english and Lang.HasThai(thai) then
+return State.Language == "TH" and thai or english
+end
+return spec
+end
+function Lang.Get(key, ...)
+local text = Lang.Resolve(Lang.Strings[key] or key)
+if select("#", ...) > 0 then
+return string.format(text, ...)
+end
+return text
+end
+function Lang.SearchText(spec)
+if type(spec) == "table" then
+return (tostring(spec.EN or "") .. " " .. tostring(spec.TH or "")):lower()
+end
+return tostring(spec or ""):lower()
+end
+function Lang.Bind(inst, spec, property, transform)
+local binding = { Spec = spec, Property = property or "Text", Transform = transform }
+Lang.Bound[inst] = binding
+Lang.Apply(inst, binding)
+end
+function Lang.Apply(inst, binding)
+local text = Lang.Resolve(binding.Spec)
+inst[binding.Property] = binding.Transform and binding.Transform(text) or text
+end
+function Lang.OnChange(owner, callback)
+local registry = typeof(owner) == "Instance" and Lang.InstanceListeners or Lang.Listeners
+registry[owner] = callback
+end
+function Lang.Set(code)
+if code ~= "EN" and code ~= "TH" then
+return
+end
+State.Language = code
+if code == "TH" then
+Fonts.LoadThaiAsync()
+end
+Theme.Prune()
+for inst, binding in pairs(Lang.Bound) do
+Lang.Apply(inst, binding)
+end
+Fonts.ApplyAll()
+for _, registry in ipairs({ Lang.Listeners, Lang.InstanceListeners }) do
+for _, callback in pairs(registry) do
+Util.Try(callback, code)
+end
+end
+Layout.MarkAll()
+end
+Fonts.Latin = {
+Display = Enum.Font.LuckiestGuy, Body = Enum.Font.FredokaOne, Desc = Enum.Font.BuilderSansMedium,
+Strong = Enum.Font.BuilderSansBold, Logo = Enum.Font.LuckiestGuy, Glyph = Enum.Font.BuilderSansBold,
+}
+Fonts.ThaiWeights = { Display = Enum.FontWeight.SemiBold, Body = Enum.FontWeight.Medium, Desc = Enum.FontWeight.Regular, Strong = Enum.FontWeight.SemiBold }
+Fonts.ThaiFallback = { Display = Enum.Font.BuilderSansBold, Body = Enum.Font.BuilderSansBold, Desc = Enum.Font.BuilderSansMedium, Strong = Enum.Font.BuilderSansBold }
+Fonts.Faces = {}
+function Fonts.Face(kind)
+local thai = State.Language == "TH" and Fonts.ThaiWeights[kind] ~= nil
+local key = (thai and (Fonts.Thai and "TH" or "THF") or "EN") .. kind
+local cached = Fonts.Faces[key]
+if cached then
+return cached
+end
+local face
+if thai and Fonts.Thai then
+face = Font.new(Fonts.Thai, Fonts.ThaiWeights[kind])
+elseif thai then
+face = Font.fromEnum(Fonts.ThaiFallback[kind])
+else
+face = Font.fromEnum(Fonts.Latin[kind] or Fonts.Latin.Body)
+end
+Fonts.Faces[key] = face
+return face
+end
+function Fonts.Size(kind, base)
+return base + (State.Language == "TH" and Config.ThaiSizeBonus[kind] or 0)
+end
+function Fonts.Style(label, kind, base)
+Fonts.Texts[label] = { Kind = kind, Base = base }
+label.FontFace = Fonts.Face(kind)
+label.TextSize = Fonts.Size(kind, base)
+end
+function Fonts.ApplyAll()
+table.clear(Layout.Measured)
+Layout.MeasuredCount = 0
+for label, style in pairs(Fonts.Texts) do
+label.FontFace = Fonts.Face(style.Kind)
+label.TextSize = Fonts.Size(style.Kind, style.Base)
+end
+end
+function Fonts.FetchFace(weight, name)
+local path = Config.FontDir .. "/kanit-" .. weight .. ".ttf"
+local cached = Util.Exists(path) and SafeFile(readfile, path)
+if type(cached) ~= "string" or cached:sub(1, 4) ~= "\0\1\0\0" then
+local body = Util.HttpGet(string.format(Config.ThaiFont.Source, name))
+if type(body) ~= "string" or body:sub(1, 4) ~= "\0\1\0\0" then
+return nil
+end
+SafeFile(writefile, path, body)
+local check = SafeFile(readfile, path)
+if type(check) ~= "string" or #check ~= #body then
+Fonts.Disable("binary write")
+return nil
+end
+end
+local asset = Util.CustomAsset(path)
+if not asset then
+Fonts.Disable("getcustomasset ttf")
+return nil
+end
+return string.format('{"name":"W%d","weight":%d,"style":"normal","assetId":"%s"}', weight, weight, asset)
+end
+function Fonts.Disable(reason)
+Fonts.Broken = true
+SafeFile(writefile, Config.FontDir .. "/disabled", tostring(reason))
+warn("[Reicht] Thai font off: " .. tostring(reason))
+end
+function Fonts.LoadThai()
+if Fonts.Thai or Fonts.Broken or not Util.FileApi() or type(getcustomasset) ~= "function" then
+return Fonts.Thai ~= nil
+end
+if Util.Exists(Config.FontDir .. "/disabled") then
+Fonts.Broken = true
+return false
+end
+Util.EnsureFolder(Config.FontDir)
+local faces = {}
+for weight, name in pairs(Config.ThaiFont.Weights) do
+if Fonts.Broken or Library.Unloaded then
+return false
+end
+table.insert(faces, Fonts.FetchFace(weight, name))
+end
+if #faces == 0 then
+return false
+end
+local descriptor = Config.FontDir .. "/kanit.font"
+if Util.Exists(descriptor) then
+SafeFile(delfile, descriptor)
+end
+SafeFile(writefile, descriptor, '{"name":"' .. Config.ThaiFont.Family .. '","faces":[' .. table.concat(faces, ",") .. "]}")
+local family = Util.CustomAsset(descriptor)
+if not family then
+Fonts.Disable("getcustomasset family")
+return false
+end
+Fonts.Thai = family
+table.clear(Fonts.Faces)
+if State.Language == "TH" and State.Gui then
+Fonts.ApplyAll()
+Layout.MarkAll()
+end
+task.spawn(Fonts.Preload)
+return true
+end
+function Fonts.LoadThaiAsync()
+if Fonts.Thai or Fonts.Broken or Fonts.Loading then
+return
+end
+Fonts.Loading = true
+task.spawn(function()
+local finished = Util.Await(Config.FontTimeout, Fonts.LoadThai)
+Fonts.Loading = false
+if not finished and not Fonts.Thai and not Fonts.Broken and not Library.Unloaded then
+Fonts.Disable("timeout")
+end
+end)
+end
+function Fonts.Preload()
+local provider = game:GetService("ContentProvider")
+local probes = {}
+for _, weight in pairs(Fonts.ThaiWeights) do
+table.insert(probes, Draw.New("TextLabel", { Text = "ก", FontFace = Font.new(Fonts.Thai, weight) }))
+end
+Util.Await(Config.PreloadTimeout, provider.PreloadAsync, provider, probes)
+for _, probe in ipairs(probes) do
+probe:Destroy()
+end
+end
+function Draw.New(className, props)
+local inst = Instance.new(className)
+local parent = props and props.Parent
+if props then
+for property, value in pairs(props) do
+if property ~= "Parent" then
+inst[property] = value
+end
+end
+end
+if inst:IsA("GuiObject") then
+inst.BorderSizePixel = 0
+end
+inst.Parent = parent
+return inst
+end
+function Draw.Corner(parent, radius)
+return Draw.New("UICorner", { CornerRadius = typeof(radius) == "UDim" and radius or UDim.new(0, radius or 8), Parent = parent })
+end
+function Draw.Stroke(parent, token, thickness, border)
+local stroke = Draw.New("UIStroke", {
+Thickness = thickness or 2,
+ApplyStrokeMode = border and Enum.ApplyStrokeMode.Border or Enum.ApplyStrokeMode.Contextual,
+LineJoinMode = Enum.LineJoinMode.Round,
+Parent = parent,
+})
+Theme.Bind(stroke, { Color = token or "Outline" })
+return stroke
+end
+function Draw.Padding(parent, top, right, bottom, left)
+return Draw.New("UIPadding", {
+PaddingTop = UDim.new(0, top or 0),
+PaddingRight = UDim.new(0, right or top or 0),
+PaddingBottom = UDim.new(0, bottom or top or 0),
+PaddingLeft = UDim.new(0, left or right or top or 0),
+Parent = parent,
+})
+end
+function Draw.List(parent, gap, horizontal, alignX, alignY)
+return Draw.New("UIListLayout", {
+Padding = UDim.new(0, gap or 0),
+FillDirection = horizontal and Enum.FillDirection.Horizontal or Enum.FillDirection.Vertical,
+HorizontalAlignment = alignX or Enum.HorizontalAlignment.Left,
+VerticalAlignment = alignY or Enum.VerticalAlignment.Top,
+SortOrder = Enum.SortOrder.LayoutOrder,
+Parent = parent,
+})
+end
+function Draw.Text(props, font, size, token, spec)
+props.BackgroundTransparency = 1
+props.Text = props.Text or ""
+props.TextXAlignment = props.TextXAlignment or Enum.TextXAlignment.Left
+props.RichText = props.RichText or false
+local className = props.ClassName or "TextLabel"
+props.ClassName = nil
+local label = Draw.New(className, props)
+Fonts.Style(label, font or "Body", size or Util.TextSize("Label"))
+Theme.Bind(label, { TextColor3 = token or "Text" })
+if spec ~= nil then
+Lang.Bind(label, spec)
+end
+return label
+end
+function Draw.Box(className, props, fill, stroke, radius, thickness)
+local box = Draw.New(className, props)
+if fill then
+Theme.Bind(box, { BackgroundColor3 = fill })
+elseif props.BackgroundTransparency == nil then
+box.BackgroundTransparency = 1
+end
+if radius then
+Draw.Corner(box, radius)
+end
+if stroke then
+Draw.Stroke(box, stroke, thickness or 2, true)
+end
+if box:IsA("GuiButton") then
+box.AutoButtonColor = false
+if box:IsA("TextButton") then
+box.Text = ""
+end
+end
+return box
+end
+function Draw.Block(parent, faceToken, shadeToken, radius, depth)
+depth = depth or 4
+local holder = Draw.New("Frame", { BackgroundTransparency = 1, Parent = parent })
+local shade = Draw.Box("Frame", {
+Position = UDim2.fromOffset(0, depth),
+Size = UDim2.new(1, 0, 1, -depth),
+Parent = holder,
+}, shadeToken, "Outline", radius, 2)
+local face = Draw.Box("Frame", { Size = UDim2.new(1, 0, 1, -depth), Parent = holder }, faceToken, "Outline", radius, 2)
+return holder, face, shade, depth
+end
+function Draw.Cloud(parent, width, token)
+local cloud = Draw.New("Frame", { BackgroundTransparency = 1, Size = UDim2.fromOffset(width, width * 0.5), Parent = parent })
+local puffs = { { 0, 0.35, 0.42 }, { 0.24, 0, 0.55 }, { 0.55, 0.18, 0.45 } }
+for _, puff in ipairs(puffs) do
+local ball = Draw.New("Frame", {
+Position = UDim2.fromScale(puff[1], puff[2]),
+Size = UDim2.fromScale(puff[3], puff[3] * 2),
+Parent = cloud,
+})
+Draw.Corner(ball, UDim.new(1, 0))
+Theme.Bind(ball, { BackgroundColor3 = token or "Cloud" })
+Theme.OnRender(ball, function()
+ball.BackgroundTransparency = Theme.Colors.CloudAlpha or 0
+end)
+end
+local base = Draw.New("Frame", { Position = UDim2.fromScale(0.08, 0.6), Size = UDim2.fromScale(0.86, 0.4), Parent = cloud })
+Draw.Corner(base, UDim.new(1, 0))
+Theme.Bind(base, { BackgroundColor3 = token or "Cloud" })
+Theme.OnRender(base, function()
+base.BackgroundTransparency = Theme.Colors.CloudAlpha or 0
+end)
+return cloud
+end
+function Draw.Emblem(parent, size)
+local holder = Draw.New("Frame", { BackgroundTransparency = 1, Size = UDim2.fromOffset(size, size), Parent = parent })
+local picture = Draw.New("ImageLabel", { BackgroundTransparency = 1, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromScale(1, 1), ScaleType = Enum.ScaleType.Fit, Visible = false, Parent = holder })
+local drawn = Draw.DrawnEmblem(holder, size)
+Theme.OnRender(holder, function()
+local content = (Theme.Colors.Logo and Assets.Resolve(Theme.Colors.Logo)) or Assets.Resolve("logo")
+picture.Image = content or ""
+picture.Visible = content ~= nil
+drawn.Visible = content == nil
+picture.Size = UDim2.fromScale(Theme.Colors.Logo and 1.25 or 1, Theme.Colors.Logo and 1.25 or 1)
+end)
+Anim.Loop("Emblem", picture, { Rotation = 6 }, 1.6, "Sine", true)
+return holder
+end
+function Draw.DrawnEmblem(parent, size)
+local emblem = Draw.Box("Frame", { Size = UDim2.fromOffset(size, size), Parent = parent }, "Accent", "Outline", UDim.new(1, 0), 2)
+local ring = Draw.New("Frame", {
+AnchorPoint = Vector2.new(0.5, 0.5),
+Position = UDim2.fromScale(0.5, 0.5),
+Size = UDim2.fromScale(0.7, 0.7),
+Parent = emblem,
+})
+Draw.Corner(ring, UDim.new(1, 0))
+Theme.Bind(ring, { BackgroundColor3 = "White" })
+local letter = Draw.Text({
+Text = "M",
+Size = UDim2.fromScale(1, 1),
+TextXAlignment = Enum.TextXAlignment.Center,
+Position = UDim2.fromOffset(0, 1),
+Parent = ring,
+}, "Logo", math.floor(size * 0.5), "Accent")
+letter.TextScaled = false
+return emblem
+end
+function Draw.Bricks(parent, columns, token)
+local mortar = {}
+for row = 0, 1 do
+local shift = row == 0 and 0 or 0.5 / columns
+for column = 1, columns - 1 do
+local xScale = column / columns + shift
+if xScale > 0.02 and xScale < 0.98 then
+table.insert(mortar, Draw.New("Frame", {
+Position = UDim2.new(xScale, 0, row * 0.5, 0),
+Size = UDim2.new(0, 2, 0.5, 0),
+Parent = parent,
+}))
+end
+end
+end
+local seam = Draw.New("Frame", { Position = UDim2.new(0, 0, 0.5, -1), Size = UDim2.new(1, 0, 0, 2), Parent = parent })
+table.insert(mortar, seam)
+for _, line in ipairs(mortar) do
+Theme.Bind(line, { BackgroundColor3 = token or "BrickDark" })
+end
+end
+function Assets.Configure(map)
+if type(map) ~= "table" then
+return
+end
+for name, source in pairs(map) do
+Assets.Overrides[tostring(name):lower()] = source
+Assets.Cache[tostring(name):lower()] = nil
+end
+end
+function Assets.Download(name, url)
+if type(getcustomasset) ~= "function" or not Util.FileApi() then
+return nil
+end
+local path = Config.AssetDir .. "/" .. Util.Sanitize(name) .. ".png"
+if not Util.Exists(path) then
+local body = Util.HttpGet(url)
+if type(body) ~= "string" or #body < 8 then
+return nil
+end
+Util.EnsureFolder(Config.AssetDir)
+SafeFile(writefile, path, body)
+end
+return Util.CustomAsset(path)
+end
+function Assets.Resolve(name)
+local key = tostring(name):lower()
+local cached = Assets.Cache[key]
+if cached ~= nil then
+return cached or nil
+end
+local source = Assets.Overrides[key]
+local content
+if type(source) == "number" then
+content = "rbxassetid://" .. source
+elseif type(source) == "string" and source:find("^rbxasset") then
+content = source
+elseif type(source) == "string" and source:match("^https?://") then
+content = Assets.Download(key, source)
+elseif type(source) == "string" and Util.Exists(source) then
+content = Util.CustomAsset(source)
+end
+Assets.Cache[key] = content or false
+return content
+end
+Sprite.Palette = {
+k = Color3.fromRGB(24, 20, 30), w = Color3.fromRGB(255, 255, 255), r = Color3.fromRGB(229, 37, 33),
+s = Color3.fromRGB(252, 216, 168), y = Color3.fromRGB(252, 208, 0), Y = Color3.fromRGB(196, 132, 0),
+q = Color3.fromRGB(248, 184, 0), Q = Color3.fromRGB(184, 104, 0), o = Color3.fromRGB(255, 140, 26),
+g = Color3.fromRGB(67, 176, 71), G = Color3.fromRGB(38, 116, 44), l = Color3.fromRGB(150, 226, 122),
+n = Color3.fromRGB(154, 160, 166), N = Color3.fromRGB(46, 46, 58), B = Color3.fromRGB(200, 86, 28),
+m = Color3.fromRGB(90, 42, 14), b = Color3.fromRGB(4, 156, 216),
+p = Color3.fromRGB(156, 92, 220), P = Color3.fromRGB(96, 44, 150),
+}
+Sprite.Art = {
+pumpkin = {
+".....mm.....", "....kmGk....", "..kkkkkkkk..", ".koooBBooook",
+"kooyyooyyook", "koyyyooyyyok", "koooooooooBk", "kooyoyyoyook",
+"koooyyyyoook", ".kooooBoook.", "..kkkkkkkk..", "............",
+},
+bat = {
+"............", "............", "k..........k", "kk...kk...kk",
+"kpk.kppk.kpk", "kppkpyypkppk", "kppppppppppk", ".kppppppppk.",
+"..kpk..kpk..", "...k....k...", "............", "............",
+},
+spider = {
+"............", "............", "k...kkkk...k", ".k.knnnnk.k.",
+"..knynnynk..", "kkknnnnnnkkk", "..knnnnnnk..", ".k.knnnnk.k.",
+"k...kkkk...k", "............", "............", "............",
+},
+candy = {
+"............", ".....kk.....", "....kwwk....", "....kwwk....",
+"...kooook...", "...kooook...", "..kooooook..", "..kyyyyyyk..",
+".kyyyyyyyyk.", ".kyyyyyyyyk.", "..kkkkkkkk..", "............",
+},
+mushroom = {
+"....kkkk....", "..kkrrwwkk..", ".krrrrwwwrk.", ".kwwrrwwrrk.",
+"kwwwwrrrrrrk", "kwwwwrrrwwrk", "krwwrrrwwwwk", "krrrrrrwwwrk",
+"kkkkkkkkkkkk", ".kssksskssk.", ".kssksskssk.", "..kkkkkkkk..",
+},
+star = {
+".....kk.....", "....kyyk....", "....kyyk....", "kkkkkyykkkkk",
+"kyyyyyyyyyyk", ".kyykyykyyk.", "..kykyykyk..", "...kyyyyk...",
+"..kyyyyyyk..", "..kyykkyyk..", ".kyyk..kyyk.", ".kkk....kkk.",
+},
+coin = {
+"....kkkk....", "...kyyyyk...", "..kyywwyyk..", "..kywyyYyk..",
+".kywyyyYyyk.", ".kywyyyYyyk.", ".kywyyyYyyk.", ".kywyyyYyyk.",
+"..kyyyyYyk..", "..kyyYYYyk..", "...kyyyyk...", "....kkkk....",
+},
+qblock = {
+"kkkkkkkkkkkk", "kqqqqqqqqqqk", "kqkqqqqqqkQk", "kqqqwwwwqqQk",
+"kqqwwQQwwqQk", "kqqQQqqwwqQk", "kqqqqqwwQqQk", "kqqqqwwQqqQk",
+"kqqqqQQqqqQk", "kqkqqwwqqkQk", "kqQQQQQQQQQk", "kkkkkkkkkkkk",
+},
+brick = {
+"BBBBBmBBBBBm", "BBBBBmBBBBBm", "mmmmmmmmmmmm", "BBmBBBBBmBBB",
+"BBmBBBBBmBBB", "mmmmmmmmmmmm", "BBBBBmBBBBBm", "BBBBBmBBBBBm",
+"mmmmmmmmmmmm", "BBmBBBBBmBBB", "BBmBBBBBmBBB", "mmmmmmmmmmmm",
+},
+pipe = {
+"kkkkkkkkkkkk", "klgggggggGGk", "klgggggggGGk", "klgggggggGGk",
+"kkkkkkkkkkkk", ".klggggggGk.", ".klggggggGk.", ".klggggggGk.",
+".klggggggGk.", ".klggggggGk.", ".klggggggGk.", ".kkkkkkkkkk.",
+},
+flower = {
+"...kkkkkk...", "..krrrrrrk..", ".krryyyyrrk.", ".kryywwyyrk.",
+".krryyyyrrk.", "..krrrrrrk..", "...kkggkk...", ".kgk.gg.kgk.",
+".kggkggkggk.", "..kggggggk..", "...kkggkk...", ".....kk.....",
+},
+shell = {
+"....kkkk....", "..kkggggkk..", ".kggGGGGggk.", ".kgGggggGgk.",
+"kggGggggGggk", "kggGGGGGGggk", "kggggggggggk", "kwwwwwwwwwwk",
+"kwkwwkkwwkwk", ".kyyyyyyyyk.", "..kyyyyyyk..", "...kkkkkk...",
+},
+boo = {
+"....kkkk....", "..kkwwwwkk..", ".kwwwwwwwwk.", ".kwwkwwkwwk.",
+"kwwwkwwkwwwk", "kwwwwwwwwwwk", "kwwkrrrrkwwk", "kwwwkrrkwwwk",
+"kwwwwkkwwwwk", "kwwwwwwwwwwk", "kwwwkwwkwwwk", "kkk.kkkk.kkk",
+},
+flag = {
+".yy.........", ".yy.........", "..nkkkkkkk..", "..nkgggggk..",
+"..nkggwggk..", "..nkgwwwgk..", "..nkggggk...", "..nkgggk....",
+"..nkkkk.....", "..n.........", "..n.........", "kkkkk.......",
+},
+key = {
+"...kkkk.....", "..kyyyyk....", ".kyykkyyk...", ".kyk..kyk...",
+".kyykkyyk...", "..kyyyyk....", "...kyyk.....", "...kyyk.....",
+"...kyykk....", "...kyyyyk...", "...kyykk....", "...kkkk.....",
+},
+gear = {
+"....kkkk....", ".kk.knnk.kk.", ".knkknnkknk.", "..knnnnnnk..",
+"kkknnkknnkkk", "knnnk..knnnk", "knnnk..knnnk", "kkknnkknnkkk",
+"..knnnnnnk..", ".knkknnkknk.", ".kk.knnk.kk.", "....kkkk....",
+},
+heart = {
+"............", ".kkk....kkk.", "kwrrrkkrrrrk", "kwrrrrrrrrrk",
+"krrrrrrrrrrk", ".krrrrrrrrk.", "..krrrrrrk..", "...krrrrk...",
+"....krrk....", ".....kk.....", "............", "............",
+},
+bomb = {
+"........o.y.", ".......n.o..", "......n.....", "...kkkkkk...",
+"..kNNNNNNk..", ".kNwwNNNNNk.", ".kNwNNwNwNk.", ".kNNNNwNwNk.",
+".kNNNNNNNNk.", "..kNNNNNNk..", "..kyykkyyk..", "..kkk..kkk..",
+},
+used = {
+"kkkkkkkkkkkk", "kBBBBBBBBBBk", "kBmBBBBBBmBk", "kBBBBBBBBBBk",
+"kBBBBBBBBBBk", "kBBBBBBBBBBk", "kBBBBBBBBBBk", "kBBBBBBBBBBk",
+"kBBBBBBBBBBk", "kBmBBBBBBmBk", "kBBBBBBBBBBk", "kkkkkkkkkkkk",
+},
+castle = {
+"....B..B....", "....BBBB....", "....BkkB....", "B.B.BBBB.B.B",
+"BBBBBBBBBBBB", "BBBBBBBBBBBB", "mmmmmmmmmmmm", "BBBBBkkBBBBB",
+"BBBBkkkkBBBB", "mmmmkkkkmmmm", "BBBBkkkkBBBB", "BBBBkkkkBBBB",
+},
+}
+Sprite.Alias = {
+house = "castle", home = "castle", user = "oneup", player = "oneup", globe = "pipe", map = "pipe",
+teleport = "pipe", eye = "boo", visuals = "boo", swords = "flower", combat = "flower", target = "bomb",
+crosshair = "bomb", shield = "shell", zap = "star", settings = "gear", ["sliders-horizontal"] = "gear",
+bell = "coin", shop = "coin", code = "qblock", info = "qblock", key = "key", play = "flag",
+quest = "flag", heart = "heart", cookie = "mushroom", ["trash-2"] = "bomb", terminal = "brick",
+["refresh-cw"] = "pipe", link = "pipe", copy = "brick", check = "star", save = "qblock",
+download = "qblock", upload = "qblock", search = "boo", misc = "qblock", troll = "shell",
+}
+Sprite.Swaps = {
+oneup = { base = "mushroom", swap = { r = "g" } },
+}
+Sprite.Templates = {}
+function Sprite.Resolve(name)
+name = tostring(name or "qblock"):lower():gsub("^lucide%-", "")
+name = Sprite.Alias[name] or name
+if Sprite.Art[name] or Sprite.Swaps[name] then
+return name
+end
+return "qblock"
+end
+function Sprite.Template(name)
+if Sprite.Templates[name] then
+return Sprite.Templates[name]
+end
+local swap = Sprite.Swaps[name]
+local rows = Sprite.Art[swap and swap.base or name]
+local recolor = swap and swap.swap or {}
+local height, width = #rows, #rows[1]
+local holder = Draw.New("Frame", { Name = "Sprite", BackgroundTransparency = 1 })
+local freq, colors = {}, {}
+for y = 1, height do
+local line = rows[y]
+for x = 1, width do
+local ch = line:sub(x, x)
+if ch ~= "." then
+if not freq[ch] then
+freq[ch] = 0
+table.insert(colors, ch)
+end
+freq[ch] += 1
+end
+end
+end
+table.sort(colors, function(a, b)
+if (a == "k") ~= (b == "k") then
+return a == "k"
+end
+if freq[a] ~= freq[b] then
+return freq[a] > freq[b]
+end
+return a < b
+end)
+local order = {}
+for idx, ch in ipairs(colors) do
+order[ch] = idx
+end
+local painted = {}
+for layerIdx, col in ipairs(colors) do
+local fill = Sprite.Palette[recolor[col] or col] or Sprite.Palette.k
+for y = 1, height do
+local line = rows[y]
+for x = 1, width do
+local cellIdx = (y - 1) * width + x
+if line:sub(x, x) == col and painted[cellIdx] ~= col then
+local stopX = x
+while stopX < width do
+local nextCh = line:sub(stopX + 1, stopX + 1)
+if nextCh == col or (order[nextCh] and order[nextCh] > layerIdx) then
+stopX += 1
+else
+break
+end
+end
+while stopX > x and line:sub(stopX, stopX) ~= col do
+stopX -= 1
+end
+local stopY = y
+while stopY < height do
+local nextLine = rows[stopY + 1]
+local okRow = true
+for cx = x, stopX do
+local nextCh = nextLine:sub(cx, cx)
+if nextCh ~= col and not (order[nextCh] and order[nextCh] > layerIdx) then
+okRow = false
+break
+end
+end
+if not okRow then
+break
+end
+stopY += 1
+end
+while stopY > y do
+local checkLine = rows[stopY]
+local hasCol = false
+for cx = x, stopX do
+if checkLine:sub(cx, cx) == col and painted[(stopY - 1) * width + cx] ~= col then
+hasCol = true
+break
+end
+end
+if hasCol then
+break
+end
+stopY -= 1
+end
+for cy = y, stopY do
+local base = (cy - 1) * width
+for cx = x, stopX do
+painted[base + cx] = col
+end
+end
+Draw.New("Frame", {
+BackgroundColor3 = fill,
+Position = UDim2.fromScale((x - 1) / width, (y - 1) / height),
+Size = UDim2.fromScale((stopX - x + 1) / width, (stopY - y + 1) / height),
+ZIndex = layerIdx,
+Parent = holder,
+})
+end
+end
+end
+end
+Sprite.Templates[name] = holder
+return holder
+end
+function Sprite.New(parent, name, size)
+local key = Sprite.Resolve(name)
+local image = Assets.Resolve(tostring(name):lower()) or Assets.Resolve(key)
+local sprite
+if image then
+sprite = Draw.New("ImageLabel", { BackgroundTransparency = 1, Image = image, ScaleType = Enum.ScaleType.Fit, ResampleMode = Enum.ResamplerMode.Pixelated })
+else
+sprite = Sprite.Template(key):Clone()
+end
+sprite.Size = UDim2.fromOffset(size, size)
+sprite.Parent = parent
+return sprite
+end
+local ExtraSprites = {
+sword = {
+".........kkk", "........kwwk", ".......kwwwk", "......kwwwk.",
+".....kwwwk..", ".kk.kwwwk...", "kyykwwwk....", ".kyyyyk.....",
+"..kyykll....", ".kmmkyk.....", "kmmk.kk.....", "kkk.........",
+},
+crosshair = {
+"....kkkk....", "..kkrrrrkk..", ".kr..kk..rk.", ".kr..rr..rk.",
+"krr.krrk.rrk", "kkkkryyrkkkk", "kkkkryyrkkkk", "krr.krrk.rrk",
+".kr..rr..rk.", ".kr..kk..rk.", "..kkrrrrkk..", "....kkkk....",
+},
+crown = {
+"............", ".kk..kk..kk.", "kyykkyykkyyk", "kyyyyyyyyyyk",
+"kyrrybbyrryk", "kyyyyyyyyyyk", "kyyyyyyyyyyk", ".kyyyyyyyyk.",
+".kYYYYYYYYk.", ".kkkkkkkkkk.", "............", "............",
+},
+gem = {
+"............", "...kkkkkk...", "..kbbbbbbk..", ".kbwwbbbbbk.",
+"kbwwbbbbbbbk", "kbbbbbbbbbbk", ".kbbbbbbbbk.", "..kbbbbbbk..",
+"...kbbbbk...", "....kbbk....", ".....kk.....", "............",
+},
+dice = {
+".kkkkkkkkkk.", "kwwwwwwwwwwk", "kwkkwwwwkkwk", "kwkkwwwwkkwk",
+"kwwwwwwwwwwk", "kwwwwkkwwwwk", "kwwwwkkwwwwk", "kwwwwwwwwwwk",
+"kwkkwwwwkkwk", "kwkkwwwwkkwk", "kwwwwwwwwwwk", ".kkkkkkkkkk.",
+},
+paw = {
+"............", ".kk..kk..kk.", "kmmkkmk.kmmk", "kmmkkmk.kmmk",
+".kk..kk..kk.", "...kkkkkk...", "..kmmmmmmk..", ".kmmssssmmk.",
+".kmssssssmk.", ".kmmmmmmmmk.", "..kkkkkkkk..", "............",
+},
+egg = {
+"....kkkk....", "...kwwwwk...", "..kwwggwwk..", ".kwwggggwwk.",
+".kwwwwwwwwk.", "kwwggwwggwwk", "kwwggwwggwwk", "kwwwwwwwwwwk",
+".kwwwwwwwwk.", ".kwwggggwwk.", "..kkwwwwkk..", "....kkkk....",
+},
+hammer = {
+"..kkkkkkkk..", ".knnnnnnnnk.", ".knwwnnnnnk.", ".knnnnnnnnk.",
+"..kkkkmmkk..", ".....kmmk...", ".....kmmk...", ".....kmmk...",
+".....kmmk...", ".....kmmk...", ".....kmmk...", ".....kkkk...",
+},
+car = {
+"............", "...kkkkkk...", "..krrrrrrk..", ".krrbbbbwwk.",
+"krrrrrrrrrrk", "krrrrrrrryyk", "kkkkkkkkkkkk", ".knnkkkkknn.",
+".knwk..knwk.", "..kk....kk..", "............", "............",
+},
+chest = {
+".kkkkkkkkkk.", "kBBBBBBBBBBk", "kByyyyyyyyBk", "kBBBBBBBBBBk",
+"kkkkkyykkkkk", "kBBBkyykBBBk", "kBBBkyykBBBk", "kBBBBBBBBBBk",
+"kBmmmmmmmmBk", "kBBBBBBBBBBk", ".kkkkkkkkkk.", "............",
+},
+lightning = {
+"......kkkk..", ".....kyyyk..", "....kyyyk...", "...kyyyk....",
+"..kyyyyykkkk", ".kyyyyyyyyyk", "....kkkkkyyk", "....kyyykyk.",
+"...kyyyk....", "..kyyyk.....", ".kyyk.......", ".kkk........",
+},
+magnet = {
+".kkkk..kkkk.", "krrrrk.krrrk", "krwwrk.krwrk", "knnnnk.knnnk",
+"knnnnk.knnnk", "krrrrk.krrrk", "krrrrkkrrrrk", ".krrrrrrrrk.",
+".krrrrrrrrk.", "..kkkkkkkk..", "............", "............",
+},
+skull = {
+"...kkkkkk...", "..kwwwwwwk..", ".kwwwwwwwwk.", "kwwkkwwkkwwk",
+"kwwkkwwkkwwk", "kwwwwwwwwwwk", ".kwwwkkwwwk.", "..kwwwwwwk..",
+"..kwkwkwkwk.", "...kkkkkk...", "............", "............",
+},
+feather = {
+"........kkk.", "......kkwwwk", ".....kwwwwwk", "....kwwbbwwk",
+"...kwwbbwwk.", "..kwwbbwwk..", "..kwbbwwk...", ".kwwbwwk....",
+".kwbwwk.....", ".kyyyk......", "kyyk........", "kkk.........",
+},
+trophy = {
+".kkkkkkkkkk.", "kyyyyyyyyyyk", "kykkyyyykkyk", "kykkywwykkyk",
+".kyyyyyyyyk.", "..kyyyyyyk..", "...kyyyyk...", "....kyyk....",
+"....kyyk....", "..kkyyyykk..", ".kkkkkkkkkk.", "............",
+},
+}
+for spriteName, grid in pairs(ExtraSprites) do
+Sprite.Art[spriteName] = grid
+end
+Sprite.Swaps.blueshell = { base = "shell", swap = { g = "b", G = "P" } }
+Sprite.Swaps.iceflower = { base = "flower", swap = { r = "b", y = "w" } }
+Sprite.Swaps.goldmushroom = { base = "mushroom", swap = { r = "y", w = "q" } }
+local ExtraAliases = {
+main = "mushroom", home = "castle", general = "qblock", hub = "star",
+combat = "sword", sword = "sword", swords = "sword", weapon = "sword", knife = "sword",
+aimbot = "crosshair", aim = "crosshair", sniper = "crosshair", target = "crosshair", crosshair = "crosshair", gun = "crosshair",
+visuals = "boo", esp = "boo", eye = "boo", camera = "boo", radar = "crosshair",
+player = "feather", user = "oneup", users = "oneup", movement = "feather", speed = "lightning",
+zap = "lightning", bolt = "lightning", fly = "feather", jump = "feather", run = "lightning",
+shield = "shell", defense = "shell", god = "star", armor = "blueshell", safe = "shell",
+teleport = "pipe", warp = "pipe", compass = "pipe", map = "pipe", globe = "pipe",
+auto = "star", farm = "star", sparkles = "star", wand = "star", bot = "gear",
+coin = "coin", money = "coin", cash = "coin", shop = "coin", bag = "chest", cart = "chest",
+gem = "gem", diamond = "gem", crown = "crown", vip = "crown", rank = "trophy", trophy = "trophy",
+gift = "chest", crate = "chest", chest = "chest", box = "qblock", package = "qblock", airdrop = "chest",
+loot = "magnet", magnet = "magnet", collect = "magnet",
+pet = "paw", paw = "paw", animal = "paw", mount = "paw",
+egg = "egg", hatch = "egg",
+dice = "dice", roll = "dice", luck = "star", spin = "dice",
+hammer = "hammer", forge = "hammer", craft = "hammer", build = "brick", pickaxe = "hammer",
+car = "car", vehicle = "car", drive = "car", race = "flag",
+skull = "skull", kill = "skull", murder = "skull", danger = "bomb", bomb = "bomb",
+heart = "heart", health = "heart", heal = "oneup",
+key = "key", lock = "key", unlock = "key",
+flag = "flag", quest = "flag", play = "flag",
+settings = "gear", cog = "gear", sliders = "gear", config = "qblock",
+palette = "flower", theme = "flower",
+info = "qblock", bell = "coin", warning = "bomb", alert = "bomb",
+check = "star", save = "qblock", refresh = "pipe", trash = "bomb",
+search = "boo", terminal = "brick", code = "qblock", chart = "trophy", stats = "trophy",
+}
+for aliasKey, targetSprite in pairs(ExtraAliases) do
+Sprite.Alias[aliasKey] = targetSprite
+end
+Icons.Rules = {
+{ "aimbot|silent|sniper|crosshair|shoot|gun|ยิง|ปืน|เล็ง", "crosshair" },
+{ "combat|sword|weapon|knife|kill|murder|sheriff|hit|attack|fight|ต่อสู้|ฆ่า|อาวุธ|ดาบ", "sword" },
+{ "visual|esp|chams|wallhack|highlight|tracer|fov|camera|see|มอง|แสง|เรดาร์", "boo" },
+{ "teleport|warp|island|location|place|spawn|zone|map|วาร์ป|เกาะ|สถานที่|แมพ", "pipe" },
+{ "pet|animal|mount|ride|สัตว์|ขี่", "paw" },
+{ "egg|hatch|ไข่|สุ่มไข่", "egg" },
+{ "dice|roll|spin|gacha|ลูกเต๋า|ทอย|สุ่ม", "dice" },
+{ "forge|craft|upgrade|mine|dig|ตีบวก|หลอม|ขุด|อัพเกรด", "hammer" },
+{ "build|pyramid|brick|สร้าง|พีระมิด", "brick" },
+{ "car|vehicle|drive|race|drift|รถ|ขับ|แข่ง", "car" },
+{ "shop|buy|sell|merchant|market|store|trade|coin|cash|money|ร้าน|ซื้อ|ขาย|เงิน", "coin" },
+{ "loot|magnet|collect|grab|ดูด|เก็บ", "magnet" },
+{ "airdrop|crate|chest|drop|gift|กล่อง|แอร์ดรอป", "chest" },
+{ "speed|dash|bolt|zap|ความเร็ว|พุ่ง", "lightning" },
+{ "player|movement|walk|jump|fly|noclip|stamina|ผู้เล่น|วิ่ง|กระโดด|บิน", "feather" },
+{ "defense|shield|god|anti|safe|guard|bypass|ป้องกัน|อมตะ|กันแบน", "shell" },
+{ "rank|vip|king|boss|crown|ยศ", "crown" },
+{ "stat|status|leaderboard|score|trophy|สถานะ|อันดับ|คะแนน", "trophy" },
+{ "quest|mission|flag|start|เควส|ภารกิจ", "flag" },
+{ "theme|color|palette|style|ธีม|สี", "flower" },
+{ "setting|config|ui|menu|keybind|language|ตั้งค่า|เมนู|ภาษา", "gear" },
+{ "auto|farm|grind|loop|bot|ออโต้|ฟาร์ม|บอท", "star" },
+{ "main|home|general|hub|หลัก|ทั่วไป", "mushroom" },
+}
+local function DrawVectorLine(parent, pos, size, rot, token)
+return Draw.Box("Frame", {
+AnchorPoint = Vector2.new(0.5, 0.5),
+Position = pos,
+Size = size,
+Rotation = rot or 0,
+Parent = parent,
+}, token or "Text", nil, UDim.new(1, 0))
+end
+local function DrawLCorner(parent, pos, size, rot, thickness, token)
+local pivot = Draw.New("Frame", {
+BackgroundTransparency = 1,
+AnchorPoint = Vector2.new(0.5, 0.5),
+Position = pos,
+Size = size,
+Rotation = rot,
+Parent = parent,
+})
+Draw.Box("Frame", {
+Position = UDim2.fromScale(0, 0),
+Size = UDim2.new(0, thickness, 1, 0),
+Parent = pivot,
+}, token or "Text", nil, UDim.new(1, 0))
+Draw.Box("Frame", {
+AnchorPoint = Vector2.new(0, 1),
+Position = UDim2.fromScale(0, 1),
+Size = UDim2.new(1, 0, 0, thickness),
+Parent = pivot,
+}, token or "Text", nil, UDim.new(1, 0))
+return pivot
+end
+Icons.Vectors = {
+search = function(box, token)
+local ring = Draw.New("Frame", {
+BackgroundTransparency = 1,
+AnchorPoint = Vector2.new(0.5, 0.5),
+Position = UDim2.fromScale(0.42, 0.42),
+Size = UDim2.fromScale(0.54, 0.54),
+Parent = box,
+})
+Draw.Corner(ring, UDim.new(1, 0))
+Draw.Stroke(ring, token or "SubText", 2)
+DrawVectorLine(box, UDim2.fromScale(0.73, 0.73), UDim2.new(0.32, 0, 0, 2), 45, token or "SubText")
+end,
+close = function(box, token)
+DrawVectorLine(box, UDim2.fromScale(0.5, 0.5), UDim2.new(0.68, 0, 0, 2), 45, token)
+DrawVectorLine(box, UDim2.fromScale(0.5, 0.5), UDim2.new(0.68, 0, 0, 2), -45, token)
+end,
+check = function(box, token)
+local w = box.Size.X.Offset
+local thick = (w >= 16) and 3 or 2
+DrawLCorner(box, UDim2.fromScale(0.5, 0.44), UDim2.fromScale(0.62, 0.36), -45, thick, token or "Good")
+end,
+plus = function(box, token)
+DrawVectorLine(box, UDim2.fromScale(0.5, 0.5), UDim2.new(0.64, 0, 0, 2), 0, token)
+DrawVectorLine(box, UDim2.fromScale(0.5, 0.5), UDim2.new(0, 2, 0.64, 0), 0, token)
+end,
+minus = function(box, token)
+DrawVectorLine(box, UDim2.fromScale(0.5, 0.5), UDim2.new(0.64, 0, 0, 2), 0, token)
+end,
+chevron_down = function(box, token)
+DrawLCorner(box, UDim2.fromScale(0.5, 0.42), UDim2.fromScale(0.42, 0.42), -45, 2, token)
+end,
+chevron_up = function(box, token)
+DrawLCorner(box, UDim2.fromScale(0.5, 0.58), UDim2.fromScale(0.42, 0.42), 135, 2, token)
+end,
+chevron_right = function(box, token)
+DrawLCorner(box, UDim2.fromScale(0.42, 0.5), UDim2.fromScale(0.42, 0.42), -135, 2, token)
+end,
+grip = function(box, token)
+DrawVectorLine(box, UDim2.fromScale(0.62, 0.62), UDim2.new(0.66, 0, 0, 2), -45, token or "White")
+DrawVectorLine(box, UDim2.fromScale(0.78, 0.78), UDim2.new(0.36, 0, 0, 2), -45, token or "White")
+end,
+}
+function Icons.NormalizeKey(rawName)
+if type(rawName) ~= "string" then
+return ""
+end
+return rawName:lower():gsub("^lucide:", ""):gsub("^lucide%-", ""):gsub("^icon:", ""):gsub("[%-%s]+", "_")
+end
+function Icons.FromTitle(titleSpec, defaultSprite)
+local text = Lang.SearchText(titleSpec)
+if text ~= "" then
+for _, rule in ipairs(Icons.Rules) do
+if text:find(rule[1]) then
+return rule[2]
+end
+end
+end
+return defaultSprite or "qblock"
+end
+function Icons.Vector(parent, vectorName, size, colorToken)
+size = size or 16
+local key = Icons.NormalizeKey(vectorName)
+local builder = Icons.Vectors[key]
+local holder = Draw.New("Frame", {
+Name = "VectorIcon",
+BackgroundTransparency = 1,
+Size = UDim2.fromOffset(size, size),
+Parent = parent,
+})
+if builder then
+builder(holder, colorToken or "Text")
+end
+return holder
+end
+function Icons.Create(parent, iconSpec, size, colorToken, fallbackTitle)
+size = size or Util.Metric("Icon")
+if type(iconSpec) == "number" or (type(iconSpec) == "string" and (iconSpec:find("^rbxassetid://") or iconSpec:match("^%d+$"))) then
+local assetId = type(iconSpec) == "number" and ("rbxassetid://" .. iconSpec) or (iconSpec:match("^%d+$") and ("rbxassetid://" .. iconSpec) or iconSpec)
+local img = Draw.New("ImageLabel", {
+Name = "Icon",
+BackgroundTransparency = 1,
+Image = assetId,
+ScaleType = Enum.ScaleType.Fit,
+Size = UDim2.fromOffset(size, size),
+Parent = parent,
+})
+if colorToken then
+Theme.Bind(img, { ImageColor3 = colorToken })
+end
+return img
+end
+local key = Icons.NormalizeKey(iconSpec)
+if Icons.Vectors[key] then
+return Icons.Vector(parent, key, size, colorToken)
+end
+local spriteName = (key ~= "" and Sprite.Resolve(key)) or Icons.FromTitle(fallbackTitle or iconSpec, "qblock")
+local spriteSize = math.max(12, math.floor((size + 2) / 2) * 2)
+return Sprite.New(parent, spriteName, spriteSize)
+end
+function Icons.Badge(parent, iconSpec, size, colorToken, fallbackTitle)
+size = size or 24
+local box = Draw.Box("Frame", {
+Name = "IconBadge",
+Size = UDim2.fromOffset(size, size),
+BackgroundTransparency = 0.25,
+Parent = parent,
+}, "Element", "Outline", 6, 1.5)
+local inner = Icons.Create(box, iconSpec, math.max(12, size - 6), colorToken, fallbackTitle)
+inner.AnchorPoint = Vector2.new(0.5, 0.5)
+inner.Position = UDim2.fromScale(0.5, 0.5)
+return box, inner
+end
+Motion.Springs = {}
+Motion.ByInst = {}
+Motion.Free = {}
+Motion.Tickers = {}
+Motion.Sizes = { number = 1, Vector2 = 2, Color3 = 3, UDim2 = 4 }
+function Motion.Pack(kind, current, out)
+if kind == "number" then
+out[1] = current
+elseif kind == "UDim2" then
+out[1], out[2], out[3], out[4] = current.X.Scale, current.X.Offset, current.Y.Scale, current.Y.Offset
+elseif kind == "Vector2" then
+out[1], out[2] = current.X, current.Y
+else
+out[1], out[2], out[3] = current.R, current.G, current.B
+end
+end
+function Motion.Unpack(kind, components)
+if kind == "number" then
+return components[1]
+elseif kind == "UDim2" then
+return UDim2.new(components[1], components[2], components[3], components[4])
+elseif kind == "Vector2" then
+return Vector2.new(components[1], components[2])
+end
+return Color3.new(
+math.clamp(components[1], 0, 1),
+math.clamp(components[2], 0, 1),
+math.clamp(components[3], 0, 1)
+)
+end
+function Motion.SpeedOf(speedKey)
+if type(speedKey) == "number" then
+return speedKey
+end
+local speeds = Config.Motion.Speed
+return speeds[speedKey or "Normal"] or speeds.Normal
+end
+function Motion.Get(inst, prop)
+local props = Motion.ByInst[inst]
+return props and props[prop]
+end
+function Motion.Create(inst, prop, kind)
+local spring = table.remove(Motion.Free) or { Pos = {}, Vel = {}, Goal = {} }
+spring.Inst, spring.Prop, spring.Kind, spring.Count = inst, prop, kind, Motion.Sizes[kind]
+Motion.Pack(kind, inst[prop], spring.Pos)
+for index = 1, spring.Count do
+spring.Vel[index] = 0
+end
+local props = Motion.ByInst[inst]
+if not props then
+props = {}
+Motion.ByInst[inst] = props
+end
+props[prop] = spring
+table.insert(Motion.Springs, spring)
+spring.Index = #Motion.Springs
+return spring
+end
+function Motion.Remove(spring, fireCallback)
+local springs = Motion.Springs
+local last = springs[#springs]
+if last then
+springs[spring.Index] = last
+last.Index = spring.Index
+springs[#springs] = nil
+end
+local props = Motion.ByInst[spring.Inst]
+if props then
+props[spring.Prop] = nil
+if next(props) == nil then
+Motion.ByInst[spring.Inst] = nil
+end
+end
+local onDone, inst = spring.OnDone, spring.Inst
+spring.Inst, spring.OnDone = nil, nil
+table.insert(Motion.Free, spring)
+if fireCallback and onDone then
+Util.Try(onDone, inst)
+end
+end
+function Motion.Wake()
+if Motion.Connection or Library.Unloaded then
+return
+end
+Motion.Connection = Util.Connect(RunService.RenderStepped, Motion.Step)
+end
+function Motion.Spring(inst, prop, target, speedKey, options)
+local kind = typeof(target)
+if not Motion.Sizes[kind] then
+inst[prop] = target
+return
+end
+local spring = Motion.Get(inst, prop) or Motion.Create(inst, prop, kind)
+Motion.Pack(kind, target, spring.Goal)
+spring.Speed = Motion.SpeedOf(speedKey)
+spring.Damping = options and options.Damping or Config.Motion.Damping
+spring.OnDone = options and options.OnDone
+Motion.Wake()
+end
+function Motion.Impulse(inst, prop, velocity, speedKey, damping)
+local kind = typeof(inst[prop])
+if not Motion.Sizes[kind] then
+return
+end
+local spring = Motion.Get(inst, prop)
+if not spring then
+spring = Motion.Create(inst, prop, kind)
+Motion.Pack(kind, inst[prop], spring.Goal)
+spring.OnDone = nil
+end
+for index = 1, spring.Count do
+spring.Vel[index] += velocity[index] or 0
+end
+spring.Speed = Motion.SpeedOf(speedKey)
+spring.Damping = damping or Config.Motion.BounceDamping
+Motion.Wake()
+end
+function Motion.Set(inst, prop, target)
+local spring = Motion.Get(inst, prop)
+if spring then
+Motion.Remove(spring, false)
+end
+inst[prop] = target
+end
+function Motion.Advance(spring, step, substeps)
+local speed = spring.Speed
+local damp = 2 * spring.Damping * speed
+local stiffness = speed * speed
+local settled = true
+for _ = 1, substeps do
+for index = 1, spring.Count do
+local displacement = spring.Pos[index] - spring.Goal[index]
+local accel = -stiffness * displacement - damp * spring.Vel[index]
+spring.Vel[index] += accel * step
+spring.Pos[index] += spring.Vel[index] * step
+end
+end
+for index = 1, spring.Count do
+if math.abs(spring.Pos[index] - spring.Goal[index]) > 0.002 or math.abs(spring.Vel[index]) > 0.01 then
+settled = false
+break
+end
+end
+if settled then
+for index = 1, spring.Count do
+spring.Pos[index] = spring.Goal[index]
+spring.Vel[index] = 0
+end
+end
+return settled
+end
+function Motion.Step(deltaTime)
+local clamped = math.min(deltaTime, 0.05)
+local substeps = clamped > 0.018 and 2 or 1
+local step = clamped / substeps
+for index = #Motion.Springs, 1, -1 do
+local spring = Motion.Springs[index]
+if not spring.Inst or not spring.Inst.Parent then
+Motion.Remove(spring, false)
+else
+local settled = Motion.Advance(spring, step, substeps)
+pcall(function()
+spring.Inst[spring.Prop] = Motion.Unpack(spring.Kind, spring.Pos)
+end)
+if settled then
+Motion.Remove(spring, true)
+end
+end
+end
+Motion.StepTickers(clamped)
+if #Motion.Springs == 0 and next(Motion.Tickers) == nil and Motion.Connection then
+Motion.Connection:Disconnect()
+Motion.Connection = nil
+end
+end
+function Motion.StepTickers(deltaTime)
+for owner, ticker in pairs(Motion.Tickers) do
+ticker.Elapsed += deltaTime
+local alpha = math.clamp(ticker.Elapsed / ticker.Duration, 0, 1)
+local eased = 1 - (1 - alpha) ^ 3
+local current = ticker.From + (ticker.To - ticker.From) * eased
+pcall(ticker.OnTick, current, alpha >= 1)
+if alpha >= 1 then
+Motion.Tickers[owner] = nil
+end
+end
+end
+function Fx.ScaleOf(frame)
+local scale = frame:FindFirstChild("FxScale")
+if not scale then
+scale = Draw.New("UIScale", { Name = "FxScale", Parent = frame })
+end
+return scale
+end
+function Fx.Squash(frame, impulseScale)
+local scale = Fx.ScaleOf(frame)
+Motion.Impulse(scale, "Scale", { impulseScale or 2.4 }, "Fast", Config.Motion.SquashDamping)
+end
+function Fx.Bump(frame, velocity)
+Motion.Impulse(frame, "Position", { 0, 0, 0, -(velocity or 110) }, "Fast", Config.Motion.BounceDamping)
+end
+function Fx.Ripple(parent, screenPos, token)
+if not parent or not parent.Parent then
+return
+end
+local pointer = screenPos or UserInputService:GetMouseLocation()
+local localPos = pointer - parent.AbsolutePosition
+local maxDim = math.max(parent.AbsoluteSize.X, parent.AbsoluteSize.Y) * 2.1
+local circle = Draw.Box("Frame", {
+Name = "Ripple",
+AnchorPoint = Vector2.new(0.5, 0.5),
+Position = UDim2.fromOffset(localPos.X, localPos.Y),
+Size = UDim2.fromOffset(4, 4),
+BackgroundTransparency = 0.55,
+ZIndex = 8,
+Parent = parent,
+}, token or "White", nil, UDim.new(1, 0))
+local tween = Anim.Tween(circle, { Size = UDim2.fromOffset(maxDim, maxDim), BackgroundTransparency = 1 }, 0.36, "Out")
+tween.Completed:Once(function()
+circle:Destroy()
+end)
+end
+function Fx.CountUp(owner, fromValue, toValue, duration, onTick)
+if math.abs(toValue - fromValue) < 1e-4 then
+pcall(onTick, toValue, true)
+return
+end
+local existing = Motion.Tickers[owner]
+local startValue = existing and (existing.From + (existing.To - existing.From) * math.clamp(existing.Elapsed / existing.Duration, 0, 1)) or fromValue
+Motion.Tickers[owner] = {
+From = startValue,
+To = toValue,
+Elapsed = 0,
+Duration = duration or 0.22,
+OnTick = onTick,
+}
+Motion.Wake()
+end
+function Fx.Shimmer(target, colorToken)
+if target:FindFirstChild("FxShimmer") then
+return
+end
+local gradient = Draw.New("UIGradient", {
+Name = "FxShimmer",
+Rotation = 25,
+Offset = Vector2.new(-1, 0),
+Parent = target,
+})
+Theme.OnRender(gradient, function()
+local base = Theme.Colors[colorToken or "Text"] or Color3.new(1, 1, 1)
+local highlight = Util.Lighten(base, 0.45)
+gradient.Color = ColorSequence.new({
+ColorSequenceKeypoint.new(0, base),
+ColorSequenceKeypoint.new(0.45, base),
+ColorSequenceKeypoint.new(0.5, highlight),
+ColorSequenceKeypoint.new(0.55, base),
+ColorSequenceKeypoint.new(1, base),
+})
+end)
+Anim.Tween(gradient, { Offset = Vector2.new(1, 0) }, 2.6, "Sine", -1, false, 0.8)
+end
+function Fx.Spotlight(card)
+return card
+end
+function Fx.StaggerRise(cards)
+for index, card in ipairs(cards) do
+if card and card.Parent then
+local scale = Fx.ScaleOf(card)
+scale.Scale = 0.96
+task.delay((index - 1) * 0.028, function()
+if card.Parent then
+Motion.Spring(scale, "Scale", 1, "Normal", { Damping = 0.62 })
+end
+end)
+end
+end
+end
+Tailwind.Cache = {}
+Tailwind.TokenMap = {
+panel = "Panel", header = "PanelHeader", element = "Element", hover = "Hover",
+accent = "Accent", ["accent-dark"] = "AccentDark", good = "Good", ["good-dark"] = "GoodDark",
+danger = "Danger", ["danger-dark"] = "DangerDark", coin = "Coin", ["coin-dark"] = "CoinDark",
+blue = "Blue", ["blue-dark"] = "BlueDark", risky = "Risky", track = "Track",
+outline = "Outline", shadow = "Shadow", text = "Text", sub = "SubText",
+muted = "Muted", white = "White", black = "Black", ink = "Ink",
+topbar = "Topbar", sidebar = "Sidebar", ["sidebar-alt"] = "SidebarAlt",
+}
+Tailwind.RadiusMap = { none = 0, sm = 6, md = 8, lg = 10, xl = 12 }
+Tailwind.FontMap = { display = "Display", body = "Body", desc = "Desc", strong = "Strong", logo = "Logo", glyph = "Glyph" }
+Tailwind.SizeMap = { xs = 12, sm = 13, base = 15, lg = 18, xl = 22, ["2xl"] = 26 }
+Tailwind.AlignXMap = { left = Enum.TextXAlignment.Left, center = Enum.TextXAlignment.Center, right = Enum.TextXAlignment.Right }
+Tailwind.FlexXMap = { start = Enum.HorizontalAlignment.Left, center = Enum.HorizontalAlignment.Center, ["end"] = Enum.HorizontalAlignment.Right }
+Tailwind.FlexYMap = { start = Enum.VerticalAlignment.Top, center = Enum.VerticalAlignment.Center, ["end"] = Enum.VerticalAlignment.Bottom }
+function Tailwind.ParseToken(raw)
+return Tailwind.TokenMap[raw] or raw
+end
+function Tailwind.ApplyLayoutRule(inst, rule, state)
+if rule == "flex-row" or rule == "flex-col" then
+state.Flex = rule == "flex-row" and "row" or "col"
+elseif rule:sub(1, 6) == "items-" then
+state.Items = rule:sub(7)
+elseif rule:sub(1, 8) == "justify-" then
+state.Justify = rule:sub(9)
+elseif rule:sub(1, 4) == "gap-" then
+state.Gap = (tonumber(rule:sub(5)) or 2) * 4
+elseif rule == "w-full" then
+inst.Size = UDim2.new(1, 0, inst.Size.Y.Scale, inst.Size.Y.Offset)
+elseif rule == "h-full" then
+inst.Size = UDim2.new(inst.Size.X.Scale, inst.Size.X.Offset, 1, 0)
+elseif rule == "w-1/2" then
+inst.Size = UDim2.new(0.5, 0, inst.Size.Y.Scale, inst.Size.Y.Offset)
+elseif rule == "clip" then
+inst.ClipsDescendants = true
+elseif rule == "auto-x" then
+inst.AutomaticSize = Enum.AutomaticSize.X
+elseif rule == "auto-y" then
+inst.AutomaticSize = Enum.AutomaticSize.Y
+end
+end
+function Tailwind.ApplyBoxRule(inst, rule, state)
+local padAll = rule:match("^p%-(%d+)$")
+local padX = rule:match("^px%-(%d+)$")
+local padY = rule:match("^py%-(%d+)$")
+local widthPx = rule:match("^w%-%[(%d+)%]$") or rule:match("^w%-(%d+)$")
+local heightPx = rule:match("^h%-%[(%d+)%]$") or rule:match("^h%-(%d+)$")
+if padAll then
+local px = tonumber(padAll) * 4
+state.Pad = { px, px, px, px }
+elseif padX then
+local px = tonumber(padX) * 4
+state.Pad = state.Pad or { 0, 0, 0, 0 }
+state.Pad[2], state.Pad[4] = px, px
+elseif padY then
+local px = tonumber(padY) * 4
+state.Pad = state.Pad or { 0, 0, 0, 0 }
+state.Pad[1], state.Pad[3] = px, px
+elseif widthPx then
+inst.Size = UDim2.new(0, tonumber(widthPx), inst.Size.Y.Scale, inst.Size.Y.Offset)
+elseif heightPx then
+inst.Size = UDim2.new(inst.Size.X.Scale, inst.Size.X.Offset, 0, tonumber(heightPx))
+end
+end
+function Tailwind.ApplySurfaceRule(inst, rule, state)
+if rule == "rounded-full" then
+Draw.Corner(inst, UDim.new(1, 0))
+elseif rule:sub(1, 8) == "rounded-" then
+local key = rule:sub(9)
+Draw.Corner(inst, Tailwind.RadiusMap[key] or tonumber(key) or 8)
+elseif rule:sub(1, 11) == "bg-opacity-" then
+inst.BackgroundTransparency = 1 - math.clamp((tonumber(rule:sub(12)) or 100) / 100, 0, 1)
+elseif rule:sub(1, 3) == "bg-" then
+inst.BackgroundTransparency = inst.BackgroundTransparency == 1 and 0 or inst.BackgroundTransparency
+Theme.Bind(inst, { BackgroundColor3 = Tailwind.ParseToken(rule:sub(4)) })
+elseif rule == "border" or rule == "border-2" or rule == "border-3" then
+state.BorderWidth = tonumber(rule:match("%d+")) or 1
+elseif rule:sub(1, 7) == "border-" then
+state.BorderToken = Tailwind.ParseToken(rule:sub(8))
+elseif rule == "spotlight" then
+state.Spotlight = true
+end
+end
+function Tailwind.ApplyTextRule(inst, rule, state)
+if not inst:IsA("TextLabel") and not inst:IsA("TextButton") and not inst:IsA("TextBox") then
+return
+end
+if rule:sub(1, 5) == "font-" then
+state.Font = Tailwind.FontMap[rule:sub(6)] or "Body"
+elseif rule:sub(1, 5) == "text-" then
+local suffix = rule:sub(6)
+if Tailwind.SizeMap[suffix] then
+state.TextSize = Tailwind.SizeMap[suffix]
+elseif Tailwind.AlignXMap[suffix] then
+inst.TextXAlignment = Tailwind.AlignXMap[suffix]
+else
+Theme.Bind(inst, { TextColor3 = Tailwind.ParseToken(suffix) })
+end
+elseif rule == "truncate" then
+inst.TextTruncate = Enum.TextTruncate.AtEnd
+elseif rule == "wrap" then
+inst.TextWrapped = true
+elseif rule == "shimmer" then
+Fx.Shimmer(inst)
+end
+end
+function Tailwind.FinalizeState(inst, state)
+if state.Pad then
+Draw.Padding(inst, state.Pad[1], state.Pad[2], state.Pad[3], state.Pad[4])
+end
+if state.Flex then
+local alignX = state.Flex == "row" and Tailwind.FlexXMap[state.Justify or "start"] or Tailwind.FlexXMap[state.Items or "start"]
+local alignY = state.Flex == "row" and Tailwind.FlexYMap[state.Items or "center"] or Tailwind.FlexYMap[state.Justify or "start"]
+local list = Draw.List(inst, state.Gap or 0, state.Flex == "row", alignX, alignY)
+if state.Justify == "between" then
+list.HorizontalFlex = state.Flex == "row" and Enum.UIFlexAlignment.SpaceBetween or Enum.UIFlexAlignment.None
+end
+end
+if state.BorderWidth or state.BorderToken then
+Draw.Stroke(inst, state.BorderToken or "Outline", state.BorderWidth or 2, true)
+end
+if state.Font or state.TextSize then
+Fonts.Style(inst, state.Font or "Body", state.TextSize or Util.TextSize("Label"))
+end
+if state.Spotlight then
+Fx.Spotlight(inst)
+end
+end
+function Tailwind.Apply(inst, classString)
+if type(classString) ~= "string" or classString == "" then
+return inst
+end
+local state = {}
+for rule in classString:gmatch("%S+") do
+Tailwind.ApplyLayoutRule(inst, rule, state)
+Tailwind.ApplyBoxRule(inst, rule, state)
+Tailwind.ApplySurfaceRule(inst, rule, state)
+Tailwind.ApplyTextRule(inst, rule, state)
+end
+Tailwind.FinalizeState(inst, state)
+return inst
+end
+function Tailwind.BindProp(inst, property, target)
+if property == "Class" or property == "class" then
+if Reactive.IsRef(target) or type(target) == "function" then
+Reactive.Effect(function()
+Tailwind.Apply(inst, Reactive.IsRef(target) and target.Value or target())
+end)
+else
+Tailwind.Apply(inst, target)
+end
+return
+end
+if property == "Text" and (type(target) == "table" and not Reactive.IsRef(target)) then
+Lang.Bind(inst, target)
+return
+end
+if Reactive.IsRef(target) or type(target) == "function" then
+Reactive.Effect(function()
+local resolved = Reactive.IsRef(target) and target.Value or target()
+if property == "Text" then
+Lang.Bind(inst, resolved)
+else
+inst[property] = resolved
+end
+end)
+return
+end
+if property == "Text" then
+Lang.Bind(inst, target)
+elseif property ~= "Parent" and property ~= "Children" then
+inst[property] = target
+end
+end
+function Tailwind.CreateElement(tag, props, children)
+props = props or {}
+local classMap = { Card = "Frame", Box = "Frame", Row = "Frame", Col = "Frame", Text = "TextLabel", Button = "TextButton", Input = "TextBox" }
+local robloxClass = classMap[tag] or tag
+local inst = Draw.New(robloxClass, { BackgroundTransparency = robloxClass == "Frame" and 1 or 1 })
+if tag == "Card" then
+Tailwind.Apply(inst, "bg-panel rounded-xl border-2 border-outline p-3 flex-col gap-2 spotlight")
+elseif tag == "Text" then
+Fonts.Style(inst, "Body", Util.TextSize("Label"))
+Theme.Bind(inst, { TextColor3 = "Text" })
+end
+for property, value in pairs(props) do
+if type(property) == "string" and property:sub(1, 2) == "On" and type(value) == "function" then
+local signalName = property:sub(3)
+if signalName == "Click" and inst:IsA("GuiButton") then
+inst.Activated:Connect(value)
+elseif inst[signalName] then
+inst[signalName]:Connect(value)
+end
+else
+Tailwind.BindProp(inst, property, value)
+end
+end
+for index, child in ipairs(children or props.Children or {}) do
+if typeof(child) == "Instance" then
+child.LayoutOrder = index
+child.Parent = inst
+end
+end
+if props.Parent then
+inst.Parent = props.Parent
+end
+return inst
+end
+function Tailwind.Component(renderFn)
+return function(props, children)
+return renderFn(props or {}, children)
+end
+end
+function Tailwind.Show(whenSource, renderTrue, renderFalse)
+local holder = Draw.New("Frame", { Name = "ShowSlot", BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.XY })
+Reactive.Effect(function()
+for _, child in ipairs(holder:GetChildren()) do
+child:Destroy()
+end
+local active = Reactive.IsRef(whenSource) and whenSource.Value or (type(whenSource) == "function" and whenSource() or whenSource)
+local builder = active and renderTrue or renderFalse
+if builder then
+local built = builder()
+if typeof(built) == "Instance" then
+built.Parent = holder
+end
+end
+end)
+return holder
+end
+function Tailwind.For(listSource, renderEntry)
+local holder = Draw.New("Frame", { Name = "ForSlot", BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y, Size = UDim2.fromScale(1, 0) })
+Draw.List(holder, 6, false)
+Reactive.Effect(function()
+for _, child in ipairs(holder:GetChildren()) do
+if not child:IsA("UIListLayout") then
+child:Destroy()
+end
+end
+local entries = Reactive.IsRef(listSource) and listSource.Value or (type(listSource) == "function" and listSource() or listSource or {})
+for index, entry in ipairs(entries) do
+local node = renderEntry(entry, index)
+if typeof(node) == "Instance" then
+node.LayoutOrder = index
+node.Parent = holder
+end
+end
+end)
+return holder
+end
+function Container.New(host, options)
+options = options or {}
+local self = setmetatable({
+Host = host,
+Items = {},
+Parent = nil,
+Depth = 0,
+PadX = options.PadX or 0,
+PadY = options.PadY or 0,
+GapX = options.GapX or Config.Gap.X,
+GapY = options.GapY or Config.Gap.Y,
+Width = 0,
+ContentHeight = 0,
+Scroll = host:IsA("ScrollingFrame"),
+OnHeight = options.OnHeight,
+IndentX = 0,
+PendingSameLine = nil,
+Window = options.Window,
+Tab = options.Tab,
+}, Container)
+if options.Parent then
+self:SetParent(options.Parent)
+end
+Layout.All[self] = true
+return self
+end
+function Container:SetParent(parent)
+self.Parent = parent
+self.Depth = parent and parent.Depth + 1 or 0
+self.Window = self.Window or (parent and parent.Window)
+self.Tab = self.Tab or (parent and parent.Tab)
+end
+function Container:MarkDirty()
+Layout.Dirty[self] = true
+Layout.Schedule()
+end
+function Container:SetWidth(width)
+width = math.max(0, math.floor(width))
+if width == self.Width then
+return
+end
+self.Width = width
+self:MarkDirty()
+end
+function Container:Add(frame, spec)
+spec = spec or {}
+local item = {
+Frame = frame,
+Width = spec.Width,
+Height = spec.Height or Util.Metric("Row"),
+Indent = self.IndentX,
+Child = spec.Child,
+ChildInset = spec.ChildInset,
+OnLayout = spec.OnLayout,
+AutoWidth = spec.AutoWidth,
+Fill = spec.Fill,
+Search = spec.Search,
+Hidden = false,
+Filtered = false,
+}
+if self.PendingSameLine then
+item.SameLine = true
+item.Gap = self.PendingSameLine.Gap
+self.PendingSameLine = nil
+end
+frame.Parent = self.Host
+self:Insert(item, spec.After)
+if spec.Child then
+spec.Child:SetParent(self)
+end
+self:MarkDirty()
+return item
+end
+function Container:Insert(item, after)
+for index, existing in ipairs(self.Items) do
+if existing == after then
+table.insert(self.Items, index + 1, item)
+return
+end
+end
+table.insert(self.Items, item)
+end
+function Container:Remove(item)
+local index = table.find(self.Items, item)
+if index then
+table.remove(self.Items, index)
+end
+if item.Child then
+item.Child:Destroy()
+end
+Theme.UnbindTree(item.Frame)
+item.Frame:Destroy()
+self:MarkDirty()
+end
+function Container:Clear()
+for index = #self.Items, 1, -1 do
+self:Remove(self.Items[index])
+end
+end
+function Container:Destroy()
+self.Destroyed = true
+Layout.All[self] = nil
+Layout.Dirty[self] = nil
+end
+function Container:SameLine(gap)
+self.PendingSameLine = { Gap = gap }
+return self
+end
+function Container:NewLine()
+self.PendingSameLine = nil
+return self:Spacing(0)
+end
+function Container:Spacing(height)
+local spacer = Draw.New("Frame", { Name = "Spacing", BackgroundTransparency = 1 })
+self:Add(spacer, { Height = height or Config.Gap.Y })
+return self
+end
+function Container:Indent(width)
+self.IndentX += width or 16
+return self
+end
+function Container:Unindent(width)
+self.IndentX = math.max(0, self.IndentX - (width or 16))
+return self
+end
+local function ResolveWidth(spec, available, used, gap)
+local remaining = math.max(0, available - used)
+if spec == nil or spec == 0 then
+return remaining
+end
+if spec < 0 then
+return math.max(0, remaining + spec)
+end
+if spec <= 1 then
+return math.min(remaining, math.floor((available + gap) * spec - gap + 0.5))
+end
+return math.min(spec, remaining)
+end
+local function ItemWidth(item, joined, available, used, gap)
+if item.Width == nil and item.AutoWidth and not item.Fill and (joined or item.SameLine) then
+return math.min(item.AutoWidth(), math.max(0, available - used))
+end
+return ResolveWidth(item.Width, available, used, gap)
+end
+function Container:Place(entry, cursor, available, joined)
+if entry.SameLine and cursor.EndX then
+cursor.X = cursor.EndX + (entry.Gap or self.GapX)
+else
+if cursor.EndX then
+cursor.Y += cursor.LineHeight + self.GapY
+end
+cursor.LineIndent = entry.Indent or 0
+cursor.X = self.PadX + cursor.LineIndent
+cursor.LineHeight = 0
+end
+local lineIndent = cursor.LineIndent or 0
+local lineAvailable = math.max(0, available - lineIndent)
+local used = math.max(0, cursor.X - self.PadX - lineIndent)
+local width = ItemWidth(entry, joined, lineAvailable, used, self.GapX)
+local height = type(entry.Height) == "function" and entry.Height(width) or entry.Height
+if entry.LastX ~= cursor.X or entry.LastY ~= cursor.Y then
+entry.LastX, entry.LastY = cursor.X, cursor.Y
+entry.Frame.Position = UDim2.fromOffset(cursor.X, cursor.Y)
+end
+if entry.LastW ~= width or entry.LastH ~= height then
+entry.LastW, entry.LastH = width, height
+entry.Frame.Size = UDim2.fromOffset(width, height)
+end
+if entry.Child then
+entry.Child:SetWidth(width - (entry.ChildInset or 0))
+end
+if entry.OnLayout then
+entry.OnLayout(width, height)
+end
+cursor.EndX = cursor.X + width
+cursor.LineHeight = math.max(cursor.LineHeight, height)
+end
+function Container:Layout()
+Layout.Dirty[self] = nil
+if self.Destroyed or self.Width <= 0 then
+return
+end
+local available = math.max(0, self.Width - self.PadX * 2)
+local cursor = { X = self.PadX, Y = self.PadY, LineHeight = 0, EndX = nil }
+local visible = {}
+for _, item in ipairs(self.Items) do
+local shown = not item.Hidden and not item.Filtered
+if item.LastShown ~= shown then
+item.LastShown = shown
+item.Frame.Visible = shown
+end
+if shown then
+table.insert(visible, item)
+end
+end
+for index, item in ipairs(visible) do
+local following = visible[index + 1]
+self:Place(item, cursor, available, following ~= nil and following.SameLine == true)
+end
+local height = cursor.EndX and (cursor.Y + cursor.LineHeight + self.PadY) or 0
+self:Commit(height)
+end
+function Container:Commit(height)
+if self.Scroll and self.LastCanvasHeight ~= height then
+self.LastCanvasHeight = height
+self.Host.CanvasSize = UDim2.fromOffset(0, height)
+end
+if height == self.ContentHeight then
+return
+end
+self.ContentHeight = height
+if self.OnHeight then
+Util.Try(self.OnHeight, height)
+end
+if self.Parent then
+self.Parent:MarkDirty()
+end
+end
+function Layout.Schedule()
+if Layout.Scheduled or Library.Unloaded then
+return
+end
+Layout.Scheduled = true
+RunService.RenderStepped:Once(Layout.Flush)
+end
+function Layout.Flush()
+Layout.Scheduled = false
+for _ = 1, Config.LayoutPasses do
+if next(Layout.Dirty) == nil then
+return
+end
+local batch = {}
+for container in pairs(Layout.Dirty) do
+table.insert(batch, container)
+end
+table.sort(batch, function(left, right)
+return left.Depth < right.Depth
+end)
+for _, container in ipairs(batch) do
+if Layout.Dirty[container] then
+container:Layout()
+end
+end
+end
+if next(Layout.Dirty) ~= nil then
+Layout.Schedule()
+end
+end
+function Layout.MarkAll()
+for container in pairs(Layout.All) do
+container:MarkDirty()
+end
+end
+function Layout.Measure(text, size, fontKind, width)
+width = math.max(1, math.floor(width))
+local key = table.concat({ text, size, fontKind, width, State.Language }, "\0")
+local cached = Layout.Measured[key]
+if cached then
+return cached
+end
+if Layout.MeasuredCount > Config.MeasureCacheLimit then
+table.clear(Layout.Measured)
+Layout.MeasuredCount = 0
+end
+local probe = Layout.Probe()
+probe.FontFace = Fonts.Face(fontKind)
+probe.TextSize = size
+probe.Size = UDim2.fromOffset(width, 100000)
+probe.Text = text
+local bounds = probe.TextBounds
+Layout.Measured[key] = bounds
+Layout.MeasuredCount += 1
+return bounds
+end
+function Layout.Probe()
+local probe = Layout.ProbeLabel
+if probe and probe.Parent then
+return probe
+end
+probe = Draw.New("TextLabel", {
+Name = "Probe",
+BackgroundTransparency = 1,
+TextTransparency = 1,
+TextWrapped = true,
+Position = UDim2.fromOffset(-20000, -20000),
+Parent = State.Gui or Util.GuiParent(),
+})
+Layout.ProbeLabel = probe
+return probe
+end
+function Layout.ScrollFrame(props)
+props.BackgroundTransparency = 1
+props.ScrollBarThickness = Config.Page.ScrollBar
+props.VerticalScrollBarInset = Enum.ScrollBarInset.Always
+props.ScrollingDirection = Enum.ScrollingDirection.Y
+props.CanvasSize = UDim2.new()
+props.ElasticBehavior = Enum.ElasticBehavior.WhenScrollable
+local frame = Draw.New("ScrollingFrame", props)
+Theme.Bind(frame, { ScrollBarImageColor3 = "Muted" })
+return frame
+end
+function Container:Columns(count, gap)
+count = math.max(1, math.floor(tonumber(count) or 2))
+gap = gap or self.GapX
+local cols = {}
+local colWidth = 1 / count
+for index = 1, count do
+if index > 1 then
+self:SameLine(gap)
+end
+local subFrame = Draw.New("Frame", {
+BackgroundTransparency = 1,
+Parent = self.Host,
+})
+local subContainer = Container.New(subFrame, {
+Parent = self,
+PadX = 0,
+PadY = 0,
+GapX = self.GapX,
+GapY = self.GapY,
+})
+local entry = self:Add(subFrame, {
+Width = colWidth,
+Height = 0,
+Child = subContainer,
+})
+subContainer.OnHeight = function(nextHeight)
+entry.Height = nextHeight
+self:MarkDirty()
+end
+cols[index] = subContainer
+end
+return table.unpack(cols)
+end
+function Container:Mount(element, spec)
+spec = spec or {}
+local frame = (type(element) == "table" and element.Frame) or element
+if not frame then
+return nil
+end
+frame.Parent = self.Host
+return self:Add(frame, {
+Width = spec.Width,
+Height = spec.Height or frame.Size.Y.Offset or Util.Metric("Row"),
+After = spec.After,
+Search = spec.Search,
+Fill = spec.Fill,
+})
+end
+function Container:EndChild()
+Gui.EndChild()
+return self.Parent or self
+end
+function Container:AddBadge(text, spec)
+spec = spec or {}
+spec.Text = text or spec.Text
+spec.Container = self
+return Gui.Badge(self, spec)
+end
+function Container:AddKbd(keys, spec)
+spec = spec or {}
+spec.Keys = keys or spec.Keys
+spec.Container = self
+return Gui.Kbd(self, spec)
+end
+function Container:AddMarquee(text, spec)
+spec = spec or {}
+spec.Text = text or spec.Text
+spec.Container = self
+return Gui.Marquee(self, spec)
+end
+function Container:tw(target, classes)
+return Tailwind.Apply(target, classes)
+end
+function Container:h(tag, props, children)
+local inst = Tailwind.CreateElement(tag, props, children)
+if inst then
+self:Mount(inst, props)
+end
+return inst
+end
+Gui.Press = { Active = false, Token = 0 }
+function Gui.Lookup(container, id)
+local registry = container and container.Ids
+return id ~= nil and registry and registry[id] or nil
+end
+function Gui.Remember(container, id, handle)
+if not container or id == nil then
+return
+end
+container.Ids = container.Ids or {}
+container.Ids[id] = handle
+end
+function Gui.Current()
+return Gui.Stack[#Gui.Stack]
+end
+function Gui.BeginChild(parent, id, options)
+if type(id) == "table" and options == nil then
+options, id = id, id.Id
+end
+local existing = Gui.Lookup(parent, id)
+if existing then
+table.insert(Gui.Stack, existing)
+return existing
+end
+options = options or {}
+local holder = Draw.New("Frame", { Name = tostring(id or "Child"), BackgroundTransparency = 1 })
+local hasBorder = options.Border ~= false and options.Fill ~= false
+local fillToken = options.Fill or (hasBorder and "Element" or nil)
+local strokeToken = options.Stroke or (hasBorder and "Track" or nil)
+local radius = options.Radius or 10
+local surface = Draw.Box("Frame", { Size = UDim2.fromScale(1, 1), ClipsDescendants = options.Clip == true, Parent = holder }, fillToken, strokeToken, radius, options.Thickness or 2)
+if hasBorder and not options.Fill then
+surface.BackgroundTransparency = 0.4
+end
+local useScroll = options.Scroll == true or options.Height ~= nil and options.Scroll ~= false
+local host = useScroll and Layout.ScrollFrame({ Size = UDim2.fromScale(1, 1), Parent = surface }) or Draw.New("Frame", { BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Parent = surface })
+local child = Container.New(host, {
+PadX = options.PadX or 8,
+PadY = options.PadY or 8,
+GapX = options.GapX,
+GapY = options.GapY,
+Parent = parent,
+})
+child.Frame, child.Surface = holder, surface
+local inset = useScroll and Config.Page.ScrollBar or 0
+if parent and parent.Add then
+child.Item = parent:Add(holder, {
+Width = options.Width,
+Height = options.Height or function()
+return child.ContentHeight
+end,
+Child = child,
+ChildInset = inset,
+})
+end
+Gui.Remember(parent, id, child)
+table.insert(Gui.Stack, child)
+return child
+end
+function Gui.EndChild()
+Gui.Stack[#Gui.Stack] = nil
+return Gui.Current()
+end
+function Gui.Badge(parent, spec, token, shiny)
+local textSpec = spec
+local container = type(parent) == "table" and parent.Add and parent or nil
+local host = (type(parent) == "userdata" and parent) or (container and container.Host) or nil
+if type(spec) == "table" and (spec.Text ~= nil or spec.Color ~= nil) then
+textSpec = spec.Text or ""
+token = spec.Color or token
+shiny = spec.Shiny
+container = spec.Container or container
+end
+token = token or "Danger"
+local shade = token .. "Dark"
+local pill = Draw.Box("Frame", {
+Name = "Badge",
+AutomaticSize = Enum.AutomaticSize.X,
+Size = UDim2.fromOffset(0, 18),
+Parent = host,
+}, token, Themes.Shared[shade] and shade or "Outline", 5, 1.5)
+Draw.Padding(pill, 0, 6, 0, 6)
+local label = Draw.Text({
+AutomaticSize = Enum.AutomaticSize.X,
+Size = UDim2.fromScale(0, 1),
+TextXAlignment = Enum.TextXAlignment.Center,
+Parent = pill,
+}, "Strong", 11, token == "Coin" and "Ink" or "OnAccent", textSpec)
+if shiny ~= false then
+Fx.Shimmer(label, token == "Coin" and "Ink" or "White")
+end
+local width = Layout.Measure(label.Text, 11, "Strong", 400).X + 14
+local badgeObj = {
+Frame = pill,
+Label = label,
+Width = width,
+SetText = function(_, nextText)
+Lang.Bind(label, nextText)
+end,
+SetColor = function(_, nextToken)
+Theme.Bind(pill, { BackgroundColor3 = nextToken })
+end,
+}
+if container then
+badgeObj.Item = container:Add(pill, { Width = width, Height = 20 })
+end
+return badgeObj, label
+end
+function Gui.Kbd(parent, keySpec)
+local container = type(parent) == "table" and parent.Add and parent or nil
+local host = (type(parent) == "userdata" and parent) or (container and container.Host) or nil
+local keyText = type(keySpec) == "table" and (keySpec.Keys or keySpec.Text or keySpec[1]) or keySpec
+local holder, face = Draw.Block(host, "Element", "Track", 5, 2)
+holder.AutomaticSize = Enum.AutomaticSize.X
+holder.Size = UDim2.fromOffset(0, 20)
+face.AutomaticSize = Enum.AutomaticSize.X
+Draw.Padding(face, 0, 6, 0, 6)
+local shortText = Keybinds.Short and Keybinds.Short(tostring(keyText or "")) or tostring(keyText or "")
+local label = Draw.Text({
+Text = shortText,
+AutomaticSize = Enum.AutomaticSize.X,
+Size = UDim2.fromScale(0, 1),
+TextXAlignment = Enum.TextXAlignment.Center,
+Parent = face,
+}, "Strong", 11, "SubText")
+local width = Layout.Measure(shortText, 11, "Strong", 400).X + 16
+if container then
+container:Add(holder, { Width = width, Height = 22 })
+end
+return holder, label
+end
+function Gui.Marquee(container, spec, speed)
+local textSpec = type(spec) == "table" and spec.Text or spec
+speed = (type(spec) == "table" and spec.Speed) or speed or 55
+local height = Util.Metric("Row") - 4
+local clip = Draw.Box("Frame", { Name = "Marquee", ClipsDescendants = true }, "Element", "Outline", 8, 2)
+local track = Draw.Text({
+Position = UDim2.fromOffset(10, 0),
+AutomaticSize = Enum.AutomaticSize.X,
+Size = UDim2.fromScale(0, 1),
+Parent = clip,
+}, "Body", Util.TextSize("Label"), "Text", textSpec)
+local entry = container:Add(clip, {
+Height = height,
+Search = Lang.SearchText(textSpec),
+OnLayout = function(width)
+local textW = Layout.Measure(track.Text, track.TextSize, "Body", 4000).X
+if textW > width - 20 then
+track.Position = UDim2.fromOffset(width, 0)
+local duration = math.max(4, (width + textW) / speed)
+Anim.Tween(track, { Position = UDim2.fromOffset(-textW, 0) }, duration, "Linear", -1, false)
+else
+track.Position = UDim2.fromOffset(10, 0)
+end
+end,
+})
+return {
+Frame = clip,
+Label = track,
+Item = entry,
+SetText = function(_, nextSpec)
+Lang.Bind(track, nextSpec)
+container:MarkDirty()
+end,
+}
+end
+Gui.ButtonStyles = {
+Default = { Face = "Element", Shade = "Track", Text = "Text" },
+Primary = { Face = "Blue", Shade = "BlueDark", Text = "White" },
+Success = { Face = "Good", Shade = "GoodDark", Text = "White" },
+Danger = { Face = "Danger", Shade = "DangerDark", Text = "White" },
+Warning = { Face = "Coin", Shade = "CoinDark", Text = "Ink" },
+Ghost = { Face = nil, Shade = nil, Text = "Text" },
+}
+function Gui.BuildButtonFace(options)
+local styleName = options.Style or "Default"
+local style = Gui.ButtonStyles[styleName] or Gui.ButtonStyles.Default
+local radius = options.Radius or Config.Metrics.Desktop.Radius
+if not style.Face then
+local holder = Draw.New("Frame", { Name = "GhostButton", BackgroundTransparency = 1 })
+local face = Draw.Box("Frame", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ClipsDescendants = true, Parent = holder }, "Hover", nil, radius)
+return holder, face, nil, 0, style
+end
+local depth = options.Depth or Config.Button.Depth
+local holder, face, shade = Draw.Block(nil, style.Face, style.Shade, radius, depth)
+face.ClipsDescendants = true
+return holder, face, shade, depth, style
+end
+function Gui.BuildButtonContent(face, options, style)
+local content = Draw.New("Frame", { BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 3, Parent = face })
+Draw.List(content, Config.Button.IconGap, true, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Center)
+Draw.Padding(content, 0, 8, 0, 8)
+if options.Icon then
+local icon = Icons.Create(content, options.Icon, Util.Metric("Icon"), style.Text, options.Text)
+icon.LayoutOrder = 1
+end
+local label = Draw.Text({
+LayoutOrder = 2,
+AutomaticSize = Enum.AutomaticSize.X,
+Size = UDim2.fromScale(0, 1),
+TextXAlignment = Enum.TextXAlignment.Center,
+TextTruncate = Enum.TextTruncate.AtEnd,
+Parent = content,
+}, "Body", Util.TextSize("Button"), style.Text, options.Text or "")
+return label
+end
+function Gui.BindButtonInput(handle)
+local face, hit, style = handle.Face, handle.Hit, handle.Style
+hit.MouseEnter:Connect(function()
+if State.Touch or handle.Disabled then
+return
+end
+if not style.Face then
+Motion.Spring(face, "BackgroundTransparency", 0.35, "Fast")
+else
+local base = Theme.Colors[style.Face] or Color3.new(1, 1, 1)
+Motion.Spring(face, "BackgroundColor3", Util.Lighten(base, Config.Button.HoverLighten), "Fast")
+end
+end)
+hit.MouseLeave:Connect(function()
+if not style.Face then
+Motion.Spring(face, "BackgroundTransparency", 1, "Fast")
+else
+Motion.Spring(face, "BackgroundColor3", Theme.Colors[style.Face] or Color3.new(1, 1, 1), "Fast")
+end
+Motion.Spring(face, "Position", UDim2.new(), "Fast")
+end)
+hit.MouseButton1Down:Connect(function()
+if not handle.Disabled and handle.Depth > 0 then
+Motion.Spring(face, "Position", UDim2.fromOffset(0, handle.Depth - 1), "Fast")
+end
+end)
+hit.MouseButton1Up:Connect(function()
+if handle.Depth > 0 then
+Motion.Spring(face, "Position", UDim2.new(), "Normal", { Damping = 0.52 })
+end
+end)
+hit.Activated:Connect(function(inputObject)
+if handle.Disabled then
+return
+end
+local pos = inputObject and inputObject.Position or UserInputService:GetMouseLocation()
+Fx.Ripple(face, Vector2.new(pos.X, pos.Y), style.Text)
+Fx.Squash(handle.Holder, 1.4)
+if handle.OnActivate then
+handle:OnActivate()
+end
+end)
+end
+function Gui.Button(container, options)
+options = options or {}
+local holder, face, shade, depth, style = Gui.BuildButtonFace(options)
+local label = Gui.BuildButtonContent(face, options, style)
+local hit = Draw.New("TextButton", { Text = "", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 5, Parent = holder })
+local handle = {
+Container = container,
+Holder = holder,
+Face = face,
+Shade = shade,
+Depth = depth,
+Style = style,
+Label = label,
+Hit = hit,
+Disabled = options.Disabled == true,
+OnActivate = options.OnActivate,
+}
+Gui.BindButtonInput(handle)
+local iconExtra = options.Icon and (Util.Metric("Icon") + Config.Button.IconGap) or 0
+if container and container.Add then
+handle.Item = container:Add(holder, {
+Width = options.Width,
+Height = (options.Height or Util.Metric("Box")) + depth,
+After = options.After,
+Search = Lang.SearchText(options.Text),
+AutoWidth = function()
+return Layout.Measure(label.Text, label.TextSize, "Body", 1000).X + iconExtra + 32
+end,
+})
+end
+if options.Tooltip then
+Tooltip.Attach(holder, options.Tooltip)
+end
+return handle
+end
+local function BuildSelectableVisuals(row, spec, height)
+local token = spec.Color or "Accent"
+local bar = Draw.Box("Frame", {
+AnchorPoint = Vector2.new(0, 0.5),
+Position = UDim2.new(0, 3, 0.5, 0),
+Size = UDim2.fromOffset(Config.Selectable.BarWidth, 0),
+Parent = row,
+}, token, nil, 2)
+local thumbSize = height - 8
+local thumb
+if spec.Image or spec.Icon then
+thumb = Draw.Thumb(row, spec.Image or spec.Icon, spec.Tint, thumbSize, UDim2.new(0, 10, 0.5, 0))
+end
+return bar, thumb, thumbSize
+end
+function Gui.Selectable(parent, spec)
+spec = spec or {}
+local container = spec.Container or (type(parent) == "table" and parent.Add and parent or nil)
+local host = (type(parent) == "userdata" and parent) or (container and container.Host) or nil
+local height = spec.Height or Util.Metric("Item")
+local row = Draw.Box("TextButton", {
+Name = "Selectable",
+BackgroundTransparency = 1,
+ClipsDescendants = true,
+Size = UDim2.new(spec.Width or 1, 0, 0, height),
+Parent = host,
+}, "Hover", nil, Config.Selectable.Radius)
+local bar, thumb, thumbSize = BuildSelectableVisuals(row, spec, height)
+local hasMedia = thumb ~= nil
+local textOffset = hasMedia and (thumbSize + 18) or 12
+local label = Draw.Text({
+Position = UDim2.fromOffset(textOffset, 0),
+Size = UDim2.new(1, -(textOffset + (spec.RightPadding or 26)), 1, 0),
+TextTruncate = Enum.TextTruncate.AtEnd,
+Parent = row,
+}, "Body", Util.TextSize("Label"), "Text", spec.Text or spec.Label or "Item")
+local mark = Icons.Vector(row, "check", 15, "OnAccent")
+mark.AnchorPoint = Vector2.new(1, 0.5)
+mark.Position = UDim2.new(1, -8, 0.5, 0)
+local markScale = Draw.New("UIScale", { Scale = spec.Selected and 1 or 0, Parent = mark })
+local handle = { Frame = row, Button = row, Label = label, Thumb = thumb, Bar = bar, Mark = mark, MarkScale = markScale, Selected = spec.Selected == true, Hovered = false }
+function handle.Render(instant)
+local isSel = handle.Selected
+local duration = instant and 0 or Config.Tween.Fast
+local fill = isSel and Theme.Colors.Accent or Theme.Colors.Hover
+local alpha = isSel and 0 or (handle.Hovered and 0.45 or 1)
+Anim.Tween(row, { BackgroundColor3 = fill, BackgroundTransparency = alpha }, duration)
+Anim.Tween(label, { TextColor3 = Theme.Colors[isSel and "OnAccent" or "Text"] }, duration)
+if instant then
+Motion.Set(markScale, "Scale", isSel and 1 or 0)
+else
+Motion.Spring(markScale, "Scale", isSel and 1 or 0, "Fast", { Damping = 0.6 })
+end
+Motion.Spring(bar, "Size", UDim2.fromOffset(Config.Selectable.BarWidth, isSel and (height - 8) or 0), "Fast")
+end
+function handle.SetSelected(active, instant)
+handle.Selected = active == true
+handle.Render(instant)
+end
+if not State.Touch then
+row.MouseEnter:Connect(function()
+handle.Hovered = true
+handle.Render()
+end)
+row.MouseLeave:Connect(function()
+handle.Hovered = false
+handle.Render()
+end)
+end
+row.Activated:Connect(function()
+Fx.Ripple(row, nil, spec.Color or "White")
+if spec.Toggle ~= false then
+handle.SetSelected(not handle.Selected)
+end
+if type(spec.Callback) == "function" then
+Util.Try(spec.Callback, handle.Selected, handle)
+end
+end)
+Theme.OnRender(row, function()
+handle.Render(true)
+end)
+handle.Render(true)
+if container and container.Add then
+handle.Item = container:Add(row, {
+Width = spec.Width,
+Height = height,
+After = spec.After,
+Search = Lang.SearchText(spec.Text or spec.Label),
+})
+end
+return handle
+end
+function Widget.Normalize(idx, info)
+if type(idx) == "table" and info == nil then
+info = idx
+idx = info.Idx or info.Flag
+end
+return idx, info or {}
+end
+local function BindWidgetReactivity(option, spec)
+local boundRef = (spec.Bind and Reactive.IsRef(spec.Bind)) and spec.Bind or Reactive.Ref(option.Value)
+option.Ref = boundRef
+if spec.Bind and Reactive.IsRef(spec.Bind) and spec.Bind:Get() ~= nil then
+option.Value = spec.Bind:Get()
+end
+Reactive.Watch(boundRef, function(nextVal)
+if not option._syncingRef and option.SetValue and nextVal ~= option.Value then
+option:SetValue(nextVal)
+end
+end)
+if spec.Visible ~= nil then
+if Reactive.IsRef(spec.Visible) then
+Reactive.Effect(function()
+option:SetVisible(spec.Visible:Get() == true)
+end)
+elseif type(spec.Visible) == "boolean" then
+option:SetVisible(spec.Visible)
+end
+end
+if spec.Disabled ~= nil then
+if Reactive.IsRef(spec.Disabled) then
+Reactive.Effect(function()
+option:SetDisabled(spec.Disabled:Get() == true)
+end)
+elseif type(spec.Disabled) == "boolean" then
+option:SetDisabled(spec.Disabled)
+end
+end
+if spec.DependsOn then
+local depKey = type(spec.DependsOn) == "table" and spec.DependsOn[1] or spec.DependsOn
+local expected = type(spec.DependsOn) == "table" and spec.DependsOn[2] or true
+task.defer(function()
+local target = Library.Options[depKey] or Library.Toggles[depKey]
+if target and target.OnChanged then
+local function CheckDep(currentVal)
+option:SetVisible(currentVal == expected)
+end
+CheckDep(target.Value)
+target:OnChanged(CheckDep)
+end
+end)
+end
+end
+function Widget.Register(option, idx, spec)
+option.Idx = idx
+option.Callback = spec.Callback or spec.Func
+option.Changed = {}
+option.NoSave = spec.NoSave == true or idx == nil
+if idx ~= nil then
+if Library.Options[idx] then
+warn("[Reicht] duplicate widget id: " .. tostring(idx))
+end
+Library.Options[idx] = option
+end
+if spec.Tooltip and option.Row then
+Tooltip.Attach(option.Row.Holder, spec.Tooltip)
+end
+if spec.Badge and option.SetBadge then
+option:SetBadge(spec.Badge, spec.BadgeColor)
+end
+BindWidgetReactivity(option, spec)
+end
+function Widget:OnChanged(callback)
+table.insert(self.Changed, callback)
+return self
+end
+function Widget:AddGuard(guard)
+self.Guards = self.Guards or {}
+table.insert(self.Guards, guard)
+return self
+end
+function Widget:PassGuards(value)
+for _, guard in ipairs(self.Guards or {}) do
+local ok, allowed = pcall(guard, value)
+if ok and allowed == false then
+return false
+end
+end
+return true
+end
+function Widget:Fire()
+if self.Disabled then
+return
+end
+if not self:PassGuards(self.Value) then
+return
+end
+if self.Ref then
+self._syncingRef = true
+self.Ref:Set(self.Value)
+self._syncingRef = false
+end
+Util.Try(self.Callback, self.Value)
+for _, callback in ipairs(self.Changed) do
+Util.Try(callback, self.Value)
+end
+end
+function Widget:Serialize()
+return self.Value
+end
+function Widget:Deserialize(saved)
+self:SetValue(saved)
+end
+function Widget:SetVisible(visible)
+if not self.Item then
+return self
+end
+self.Item.Hidden = not visible
+self.Container:MarkDirty()
+return self
+end
+function Widget:SetDisabled(disabled)
+self.Disabled = disabled == true
+local holder = (self.Row and self.Row.Holder) or (self.Item and self.Item.Frame)
+if holder then
+if not self.DisableMask and self.Disabled then
+self.DisableMask = Draw.Box("TextButton", {
+Text = "",
+AutoButtonColor = false,
+BackgroundTransparency = 0.45,
+Size = UDim2.fromScale(1, 1),
+ZIndex = 15,
+Parent = holder,
+}, "Panel", nil, 8)
+end
+if self.DisableMask then
+self.DisableMask.Visible = self.Disabled
+end
+end
+return self
+end
+function Widget:Flash(colorToken)
+local row = self.Row
+if not row or not row.Holder then
+return self
+end
+if not row.Hover then
+row.Hover = Draw.Box("Frame", { BackgroundTransparency = 1, Position = UDim2.fromOffset(-4, 0), Size = UDim2.new(1, 8, 1, 0), ZIndex = 1, Parent = row.Holder }, "Hover", nil, 6)
+end
+local hover = row.Hover
+hover.BackgroundColor3 = Theme.Colors[colorToken or "Coin"] or Theme.Colors.Coin
+hover.BackgroundTransparency = 0.25
+Anim.Tween(hover, { BackgroundTransparency = 1, BackgroundColor3 = Theme.Colors.Hover }, 0.55)
+return self
+end
+function Widget:SetBadge(text, colorToken)
+if not self.Row then
+return self
+end
+if not self.BadgePill then
+self.BadgePill = Gui.Badge(self.Row.Right, { Text = text, Color = colorToken or "Coin" })
+self.Row:AddRight(self.BadgePill.Frame, self.BadgePill.Width)
+else
+self.BadgePill:SetText(text)
+if colorToken then
+self.BadgePill:SetColor(colorToken)
+end
+end
+return self
+end
+function Widget:AddKeyPicker(idx, spec)
+KeyPicker.New(self.Row, idx, spec or {}, self.Type == "Toggle" and self or nil)
+return self
+end
+function Widget:AddColorPicker(idx, spec)
+ColorPicker.New(self.Row, idx, spec or {})
+return self
+end
+function Row.LineHeight(kind)
+return Fonts.Size("Body", Util.TextSize(kind or "Label")) + 8
+end
+function Row.SearchText(info)
+local parts = { Lang.SearchText(info.Text or info.Title), Lang.SearchText(info.Description) }
+if type(info.Values) == "table" then
+for _, v in ipairs(info.Values) do
+table.insert(parts, Lang.SearchText(Dropdown and Dropdown.FormatValue and Dropdown.FormatValue(v) or v))
+end
+end
+return table.concat(parts, " ")
+end
+function Row.New(container, spec, options)
+options = options or {}
+local holder = Draw.New("Frame", { Name = "Row", BackgroundTransparency = 1 })
+local row = setmetatable({ Holder = holder, Container = container, RightWidth = 0, RightCount = 0, TitleFont = options.TitleFont or "Body", IconOffset = 0 }, { __index = Row })
+if spec.Icon then
+row.Icon = Icons.Create(holder, spec.Icon, 16, nil, spec.Text or spec.Title)
+row.Icon.AnchorPoint = Vector2.new(0, 0.5)
+row.Icon.ZIndex = 3
+row.IconOffset = 22
+end
+row.Title = Draw.Text({ TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 3, Parent = holder }, row.TitleFont, options.TitleSize or Util.TextSize("Label"), options.TitleToken or "Text", spec.Text or spec.Title or "")
+if spec.Description then
+row.Desc = Draw.Text({ TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 3, Parent = holder }, "Desc", Util.TextSize("Desc"), "SubText", spec.Description)
+end
+row.Right = Draw.New("Frame", { BackgroundTransparency = 1, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, 0, 0.5, 0), ZIndex = 4, Parent = holder })
+Draw.List(row.Right, 6, true, Enum.HorizontalAlignment.Right, Enum.VerticalAlignment.Center)
+if options.Clickable then
+row.Hit = Draw.New("TextButton", { Text = "", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 2, Parent = holder })
+end
+row.Item = container:Add(holder, {
+Height = function(width)
+return row:Measure(width)
+end,
+OnLayout = function(width, height)
+row:Arrange(width, height)
+end,
+Search = Row.SearchText(spec),
+})
+return row
+end
+function Row.BindHover()
+end
+function Row:Measure(width)
+local textWidth = math.max(20, width - self.IconOffset - self.RightWidth - (self.RightWidth > 0 and 10 or 0))
+local titleHeight = Layout.Measure(self.Title.Text, self.Title.TextSize, self.TitleFont, textWidth).Y
+local descHeight = self.Desc and Layout.Measure(self.Desc.Text, self.Desc.TextSize, "Desc", textWidth).Y or 0
+self.TextWidth, self.TitleHeight, self.DescHeight = textWidth, titleHeight, descHeight
+local content = titleHeight + (self.Desc and descHeight + 2 or 0)
+return math.max(self.MinHeight or Util.Metric("Row"), content + 8)
+end
+function Row:Arrange(_, height)
+local content = self.TitleHeight + (self.Desc and self.DescHeight + 2 or 0)
+local top = math.floor((height - content) / 2)
+if self.Icon then
+self.Icon.Position = UDim2.new(0, 0, 0.5, 0)
+end
+self.Title.Position = UDim2.fromOffset(self.IconOffset, top)
+self.Title.Size = UDim2.fromOffset(self.TextWidth, self.TitleHeight)
+if self.Desc then
+self.Desc.Position = UDim2.fromOffset(self.IconOffset, top + self.TitleHeight + 2)
+self.Desc.Size = UDim2.fromOffset(self.TextWidth, self.DescHeight)
+end
+self.Right.Size = UDim2.new(0, self.RightWidth, 1, 0)
+end
+function Row:AddRight(frame, width)
+self.RightCount += 1
+frame.LayoutOrder = -self.RightCount
+frame.Parent = self.Right
+frame:SetAttribute("RightWidth", width)
+self:RecalcRight()
+end
+function Row:RecalcRight()
+local total, count = 0, 0
+for _, child in ipairs(self.Right:GetChildren()) do
+local width = child:GetAttribute("RightWidth")
+if width then
+total += width
+count += 1
+end
+end
+self.RightWidth = total + math.max(0, count - 1) * 6
+self.Container:MarkDirty()
+end
+function Row:SetTitle(text)
+Lang.Bind(self.Title, text)
+self.Container:MarkDirty()
+end
+function Row.Stack(container, spec, controlHeight)
+local holder = Draw.New("Frame", { Name = "Stack", BackgroundTransparency = 1 })
+local stack = setmetatable({ Holder = holder, Container = container, ControlHeight = controlHeight, IconOffset = 0 }, { __index = Row })
+if spec.Icon then
+stack.Icon = Icons.Create(holder, spec.Icon, 16, nil, spec.Text or spec.Title)
+stack.IconOffset = 22
+end
+stack.Title = Draw.Text({ TextTruncate = Enum.TextTruncate.AtEnd, Parent = holder }, "Body", Util.TextSize("Label"), spec.Risky and "Risky" or "Text", spec.Text or spec.Title or "")
+stack.Aside = Draw.Text({ AnchorPoint = Vector2.new(1, 0), Position = UDim2.fromScale(1, 0), TextXAlignment = Enum.TextXAlignment.Right, Parent = holder }, "Body", Util.TextSize("Label"), "SubText")
+if spec.Description then
+stack.Desc = Draw.Text({ TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, Parent = holder }, "Desc", Util.TextSize("Desc"), "SubText", spec.Description)
+end
+stack.Control = Draw.New("Frame", { Name = "Control", BackgroundTransparency = 1, Parent = holder })
+stack.Item = container:Add(holder, {
+Height = function(width)
+return stack:MeasureStack(width)
+end,
+OnLayout = function(width)
+stack:ArrangeStack(width)
+end,
+Search = Row.SearchText(spec),
+})
+return stack
+end
+function Row:MeasureStack(width)
+self.StackWidth = width
+local titled = self.Title.Text ~= "" or self.Aside.Text ~= "" or self.AsideWidth ~= nil
+self.LineHeight = titled and Row.LineHeight() or 0
+self.DescHeight = self.Desc and Layout.Measure(self.Desc.Text, self.Desc.TextSize, "Desc", width).Y or 0
+self.ControlTop = self.LineHeight + (self.Desc and self.DescHeight + 2 or 0) + 4
+return self.ControlTop + self.ControlHeight + 2
+end
+function Row:ArrangeStack(width)
+local asideWidth = self.AsideWidth or (self.Aside.Text ~= "" and (Layout.Measure(self.Aside.Text, self.Aside.TextSize, "Body", width).X + 8) or 0)
+if self.Icon then
+self.Icon.Position = UDim2.fromOffset(0, math.max(0, math.floor((self.LineHeight - 16) / 2)))
+end
+self.Title.Position = UDim2.fromOffset(self.IconOffset, 0)
+self.Title.Size = UDim2.fromOffset(math.max(10, width - self.IconOffset - asideWidth), self.LineHeight)
+self.Aside.Size = UDim2.fromOffset(asideWidth, self.LineHeight)
+if self.Desc then
+self.Desc.Position = UDim2.fromOffset(0, self.LineHeight)
+self.Desc.Size = UDim2.fromOffset(width, self.DescHeight)
+end
+self.Control.Position = UDim2.fromOffset(0, self.ControlTop)
+self.Control.Size = UDim2.new(1, 0, 0, self.ControlHeight)
+if self.OnArranged then
+self.OnArranged(width)
+end
+end
+function Container:AddToggle(idx, info)
+idx, info = Widget.Normalize(idx, info)
+local toggle = setmetatable({ Type = "Toggle", Value = info.Default == true, Style = info.Style or "Switch", Container = self }, Toggle)
+toggle.Row = Row.New(self, info, { Clickable = true, TitleToken = info.Risky and "Risky" or nil })
+toggle.Item = toggle.Row.Item
+if toggle.Style == "Checkbox" then
+toggle:BuildCheckbox()
+else
+toggle:BuildSwitch()
+end
+toggle.Row.Hit.Activated:Connect(function()
+toggle:SetValue(not toggle.Value)
+if toggle.Value then
+Anim.CoinPop(toggle.Row.Holder, UDim2.new(1, -toggle.Track.Size.X.Offset / 2, 0, 6), 18)
+end
+end)
+Widget.Register(toggle, idx, info)
+if idx ~= nil then
+Library.Toggles[idx] = toggle
+end
+Theme.OnRender(toggle, function()
+toggle:Render(true)
+end)
+return toggle
+end
+function Container:AddCheckbox(idx, info)
+idx, info = Widget.Normalize(idx, info)
+info.Style = "Checkbox"
+return self:AddToggle(idx, info)
+end
+function Toggle:BuildSwitch()
+local size, knobSize = Util.Metric("Switch"), Util.Metric("SwitchKnob")
+self.KnobSize = knobSize
+self.Track = Draw.Box("Frame", { Size = UDim2.fromOffset(size.X, size.Y) }, "Track", "Outline", UDim.new(1, 0), 2)
+self.Knob = Draw.Box("Frame", {
+AnchorPoint = Vector2.new(0, 0.5),
+Position = UDim2.new(0, 3, 0.5, 0),
+Size = UDim2.fromOffset(knobSize, knobSize),
+Parent = self.Track,
+}, "Knob", "Outline", UDim.new(1, 0), 2)
+self.Mark = Icons.Vector(self.Knob, "check", knobSize - 2, "Good")
+self.Mark.AnchorPoint = Vector2.new(0.5, 0.5)
+self.Mark.Position = UDim2.fromScale(0.5, 0.5)
+self.MarkScale = Draw.New("UIScale", { Scale = self.Value and 1 or 0, Parent = self.Mark })
+self.Row:AddRight(self.Track, size.X)
+end
+function Toggle:BuildCheckbox()
+local size = Util.Metric("Check")
+self.Track = Draw.Box("Frame", { Size = UDim2.fromOffset(size, size) }, "Element", "Outline", 6, 2)
+self.Mark = Icons.Vector(self.Track, "check", size - 4, "Ink")
+self.Mark.AnchorPoint = Vector2.new(0.5, 0.5)
+self.Mark.Position = UDim2.fromScale(0.5, 0.5)
+self.MarkScale = Draw.New("UIScale", { Scale = self.Value and 1 or 0, Parent = self.Mark })
+self.Row:AddRight(self.Track, size)
+end
+function Toggle:Render(instant)
+local on = self.Value
+local duration = instant and 0 or Config.Tween.Normal
+if self.Knob then
+local travel = self.Track.Size.X.Offset - self.KnobSize - 3
+local targetPos = UDim2.new(0, on and travel or 3, 0.5, 0)
+Anim.Tween(self.Track, { BackgroundColor3 = Theme.Colors[on and "Good" or "Track"] }, duration)
+if instant then
+Motion.Set(self.Knob, "Position", targetPos)
+else
+Motion.Spring(self.Knob, "Position", targetPos, "Fast", { Damping = 0.58 })
+Fx.Squash(self.Knob, 1.9)
+end
+else
+Anim.Tween(self.Track, { BackgroundColor3 = Theme.Colors[on and "Coin" or "Element"] }, duration)
+end
+if self.MarkScale then
+if instant then
+Motion.Set(self.MarkScale, "Scale", on and 1 or 0)
+else
+Motion.Spring(self.MarkScale, "Scale", on and 1 or 0, "Fast", { Damping = 0.58 })
+end
+end
+end
+function Toggle:SetValue(value)
+value = value == true
+if value == self.Value then
+return
+end
+self.Value = value
+self:Render(false)
+self:Fire()
+end
+function Container:AddSlider(idx, info)
+idx, info = Widget.Normalize(idx, info)
+local knob = Util.Metric("Knob")
+local slider = setmetatable({
+Type = "Slider",
+Min = info.Min or 0,
+Max = info.Max or 100,
+Rounding = info.Rounding or 0,
+Prefix = info.Prefix or "",
+Suffix = info.Suffix or "",
+FinishedOnly = info.Finished == true,
+Container = self,
+}, Slider)
+slider.Value = Util.Round(math.clamp(tonumber(info.Default) or slider.Min, slider.Min, slider.Max), slider.Rounding)
+slider.Row = Row.Stack(self, info, knob + 4)
+slider.Item = slider.Row.Item
+slider:Build(knob)
+Widget.Register(slider, idx, info)
+slider:MeasureAside()
+slider:Render(false)
+Lang.OnChange(slider, function()
+slider:MeasureAside()
+slider:Render(false)
+slider.Container:MarkDirty()
+end)
+return slider
+end
+function Slider:Build(knob)
+local control = self.Row.Control
+local trackHeight = Util.Metric("Track")
+self.Track = Draw.Box("Frame", {
+AnchorPoint = Vector2.new(0, 0.5),
+Position = UDim2.new(0, knob / 2, 0.5, 0),
+Size = UDim2.new(1, -knob, 0, trackHeight),
+Parent = control,
+}, "Track", "Outline", UDim.new(1, 0), 2)
+self.Fill = Draw.Box("Frame", { Size = UDim2.fromScale(0, 1), Parent = self.Track }, "Accent", nil, UDim.new(1, 0))
+self.Knob = Draw.Box("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(knob, knob), Position = UDim2.fromScale(0, 0.5), ZIndex = 3, Parent = self.Track }, "Coin", "Outline", UDim.new(1, 0), 2)
+local slit = Draw.Box("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.new(0, 3, 0.5, 0), Parent = self.Knob }, "CoinDark", nil, 2)
+slit.ZIndex = 4
+self.KnobScale = Draw.New("UIScale", { Parent = self.Knob })
+self:BuildValueBox()
+local hit = Draw.New("TextButton", { Text = "", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 6), Position = UDim2.fromOffset(0, -3), ZIndex = 5, Parent = control })
+hit.InputBegan:Connect(function(input)
+if Util.IsPointer(input) then
+self:BeginDrag(input)
+end
+end)
+end
+function Slider:MeasureAside()
+local widest = 0
+local mid = Util.Round((self.Min + self.Max) / 2, self.Rounding)
+for _, sample in ipairs({ self.Min, self.Max, mid }) do
+widest = math.max(widest, Layout.Measure(self:Format(sample), self.Row.Aside.TextSize, "Body", 400).X)
+end
+self.Row.AsideWidth = widest + 14
+end
+function Slider:BuildValueBox()
+local aside = self.Row.Aside
+self.ValueBox = Draw.Text({
+ClassName = "TextBox",
+ClearTextOnFocus = false,
+Size = UDim2.fromScale(1, 1),
+TextXAlignment = Enum.TextXAlignment.Right,
+Parent = aside,
+}, "Body", Util.TextSize("Label"), "Accent")
+aside.TextTransparency = 1
+self.ValueBox.Focused:Connect(function()
+self.ValueBox.Text = tostring(self.Value)
+end)
+self.ValueBox.FocusLost:Connect(function()
+local typed = tonumber(self.ValueBox.Text)
+if typed then
+self:SetValue(typed)
+end
+self:Render(false)
+end)
+end
+function Slider:BeginDrag(input)
+Motion.Spring(self.KnobScale, "Scale", 1.24, "Fast", { Damping = 0.52 })
+self.Dragging = true
+self:SetFromX(input.Position.X)
+State.Drag = {
+Move = function(move)
+self:SetFromX(move.Position.X)
+end,
+Stop = function()
+Motion.Spring(self.KnobScale, "Scale", 1, "Fast", { Damping = 0.58 })
+self.Dragging = false
+if self.PendingFire then
+self.PendingFire = false
+self:Fire()
+end
+end,
+}
+end
+function Slider:SetFromX(screenX)
+local left, width = self.Track.AbsolutePosition.X, self.Track.AbsoluteSize.X
+local fraction = width > 0 and math.clamp((screenX - left) / width, 0, 1) or 0
+self:SetValue(self.Min + (self.Max - self.Min) * fraction)
+end
+function Slider:Format(targetVal)
+local num = Util.Round(targetVal ~= nil and targetVal or self.Value, self.Rounding)
+local formatted = self.Rounding > 0 and string.format("%." .. self.Rounding .. "f", num) or tostring(math.floor(num + 0.5))
+local pre = Lang.Resolve(self.Prefix or "")
+local suf = Lang.Resolve(self.Suffix or "")
+return pre .. formatted .. suf
+end
+function Slider:Render(animated)
+local span = self.Max - self.Min
+local fraction = span > 0 and (self.Value - self.Min) / span or 0
+if animated then
+Motion.Spring(self.Fill, "Size", UDim2.fromScale(fraction, 1), "Fast")
+Motion.Spring(self.Knob, "Position", UDim2.fromScale(fraction, 0.5), "Fast", { Damping = 0.68 })
+else
+Motion.Set(self.Fill, "Size", UDim2.fromScale(fraction, 1))
+Motion.Set(self.Knob, "Position", UDim2.fromScale(fraction, 0.5))
+end
+local text = self:Format(self.Value)
+self.Row.Aside.Text = text
+if not self.ValueBox:IsFocused() then
+self.ValueBox.Text = text
+end
+end
+function Slider:SetValue(value)
+value = tonumber(value)
+if not value then
+return
+end
+value = Util.Round(math.clamp(value, self.Min, self.Max), self.Rounding)
+if value == self.Value then
+return
+end
+self.Value = value
+self:Render(true)
+if self.FinishedOnly and self.Dragging then
+self.PendingFire = true
+return
+end
+self:Fire()
+end
+function Slider:SetRange(min, max)
+self.Min, self.Max = min, max
+local clamped = math.clamp(self.Value, min, max)
+local changed = clamped ~= self.Value
+self.Value = clamped
+self:MeasureAside()
+self:Render(false)
+self.Container:MarkDirty()
+if changed then
+self:Fire()
+end
+end
+function Slider:SetMax(max)
+self:SetRange(self.Min, max)
+end
+function Slider:SetMin(min)
+self:SetRange(min, self.Max)
+end
+function Draw.Field(parent, className)
+local field = Draw.Box(className or "TextButton", { Size = UDim2.fromScale(1, 1), Parent = parent }, "Element", "Outline", 8, 2)
+return field
+end
+function Container:AddDropdown(idx, info)
+idx, info = Widget.Normalize(idx, info)
+local dropdown = setmetatable({
+Type = "Dropdown",
+Multi = info.Multi == true,
+AllowNull = info.AllowNull == true,
+Searchable = info.Searchable,
+Placeholder = info.Placeholder,
+SpecialType = info.SpecialType,
+Values = info.Values or {},
+Images = info.Images,
+Colors = info.Colors,
+Container = self,
+}, Dropdown)
+if dropdown.SpecialType == "Player" then
+dropdown.Values = Util.PlayerNames()
+end
+dropdown.Value = dropdown.Multi and {} or nil
+dropdown.Row = Row.Stack(self, info, Util.Metric("Box"))
+dropdown.Item = dropdown.Row.Item
+dropdown:Build()
+Widget.Register(dropdown, idx, info)
+dropdown:ApplyDefault(info.Default)
+dropdown:WatchPlayers()
+Lang.OnChange(dropdown, function()
+dropdown:Render()
+end)
+return dropdown
+end
+function Dropdown:Build()
+local field = Draw.Field(self.Row.Control)
+self.Field = field
+self.Display = Draw.Text({ Position = UDim2.fromOffset(10, 0), Size = UDim2.new(1, -44, 1, 0), TextTruncate = Enum.TextTruncate.AtEnd, Parent = field }, "Body", Util.TextSize("Label"), "Text")
+self:EnsureThumb()
+local cap = Draw.Box("Frame", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -4, 0.5, 0), Size = UDim2.new(0, 26, 1, -8), Parent = field }, "Accent", "Outline", 6, 2)
+self.Chevron = Icons.Vector(cap, "chevron_down", 14, "White")
+self.Chevron.AnchorPoint = Vector2.new(0.5, 0.5)
+self.Chevron.Position = UDim2.fromScale(0.5, 0.5)
+field.MouseEnter:Connect(function()
+if not State.Touch then
+Anim.Tween(field, { BackgroundColor3 = Theme.Colors.Hover }, Config.Tween.Fast)
+end
+end)
+field.MouseLeave:Connect(function()
+Anim.Tween(field, { BackgroundColor3 = Theme.Colors.Element }, Config.Tween.Fast)
+end)
+field.Activated:Connect(function()
+self:Open()
+end)
+end
+function Dropdown:ApplyDefault(default)
+if self.Multi then
+self.Value = Util.ToSet(default)
+elseif type(default) == "number" then
+self.Value = self.Values[default]
+elseif default ~= nil then
+self.Value = default
+elseif not self.AllowNull then
+self.Value = self.Values[1]
+end
+self:Render()
+end
+function Dropdown:WatchPlayers()
+if self.SpecialType ~= "Player" then
+return
+end
+local function Refresh()
+self:SetValues(Util.PlayerNames())
+end
+Util.Connect(Players.PlayerAdded, Refresh)
+Util.Connect(Players.PlayerRemoving, function()
+task.defer(Refresh)
+end)
+end
+function Dropdown:IsSelected(value)
+if self.Multi then
+return self.Value[value] == true
+end
+return self.Value == value
+end
+function Dropdown:GetActiveValues()
+local active = {}
+if not self.Multi then
+return self.Value ~= nil and { self.Value } or active
+end
+for _, value in ipairs(self.Values) do
+if self.Value[value] then
+table.insert(active, value)
+end
+end
+return active
+end
+function Dropdown.FormatValue(entry)
+if type(entry) == "table" then
+if entry.EN or entry.TH then
+return Lang.Resolve(entry)
+end
+return Lang.Resolve(entry.Text or entry.Label or entry.Value or "")
+end
+return tostring(entry or "")
+end
+function Dropdown:Render()
+local active = self:GetActiveValues()
+local labels = {}
+for _, entry in ipairs(active) do
+table.insert(labels, tostring(Dropdown.FormatValue(entry)))
+end
+local text = #labels > 0 and table.concat(labels, ", ") or Lang.Resolve(self.Placeholder or Lang.Strings.None)
+self.Display.Text = text
+Theme.Bind(self.Display, { TextColor3 = #labels > 0 and "Text" or "Muted" })
+if self.Thumb then
+self.Thumb.Image = self.Images[self.Value] or ""
+local tint = self.Colors and self.Colors[self.Value]
+if tint then self.ThumbStroke.Color = tint end
+end
+end
+function Dropdown:SetImages(images, colors)
+self.Images = images
+self.Colors = colors
+self:EnsureThumb()
+self:Render()
+end
+function Dropdown:EnsureThumb()
+if self.Thumb or not self.Images or self.Multi then
+return
+end
+local size = Util.Metric("Box") - 10
+self.Thumb, self.ThumbStroke = Draw.Thumb(self.Field, nil, nil, size)
+self.Display.Position = UDim2.fromOffset(size + 12, 0)
+self.Display.Size = UDim2.new(1, -(size + 46), 1, 0)
+end
+function Dropdown:SetValue(value)
+if self.Multi then
+self.Value = Util.ToSet(value)
+else
+self.Value = value
+end
+self:Render()
+self:Fire()
+end
+function Dropdown:SetValues(values)
+self.Values = values or {}
+if not self.Multi and self.Value ~= nil and not table.find(self.Values, self.Value) and not self.AllowNull then
+self.Value = self.Values[1]
+end
+self:Render()
+if self.List then
+self.List.Rebuild(self.Values)
+end
+end
+function Dropdown:Serialize()
+if self.Multi then
+return self:GetActiveValues()
+end
+return self.Value
+end
+function Dropdown:Pick(value)
+if self.Multi then
+self.Value[value] = not self.Value[value] or nil
+elseif self.Value == value and self.AllowNull then
+self.Value = nil
+else
+self.Value = value
+end
+self:Render()
+self:Fire()
+end
+function Dropdown:Open()
+Anim.Tween(self.Chevron, { Rotation = 180 }, Config.Tween.Normal)
+self.List = Popup.List({
+Anchor = self.Field,
+Values = self.Values,
+Multi = self.Multi,
+Images = self.Images,
+Colors = self.Colors,
+Search = self.Searchable ~= false and (self.Searchable or #self.Values > Config.Dropdown.SearchThreshold),
+IsSelected = function(value)
+return self:IsSelected(value)
+end,
+OnPick = function(value)
+self:Pick(value)
+return not self.Multi
+end,
+OnClose = function()
+self.List = nil
+Anim.Tween(self.Chevron, { Rotation = 0 }, Config.Tween.Normal)
+end,
+})
+end
+function Container:AddInput(idx, info)
+idx, info = Widget.Normalize(idx, info)
+local input = setmetatable({ Type = "Input", Value = tostring(info.Default or ""), Numeric = info.Numeric, Finished = info.Finished, MaxLength = info.MaxLength, Container = self }, Input)
+input.Row = Row.Stack(self, info, Util.Metric("Box"))
+input.Item = input.Row.Item
+local field = Draw.Field(input.Row.Control, "Frame")
+input.Box = Draw.Text({
+ClassName = "TextBox",
+Text = input.Value,
+ClearTextOnFocus = info.ClearTextOnFocus == true,
+Position = UDim2.fromOffset(10, 0),
+Size = UDim2.new(1, -20, 1, 0),
+TextTruncate = Enum.TextTruncate.AtEnd,
+Parent = field,
+}, "Body", Util.TextSize("Label"), "Text")
+Lang.Bind(input.Box, info.Placeholder or "", "PlaceholderText")
+Theme.Bind(input.Box, { PlaceholderColor3 = "Muted" })
+input:Bind(field)
+Widget.Register(input, idx, info)
+return input
+end
+function Input:Bind(field)
+local stroke = field:FindFirstChildOfClass("UIStroke")
+self.Box.Focused:Connect(function()
+Anim.Tween(stroke, { Color = Theme.Colors.Blue }, Config.Tween.Fast)
+end)
+self.Box:GetPropertyChangedSignal("Text"):Connect(function()
+local clean = self:Sanitize(self.Box.Text)
+if clean ~= self.Box.Text then
+self.Box.Text = clean
+return
+end
+if not self.Finished then
+self:Commit(clean)
+end
+end)
+self.Box.FocusLost:Connect(function()
+Anim.Tween(stroke, { Color = Theme.Colors.Outline }, Config.Tween.Fast)
+self:Commit(self.Box.Text)
+end)
+end
+function Input:Sanitize(text)
+if self.Numeric then
+text = text:gsub("[^%d%.%-]", "")
+end
+if self.MaxLength and #text > self.MaxLength then
+text = text:sub(1, self.MaxLength)
+end
+return text
+end
+function Input:Commit(text)
+if text == self.Value then
+return
+end
+self.Value = text
+self:Fire()
+end
+function Input:SetValue(text)
+text = self:Sanitize(tostring(text or ""))
+self.Box.Text = text
+self:Commit(text)
+end
+Button.Styles = {
+Default = { Face = "Element", Shade = "Track", Text = "Text" },
+Primary = { Face = "Blue", Shade = "BlueDark", Text = "White" },
+Success = { Face = "Good", Shade = "GoodDark", Text = "White" },
+Danger = { Face = "Danger", Shade = "DangerDark", Text = "White" },
+Warning = { Face = "Coin", Shade = "CoinDark", Text = "Ink" },
+}
+function Container:AddButton(info, callback)
+return Button.Create(self, info, callback)
+end
+function Button.Create(container, info, callback, after)
+if type(info) ~= "table" then
+info = { Text = info, Func = callback }
+end
+local style = Button.Styles[info.Style or "Default"] or Button.Styles.Default
+local button = setmetatable({ Container = container, Info = info, Func = info.Func or info.Callback or callback, Style = style, Armed = false }, Button)
+table.insert(Library.Buttons, button)
+local holder, face, _, depth = Draw.Block(nil, style.Face, style.Shade, 10, 4)
+face.ClipsDescendants = true
+button.Holder, button.Face, button.Depth = holder, face, depth
+local content = Draw.New("Frame", { BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 3, Parent = face })
+Draw.List(content, 6, true, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Center)
+Draw.Padding(content, 0, 8, 0, 8)
+local iconExtra = 0
+if info.Icon then
+local icon = Icons.Create(content, info.Icon, 16, style.Text, info.Text)
+icon.LayoutOrder = 1
+iconExtra = 22
+end
+button.Label = Draw.Text({ LayoutOrder = 2, AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.fromScale(0, 1), TextXAlignment = Enum.TextXAlignment.Center, TextTruncate = Enum.TextTruncate.AtEnd, Parent = content }, "Body", Util.TextSize("Button"), style.Text, info.Text or info.Title or "")
+button.Hit = Draw.New("TextButton", { Text = "", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 5, Parent = holder })
+button:BindPress()
+button.Group = { button }
+button.Item = container:Add(holder, {
+Height = Util.Metric("Box") + depth,
+After = after,
+Search = Lang.SearchText(info.Text or info.Title),
+AutoWidth = function()
+return Layout.Measure(button.Label.Text, button.Label.TextSize, "Body", 1000).X + iconExtra + 36
+end,
+})
+if info.Tooltip then
+Tooltip.Attach(holder, info.Tooltip)
+end
+return button
+end
+function Button:BindPress()
+local face, hit = self.Face, self.Hit
+local faceColor = function()
+return Theme.Colors[self.Style.Face]
+end
+hit.MouseEnter:Connect(function()
+if not State.Touch then
+Anim.Tween(face, { BackgroundColor3 = Util.Lighten(faceColor(), 0.14) }, Config.Tween.Fast)
+end
+end)
+hit.MouseLeave:Connect(function()
+Anim.Tween(face, { BackgroundColor3 = faceColor() }, Config.Tween.Fast)
+Motion.Spring(face, "Position", UDim2.new(), "Fast")
+end)
+hit.MouseButton1Down:Connect(function()
+Motion.Spring(face, "Position", UDim2.fromOffset(0, self.Depth - 1), "Fast")
+end)
+hit.MouseButton1Up:Connect(function()
+Motion.Spring(face, "Position", UDim2.new(), "Fast", { Damping = 0.56 })
+end)
+hit.Activated:Connect(function()
+Fx.Ripple(face, nil, "White")
+self:Click()
+end)
+end
+function Button:Click()
+if self.Info.DoubleClick and not self.Armed then
+self.Armed = true
+local token = {}
+self.ArmToken = token
+Lang.Bind(self.Label, Lang.Strings.Confirm)
+Anim.Shake(self.Face)
+task.delay(Config.ConfirmWindow, function()
+if self.ArmToken == token then
+self:Disarm()
+end
+end)
+return
+end
+self:Disarm()
+Util.Try(self.Func)
+end
+function Button:Disarm()
+if not self.Armed then
+return
+end
+self.Armed = false
+Lang.Bind(self.Label, self.Info.Text or "")
+end
+function Button:AddButton(info, callback)
+local last = self.Group[#self.Group]
+self.Container:SameLine()
+local sibling = Button.Create(self.Container, info, callback, last.Item)
+sibling.Group = self.Group
+table.insert(self.Group, sibling)
+local count = #self.Group
+for index, member in ipairs(self.Group) do
+member.Item.Width = index < count and 1 / count or nil
+member.Item.Fill = true
+end
+self.Container:MarkDirty()
+return sibling
+end
+function Button:SetText(text)
+self.Info.Text = text
+Lang.Bind(self.Label, text)
+end
+function Button:SetVisible(visible)
+self.Item.Hidden = not visible
+self.Container:MarkDirty()
+end
+function Container:AddLabel(text, wrap)
+local info = type(text) == "table" and text.Text and text or { Text = text }
+local label = setmetatable({ Type = "Label", Container = self, Wrap = wrap }, Label)
+label.Row = Row.New(self, info, { TitleFont = "Desc", TitleSize = Util.TextSize("Label") - 1, TitleToken = "SubText" })
+label.Row.MinHeight = Row.LineHeight()
+label.Item = label.Row.Item
+return label
+end
+function Label:SetText(text)
+self.Row:SetTitle(text)
+end
+Label.SetVisible = Widget.SetVisible
+Label.AddColorPicker = Widget.AddColorPicker
+Label.AddKeyPicker = Widget.AddKeyPicker
+function Container:AddParagraph(info)
+local paragraph = setmetatable({ Type = "Label", Container = self }, Label)
+paragraph.Row = Row.New(self, { Text = info.Title, Description = info.Content or info.Description or "" })
+paragraph.Item = paragraph.Row.Item
+function paragraph.SetContent(_, text)
+Lang.Bind(paragraph.Row.Desc, text)
+self:MarkDirty()
+end
+function paragraph.SetTitle(_, text)
+paragraph.Row:SetTitle(text)
+end
+return paragraph
+end
+function Container:AddDivider()
+local holder = Draw.New("Frame", { Name = "Divider", BackgroundTransparency = 1 })
+local line = Draw.Box("Frame", { AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.fromScale(0, 0.5), Size = UDim2.new(1, 0, 0, 2) }, "Track", nil, 1)
+line.Parent = holder
+self:Add(holder, { Height = 10 })
+return self
+end
+Container.Separator = Container.AddDivider
+function Container:AddSeparatorText(text)
+local holder = Draw.New("Frame", { Name = "SeparatorText", BackgroundTransparency = 1 })
+local caption = Draw.Text({ TextXAlignment = Enum.TextXAlignment.Center, Parent = holder }, "Body", Util.TextSize("Desc"), "Muted", text)
+local left = Draw.Box("Frame", { AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.fromScale(0, 0.5), Parent = holder }, "Track", nil, 1)
+local right = Draw.Box("Frame", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.fromScale(1, 0.5), Parent = holder }, "Track", nil, 1)
+self:Add(holder, {
+Height = Row.LineHeight("Desc"),
+OnLayout = function(width, height)
+local textWidth = Layout.Measure(caption.Text, caption.TextSize, "Body", width).X + 12
+left.Size = UDim2.fromOffset(12, 2)
+caption.Position = UDim2.fromOffset(14, 0)
+caption.Size = UDim2.fromOffset(textWidth, height)
+right.Size = UDim2.fromOffset(math.max(0, width - textWidth - 16), 2)
+end,
+})
+return self
+end
+function Draw.Thumb(parent, image, tint, size, position)
+local tile = Draw.Box("ImageLabel", {
+Name = "Thumb",
+Image = image or "",
+ScaleType = Enum.ScaleType.Fit,
+AnchorPoint = Vector2.new(0, 0.5),
+Position = position or UDim2.new(0, 4, 0.5, 0),
+Size = UDim2.fromOffset(size, size),
+Parent = parent,
+}, "Element", nil, 6)
+Draw.Padding(tile, 2)
+local stroke
+if tint then
+stroke = Draw.New("UIStroke", { Thickness = 2, Color = tint, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, LineJoinMode = Enum.LineJoinMode.Round, Parent = tile })
+else
+stroke = Draw.Stroke(tile, "Outline", 2, true)
+end
+return tile, stroke
+end
+function Selectable.Build(text, options)
+options = options or {}
+local textSpec = text
+local iconSpec = options.Icon
+if type(text) == "table" and not text.EN and not text.TH then
+textSpec = text.Text or text.Label or text.Value or ""
+iconSpec = iconSpec or text.Icon
+end
+local button = Draw.Box("TextButton", { Name = "Selectable", BackgroundTransparency = 1, ClipsDescendants = true }, "Hover", nil, 8)
+local bar = Draw.Box("Frame", {
+AnchorPoint = Vector2.new(0, 0.5),
+Position = UDim2.new(0, 3, 0.5, 0),
+Size = UDim2.fromOffset(3, 0),
+Parent = button,
+}, "Coin", nil, 2)
+local inset = 12
+if options.Image then
+local size = Util.Metric("Item") - 6
+Draw.Thumb(button, options.Image, options.Tint, size, UDim2.new(0, 8, 0.5, 0))
+inset = size + 16
+elseif iconSpec then
+local icon = Icons.Create(button, iconSpec, 16, nil, textSpec)
+icon.AnchorPoint = Vector2.new(0, 0.5)
+icon.Position = UDim2.new(0, 10, 0.5, 0)
+inset = 32
+elseif options.Tint then
+Draw.Box("Frame", { AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 8, 0.5, 0), Size = UDim2.new(0, 4, 1, -10), BackgroundColor3 = options.Tint, Parent = button }, nil, nil, 2)
+inset = 18
+end
+local label = Draw.Text({ Position = UDim2.fromOffset(inset, 0), Size = UDim2.new(1, -(inset + 26), 1, 0), TextTruncate = Enum.TextTruncate.AtEnd, Parent = button }, "Body", Util.TextSize("Label"), "Text", textSpec)
+local mark = Icons.Vector(button, "check", 15, "OnAccent")
+mark.AnchorPoint = Vector2.new(1, 0.5)
+mark.Position = UDim2.new(1, -8, 0.5, 0)
+local markScale = Draw.New("UIScale", { Scale = 0, Parent = mark })
+local parts = { Button = button, Label = label, Mark = mark, MarkScale = markScale, Bar = bar, Selected = false, Hovered = false }
+function parts.Render(instant)
+local duration = instant and 0 or Config.Tween.Fast
+local fill = parts.Selected and Theme.Colors.Accent or Theme.Colors.Hover
+local alpha = parts.Selected and 0 or (parts.Hovered and 0.45 or 1)
+Anim.Tween(button, { BackgroundColor3 = fill, BackgroundTransparency = alpha }, duration)
+Anim.Tween(label, { TextColor3 = Theme.Colors[parts.Selected and "OnAccent" or "Text"] }, duration)
+if instant then
+Motion.Set(markScale, "Scale", parts.Selected and 1 or 0)
+else
+Motion.Spring(markScale, "Scale", parts.Selected and 1 or 0, "Fast", { Damping = 0.6 })
+end
+local barHeight = parts.Selected and (Util.Metric("Item") - 10) or 0
+if instant then
+Motion.Set(bar, "Size", UDim2.fromOffset(3, barHeight))
+else
+Motion.Spring(bar, "Size", UDim2.fromOffset(3, barHeight), "Fast")
+end
+end
+function parts.SetSelected(selected, instant)
+parts.Selected = selected
+parts.Render(instant)
+end
+if not State.Touch then
+button.MouseEnter:Connect(function()
+parts.Hovered = true
+parts.Render()
+end)
+button.MouseLeave:Connect(function()
+parts.Hovered = false
+parts.Render()
+end)
+end
+Theme.OnRender(button, function()
+parts.Render(true)
+end)
+return parts
+end
+function Container:AddSelectable(idx, info)
+idx, info = Widget.Normalize(idx, info)
+local selectable = setmetatable({ Type = "Selectable", Value = info.Default == true or info.Selected == true, Container = self }, Selectable)
+selectable.Parts = Selectable.Build(info.Text or "", info)
+selectable.Item = self:Add(selectable.Parts.Button, { Height = Util.Metric("Item"), Search = Row.SearchText(info) })
+selectable.Parts.SetSelected(selectable.Value, true)
+selectable.Parts.Button.Activated:Connect(function()
+selectable:SetValue(not selectable.Value)
+end)
+Widget.Register(selectable, idx, info)
+return selectable
+end
+function Selectable:SetValue(value)
+value = value == true
+if value == self.Value then
+return
+end
+self.Value = value
+self.Parts.SetSelected(value)
+self:Fire()
+end
+function Container:AddListBox(idx, info)
+idx, info = Widget.Normalize(idx, info)
+local rows = info.Height or 5
+local itemHeight = Util.Metric("Item")
+local listbox = setmetatable({ Type = "Dropdown", Multi = info.Multi == true, AllowNull = info.AllowNull ~= false, Values = info.Values or {}, Container = self, Entries = {} }, ListBox)
+listbox.Value = listbox.Multi and Util.ToSet(info.Default) or info.Default
+listbox.Row = Row.Stack(self, info, rows * (itemHeight + 2) + 10)
+listbox.Item = listbox.Row.Item
+local frame = Draw.Box("Frame", { Size = UDim2.fromScale(1, 1), Parent = listbox.Row.Control }, "Element", "Outline", 10, 2)
+local scroll = Layout.ScrollFrame({ Size = UDim2.fromScale(1, 1), Parent = frame })
+listbox.List = Container.New(scroll, { PadX = 4, PadY = 4, GapY = 2 })
+listbox.List:SetParent(self)
+listbox.Row.OnArranged = function(width)
+listbox.List:SetWidth(width - Config.Page.ScrollBar - 4)
+end
+Widget.Register(listbox, idx, info)
+listbox:Rebuild()
+return listbox
+end
+function ListBox:Rebuild()
+self.List:Clear()
+table.clear(self.Entries)
+for _, value in ipairs(self.Values) do
+local parts = Selectable.Build(value, { Multi = self.Multi })
+parts.SetSelected(Dropdown.IsSelected(self, value), true)
+parts.Button.Activated:Connect(function()
+Dropdown.Pick(self, value)
+end)
+self.Entries[value] = parts
+self.List:Add(parts.Button, { Height = Util.Metric("Item") })
+end
+if #self.Values == 0 then
+self.List:AddLabel(Lang.Strings.Empty)
+end
+end
+function ListBox:Render()
+for value, parts in pairs(self.Entries) do
+parts.SetSelected(Dropdown.IsSelected(self, value))
+end
+end
+ListBox.IsSelected = Dropdown.IsSelected
+ListBox.GetActiveValues = Dropdown.GetActiveValues
+ListBox.Serialize = Dropdown.Serialize
+function ListBox:SetValue(value)
+self.Value = self.Multi and Util.ToSet(value) or value
+self:Render()
+self:Fire()
+end
+function ListBox:SetValues(values)
+self.Values = values or {}
+if not self.Multi and self.Value ~= nil and not table.find(self.Values, self.Value) then
+self.Value = nil
+end
+self:Rebuild()
+end
+function Container:AddProgressBar(idx, info)
+idx, info = Widget.Normalize(idx, info)
+local progress = setmetatable({ Type = "Progress", Value = 0, Max = info.Max or 1, Suffix = info.Suffix, Container = self }, Progress)
+progress.Row = Row.Stack(self, info, 16)
+progress.Item = progress.Row.Item
+local bar = Draw.Box("Frame", { Size = UDim2.fromScale(1, 1), Parent = progress.Row.Control }, "Track", "Outline", UDim.new(1, 0), 2)
+progress.Fill = Draw.Box("Frame", { Size = UDim2.fromScale(0, 1), Parent = bar }, "Good", nil, UDim.new(1, 0))
+local shine = Draw.Box("Frame", { Position = UDim2.new(0, 4, 0, 2), Size = UDim2.new(1, -8, 0, 3), BackgroundTransparency = 0.55, Parent = progress.Fill }, "White", nil, UDim.new(1, 0))
+shine.ZIndex = 2
+progress:SetValue(info.Default or info.Value or 0)
+if idx ~= nil then
+Library.Options[idx] = progress
+progress.NoSave = true
+end
+return progress
+end
+function Progress:SetValue(value)
+self.Value = math.clamp(tonumber(value) or 0, 0, self.Max)
+local fraction = self.Max > 0 and self.Value / self.Max or 0
+Anim.Tween(self.Fill, { Size = UDim2.fromScale(fraction, 1) }, Config.Tween.Slide)
+local text = self.Suffix and (tostring(Util.Round(self.Value, 2)) .. self.Suffix) or (math.floor(fraction * 100 + 0.5) .. "%")
+local resized = #text ~= #self.Row.Aside.Text
+self.Row.Aside.Text = text
+if resized then
+self.Container:MarkDirty()
+end
+end
+function Progress:SetText(text)
+self.Row:SetTitle(text)
+end
+Progress.SetVisible = Widget.SetVisible
+function Container:AddChild(id, info)
+if Gui and Gui.BeginChild then
+return Gui.BeginChild(self, id, info)
+end
+if type(id) == "table" and info == nil then
+info, id = id, nil
+end
+info = info or {}
+local holder = Draw.New("Frame", { Name = tostring(id or "Child"), BackgroundTransparency = 1 })
+local frame = Draw.Box("Frame", { Size = UDim2.fromScale(1, 1), Parent = holder }, info.Border ~= false and "Element" or nil, info.Border ~= false and "Track" or nil, 10, 2)
+if info.Border ~= false then
+frame.BackgroundTransparency = 0.4
+end
+local host = info.Height and Layout.ScrollFrame({ Size = UDim2.fromScale(1, 1), Parent = frame }) or Draw.New("Frame", { BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Parent = frame })
+local child = Container.New(host, { PadX = 8, PadY = 8 })
+local inset = info.Height and Config.Page.ScrollBar or 0
+self:Add(holder, {
+Height = function()
+return info.Height or child.ContentHeight
+end,
+Child = child,
+ChildInset = inset,
+})
+return child
+end
+Container.BeginChild = Container.AddChild
+function Container:AddKeybind(idx, info)
+idx, info = Widget.Normalize(idx, info)
+local row = Row.New(self, info)
+local picker = KeyPicker.New(row, idx, info, nil)
+picker.Row, picker.Item, picker.Container = row, row.Item, self
+return picker
+end
+function Container:AddColorPicker(idx, info)
+idx, info = Widget.Normalize(idx, info)
+local row = Row.New(self, info)
+local picker = ColorPicker.New(row, idx, info)
+picker.Row, picker.Item, picker.Container = row, row.Item, self
+return picker
+end
+function Container:AddStepper(idx, spec)
+idx, spec = Widget.Normalize(idx, spec)
+local stepVal = spec.Step or 1
+local stepper = setmetatable({
+Type = "Stepper",
+Min = spec.Min or -1e9,
+Max = spec.Max or 1e9,
+Step = stepVal,
+Rounding = spec.Rounding or (math.floor(stepVal) ~= stepVal and 2 or 0),
+Container = self,
+}, Stepper)
+stepper.Value = Util.Round(math.clamp(tonumber(spec.Default) or math.max(0, stepper.Min), stepper.Min, stepper.Max), stepper.Rounding)
+stepper.Row = Row.New(self, spec)
+stepper.Item = stepper.Row.Item
+stepper:Build()
+Widget.Register(stepper, idx, spec)
+stepper:Render(true)
+return stepper
+end
+function Stepper:Build()
+local height = Util.Metric("Box") - 4
+local box = Draw.Box("Frame", { Size = UDim2.fromOffset(108, height) }, "Element", "Outline", 8, 2)
+local minusBtn = Draw.Box("TextButton", { Position = UDim2.fromOffset(2, 2), Size = UDim2.fromOffset(height - 4, height - 4), Parent = box }, "Hover", nil, 6)
+Icons.Vector(minusBtn, "minus", 14, "Text").Position = UDim2.fromScale(0.18, 0.18)
+local plusBtn = Draw.Box("TextButton", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -2, 0, 2), Size = UDim2.fromOffset(height - 4, height - 4), Parent = box }, "Accent", nil, 6)
+Icons.Vector(plusBtn, "plus", 14, "OnAccent").Position = UDim2.fromScale(0.18, 0.18)
+self.Readout = Draw.Text({
+Position = UDim2.fromOffset(height, 0),
+Size = UDim2.new(1, -height * 2, 1, 0),
+TextXAlignment = Enum.TextXAlignment.Center,
+Parent = box,
+}, "Strong", Util.TextSize("Label"), "Text", tostring(self.Value))
+minusBtn.Activated:Connect(function()
+Fx.Squash(minusBtn, 1.8)
+self:SetValue(self.Value - self.Step)
+end)
+plusBtn.Activated:Connect(function()
+Fx.Squash(plusBtn, 1.8)
+self:SetValue(self.Value + self.Step)
+end)
+self.Row:AddRight(box, 108)
+end
+function Stepper:Render(instant)
+local formatted = self.Rounding > 0 and string.format("%." .. self.Rounding .. "f", self.Value) or tostring(math.floor(self.Value + 0.5))
+if instant or not self.PrevValue then
+self.Readout.Text = formatted
+else
+Fx.CountUp(self, self.PrevValue, self.Value, 0.18, function(cur)
+local num = Util.Round(cur, self.Rounding)
+self.Readout.Text = self.Rounding > 0 and string.format("%." .. self.Rounding .. "f", num) or tostring(math.floor(num + 0.5))
+end)
+end
+self.PrevValue = self.Value
+end
+function Stepper:SetValue(nextVal)
+local num = tonumber(nextVal)
+if not num then
+return
+end
+num = Util.Round(math.clamp(num, self.Min, self.Max), self.Rounding)
+if num == self.Value then
+return
+end
+self.Value = num
+self:Render(false)
+self:Fire()
+end
+function Container:AddRangeSlider(idx, spec)
+idx, spec = Widget.Normalize(idx, spec)
+local knobSize = Util.Metric("Knob")
+local minBound, maxBound = spec.Min or 0, spec.Max or 100
+local defTable = type(spec.Default) == "table" and spec.Default or { minBound, maxBound }
+local range = setmetatable({
+Type = "RangeSlider",
+Min = minBound,
+Max = maxBound,
+Rounding = spec.Rounding or 0,
+Suffix = spec.Suffix or "",
+Container = self,
+}, RangeSlider)
+local low = Util.Round(math.clamp(tonumber(defTable[1]) or minBound, minBound, maxBound), range.Rounding)
+local high = Util.Round(math.clamp(tonumber(defTable[2]) or maxBound, low, maxBound), range.Rounding)
+range.Value = { low, high }
+range.Row = Row.Stack(self, spec, knobSize + 4)
+range.Item = range.Row.Item
+range:Build(knobSize)
+Widget.Register(range, idx, spec)
+range:Render(false)
+return range
+end
+function RangeSlider:Build(knobSize)
+local control = self.Row.Control
+local trackHeight = Util.Metric("Track")
+self.Track = Draw.Box("Frame", {
+AnchorPoint = Vector2.new(0, 0.5),
+Position = UDim2.new(0, knobSize / 2, 0.5, 0),
+Size = UDim2.new(1, -knobSize, 0, trackHeight),
+Parent = control,
+}, "Track", "Outline", UDim.new(1, 0), 2)
+self.Fill = Draw.Box("Frame", { Size = UDim2.fromScale(1, 1), Parent = self.Track }, "Accent", nil, UDim.new(1, 0))
+self.KnobLow = Draw.Box("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(knobSize, knobSize), Position = UDim2.fromScale(0, 0.5), ZIndex = 3, Parent = self.Track }, "Coin", "Outline", UDim.new(1, 0), 2)
+self.KnobHigh = Draw.Box("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(knobSize, knobSize), Position = UDim2.fromScale(1, 0.5), ZIndex = 4, Parent = self.Track }, "Coin", "Outline", UDim.new(1, 0), 2)
+local hit = Draw.New("TextButton", { Text = "", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 6), Position = UDim2.fromOffset(0, -3), ZIndex = 5, Parent = control })
+hit.InputBegan:Connect(function(input)
+if Util.IsPointer(input) then
+self:BeginDrag(input)
+end
+end)
+end
+function RangeSlider:BeginDrag(input)
+local left, width = self.Track.AbsolutePosition.X, math.max(1, self.Track.AbsoluteSize.X)
+local frac = math.clamp((input.Position.X - left) / width, 0, 1)
+local pickedVal = self.Min + (self.Max - self.Min) * frac
+local pickHigh = math.abs(pickedVal - self.Value[2]) < math.abs(pickedVal - self.Value[1])
+local activeKnob = pickHigh and self.KnobHigh or self.KnobLow
+Fx.Squash(activeKnob, 1.9)
+local function UpdateFromX(screenX)
+local ratio = math.clamp((screenX - self.Track.AbsolutePosition.X) / math.max(1, self.Track.AbsoluteSize.X), 0, 1)
+local raw = self.Min + (self.Max - self.Min) * ratio
+if pickHigh then
+self:SetValue({ self.Value[1], math.max(self.Value[1], raw) })
+else
+self:SetValue({ math.min(self.Value[2], raw), self.Value[2] })
+end
+end
+UpdateFromX(input.Position.X)
+State.Drag = {
+Move = function(move)
+UpdateFromX(move.Position.X)
+end,
+Stop = function()
+Fx.Squash(activeKnob, 1.4)
+end,
+}
+end
+function RangeSlider:Render(animated)
+local span = math.max(1e-6, self.Max - self.Min)
+local lowFrac = math.clamp((self.Value[1] - self.Min) / span, 0, 1)
+local highFrac = math.clamp((self.Value[2] - self.Min) / span, lowFrac, 1)
+if animated then
+Motion.Spring(self.Fill, "Position", UDim2.fromScale(lowFrac, 0), "Fast")
+Motion.Spring(self.Fill, "Size", UDim2.fromScale(highFrac - lowFrac, 1), "Fast")
+Motion.Spring(self.KnobLow, "Position", UDim2.fromScale(lowFrac, 0.5), "Fast")
+Motion.Spring(self.KnobHigh, "Position", UDim2.fromScale(highFrac, 0.5), "Fast")
+else
+Motion.Set(self.Fill, "Position", UDim2.fromScale(lowFrac, 0))
+Motion.Set(self.Fill, "Size", UDim2.fromScale(highFrac - lowFrac, 1))
+Motion.Set(self.KnobLow, "Position", UDim2.fromScale(lowFrac, 0.5))
+Motion.Set(self.KnobHigh, "Position", UDim2.fromScale(highFrac, 0.5))
+end
+local suf = Lang.Resolve(self.Suffix or "")
+self.Row.Aside.Text = tostring(self.Value[1]) .. suf .. " – " .. tostring(self.Value[2]) .. suf
+end
+function RangeSlider:SetValue(pair)
+if type(pair) ~= "table" then
+return
+end
+local low = Util.Round(math.clamp(tonumber(pair[1]) or self.Min, self.Min, self.Max), self.Rounding)
+local high = Util.Round(math.clamp(tonumber(pair[2]) or self.Max, low, self.Max), self.Rounding)
+if low == self.Value[1] and high == self.Value[2] then
+return
+end
+self.Value = { low, high }
+self:Render(true)
+self:Fire()
+end
+function Container:AddSegmented(idx, spec)
+idx, spec = Widget.Normalize(idx, spec)
+local optionsList = spec.Values or spec.Options or {}
+local seg = setmetatable({
+Type = "Segmented",
+Values = optionsList,
+Value = spec.Default or optionsList[1],
+Buttons = {},
+Container = self,
+}, Segmented)
+seg.Row = (spec.Text or spec.Title) and Row.Stack(self, spec, Util.Metric("Box")) or nil
+local host = seg.Row and seg.Row.Control or Draw.New("Frame", { BackgroundTransparency = 1 })
+if not seg.Row then
+seg.Item = self:Add(host, { Height = Util.Metric("Box"), Search = Lang.SearchText(spec.Text) })
+else
+seg.Item = seg.Row.Item
+end
+seg:Build(host)
+Widget.Register(seg, idx, spec)
+seg:Render(true)
+return seg
+end
+function Segmented:Build(host)
+local bar = Draw.Box("Frame", { Size = UDim2.fromScale(1, 1), Parent = host }, "Element", "Outline", 8, 2)
+Draw.Padding(bar, 3, 3, 3, 3)
+local count = math.max(1, #self.Values)
+self.Thumb = Draw.Box("Frame", {
+Size = UDim2.fromScale(1 / count, 1),
+ZIndex = 2,
+Parent = bar,
+}, "Accent", nil, 6)
+for index, optionVal in ipairs(self.Values) do
+local btn = Draw.Text({
+ClassName = "TextButton",
+Position = UDim2.fromScale((index - 1) / count, 0),
+Size = UDim2.fromScale(1 / count, 1),
+TextXAlignment = Enum.TextXAlignment.Center,
+ZIndex = 3,
+Parent = bar,
+}, "Strong", Util.TextSize("Label") - 1, "Text", Dropdown.FormatValue(optionVal))
+btn.AutoButtonColor = false
+btn.Activated:Connect(function()
+self:SetValue(optionVal)
+end)
+self.Buttons[index] = { Button = btn, Value = optionVal }
+end
+end
+function Segmented:Render(instant)
+local count = math.max(1, #self.Values)
+local activeIdx = 1
+for index, entry in ipairs(self.Buttons) do
+local isSel = entry.Value == self.Value
+if isSel then
+activeIdx = index
+end
+Theme.Bind(entry.Button, { TextColor3 = isSel and "OnAccent" or "SubText" })
+end
+local targetPos = UDim2.fromScale((activeIdx - 1) / count, 0)
+local targetSize = UDim2.fromScale(1 / count, 1)
+if instant then
+Motion.Set(self.Thumb, "Position", targetPos)
+Motion.Set(self.Thumb, "Size", targetSize)
+else
+Motion.Spring(self.Thumb, "Position", targetPos, "Fast", { Damping = 0.68 })
+Motion.Spring(self.Thumb, "Size", targetSize, "Fast")
+end
+end
+function Segmented:SetValue(nextVal)
+if nextVal == self.Value then
+return
+end
+self.Value = nextVal
+self:Render(false)
+self:Fire()
+end
+function Container:AddStat(idx, spec)
+idx, spec = Widget.Normalize(idx, spec)
+local card = Draw.Box("Frame", { Name = "StatCard" }, "Element", "Outline", 10, 2)
+Fx.Spotlight(card)
+local badge = Icons.Badge(card, spec.Icon, 30, spec.Color or "Accent", spec.Title or spec.Text)
+badge.AnchorPoint = Vector2.new(0, 0.5)
+badge.Position = UDim2.new(0, 10, 0.5, 0)
+local titleLabel = Draw.Text({
+Position = UDim2.fromOffset(48, 6),
+Size = UDim2.new(1, -56, 0, 16),
+TextTruncate = Enum.TextTruncate.AtEnd,
+Parent = card,
+}, "Desc", Util.TextSize("Desc"), "SubText", spec.Title or spec.Text or "Stat")
+local valLabel = Draw.Text({
+Position = UDim2.fromOffset(48, 22),
+Size = UDim2.new(1, -56, 0, 22),
+TextTruncate = Enum.TextTruncate.AtEnd,
+Parent = card,
+}, "Display", Util.TextSize("Group") + 2, spec.Color or "Text", tostring(spec.Value or spec.Default or "0"))
+local stat = setmetatable({
+Type = "Stat",
+Frame = card,
+TitleLabel = titleLabel,
+ValueLabel = valLabel,
+Prefix = spec.Prefix or "",
+Suffix = spec.Suffix or "",
+Value = spec.Value or spec.Default or 0,
+Container = self,
+}, StatWidget)
+stat.Item = self:Add(card, { Width = spec.Width, Height = 50, Search = Row.SearchText(spec) })
+Widget.Register(stat, idx, spec)
+return stat
+end
+function StatWidget:SetValue(nextVal)
+local prevNum = tonumber(self.Value)
+local nextNum = tonumber(nextVal)
+self.Value = nextVal
+local pre = Lang.Resolve(self.Prefix or "")
+local suf = Lang.Resolve(self.Suffix or "")
+if prevNum and nextNum then
+Fx.CountUp(self, prevNum, nextNum, 0.25, function(cur)
+self.ValueLabel.Text = pre .. tostring(math.floor(cur + 0.5)) .. suf
+end)
+else
+self.ValueLabel.Text = pre .. tostring(nextVal) .. suf
+end
+end
+function Container:AddStatus(idx, spec)
+idx, spec = Widget.Normalize(idx, spec)
+local row = Row.New(self, spec)
+local pill, label = Gui.Badge(row.Right, spec.Status or spec.Default or "Ready", spec.Color or "Good", true)
+row:AddRight(pill.Frame, pill.Width)
+local status = setmetatable({
+Type = "Status",
+Row = row,
+Item = row.Item,
+Badge = pill,
+Label = label,
+Value = spec.Status or spec.Default or "Ready",
+Container = self,
+}, StatusWidget)
+Widget.Register(status, idx, spec)
+return status
+end
+function StatusWidget:SetValue(nextText, colorToken)
+self.Value = nextText
+self.Badge:SetText(nextText)
+if colorToken then
+self.Badge:SetColor(colorToken)
+end
+end
+function Container:AddTable(idx, spec)
+idx, spec = Widget.Normalize(idx, spec)
+local headers = spec.Headers or spec.Columns or {}
+local rows = spec.Rows or {}
+local holder = Draw.Box("Frame", { Name = "Table" }, "Element", "Outline", 10, 2)
+local inner = Container.New(holder, { PadX = 8, PadY = 6, GapY = 4 })
+inner:SetParent(self)
+local tbl = setmetatable({
+Type = "Table",
+Headers = headers,
+Rows = rows,
+Inner = inner,
+Container = self,
+}, TableWidget)
+tbl.Item = self:Add(holder, {
+Height = function()
+return math.max(36, inner.ContentHeight)
+end,
+Child = inner,
+Search = Row.SearchText(spec),
+})
+tbl:Rebuild()
+return tbl
+end
+function TableWidget:Rebuild()
+self.Inner:Clear()
+local colCount = math.max(1, #self.Headers)
+if #self.Headers > 0 then
+local headRow = Draw.Box("Frame", { BackgroundTransparency = 0.35 }, "PanelHeader", nil, 6)
+for colIdx, hText in ipairs(self.Headers) do
+Draw.Text({
+Position = UDim2.new((colIdx - 1) / colCount, 6, 0, 0),
+Size = UDim2.new(1 / colCount, -8, 1, 0),
+TextTruncate = Enum.TextTruncate.AtEnd,
+Parent = headRow,
+}, "Strong", Util.TextSize("Desc"), "Accent", hText)
+end
+self.Inner:Add(headRow, { Height = 24 })
+end
+for _, cells in ipairs(self.Rows) do
+local line = Draw.New("Frame", { BackgroundTransparency = 1 })
+for colIdx = 1, colCount do
+Draw.Text({
+Position = UDim2.new((colIdx - 1) / colCount, 6, 0, 0),
+Size = UDim2.new(1 / colCount, -8, 1, 0),
+TextTruncate = Enum.TextTruncate.AtEnd,
+Parent = line,
+}, "Body", Util.TextSize("Desc"), colIdx == 1 and "Text" or "SubText", tostring(cells[colIdx] or ""))
+end
+self.Inner:Add(line, { Height = 22 })
+end
+self.Container:MarkDirty()
+end
+function TableWidget:SetRows(nextRows)
+self.Rows = nextRows or {}
+self:Rebuild()
+end
+Container.Toggle = Container.AddToggle
+Container.Checkbox = Container.AddCheckbox
+Container.Slider = Container.AddSlider
+Container.Dropdown = Container.AddDropdown
+Container.Input = Container.AddInput
+Container.Button = Container.AddButton
+Container.Keybind = Container.AddKeybind
+Container.Colorpicker = Container.AddColorPicker
+Container.Label = Container.AddLabel
+Container.Paragraph = Container.AddParagraph
+Container.Divider = Container.AddDivider
+Container.Section = Container.AddSeparatorText
+Container.Stepper = Container.AddStepper
+Container.RangeSlider = Container.AddRangeSlider
+Container.Segmented = Container.AddSegmented
+Container.Stat = Container.AddStat
+Container.Status = Container.AddStatus
+Container.Table = Container.AddTable
+function Popup.Card(width, height)
+local shadow = Config.Group.Shadow
+local card = Draw.New("Frame", { Name = "Popup", BackgroundTransparency = 1, Size = UDim2.fromOffset(width + shadow, height + shadow), ZIndex = 2 })
+Draw.Box("Frame", { Position = UDim2.fromOffset(shadow, shadow), Size = UDim2.new(1, -shadow, 1, -shadow), Parent = card }, "Shadow", nil, 12)
+local face = Draw.Box("Frame", { Size = UDim2.new(1, -shadow, 1, -shadow), Parent = card }, "Panel", "Outline", 12, 3)
+local scale = Draw.New("UIScale", { Parent = card })
+return card, face, scale
+end
+function Popup.Open(card, scale, anchor, onClose)
+Popup.Close()
+card.Parent = State.Overlay
+State.Overlay.Visible = true
+Popup.Place(card, anchor)
+scale.Scale = State.UserScale * 0.88
+Motion.Spring(scale, "Scale", State.UserScale, "Fast", { Damping = 0.62 })
+local lastPos = anchor and anchor.AbsolutePosition or Vector2.zero
+local tracker
+if anchor then
+tracker = Util.Connect(RunService.RenderStepped, function()
+if not State.Popup or State.Popup.Card ~= card then
+return
+end
+if not anchor.Parent or (State.Window and (not State.Window.Visible or State.Window.Minimized)) then
+Popup.Close()
+return
+end
+local curPos = anchor.AbsolutePosition
+if (curPos - lastPos).Magnitude > 0.5 then
+lastPos = curPos
+Popup.Place(card, anchor)
+end
+end)
+end
+State.Popup = { Card = card, Scale = scale, Anchor = anchor, Tracker = tracker, OnClose = onClose }
+end
+function Popup.Place(card, anchor)
+if not anchor or not State.Gui then
+return
+end
+local viewport = State.Gui.AbsoluteSize
+local scaleFactor = math.max(0.5, State.UserScale or 1)
+local width = card.Size.X.Offset * scaleFactor
+local height = card.Size.Y.Offset * scaleFactor
+local origin = anchor.AbsolutePosition - State.Gui.AbsolutePosition
+local size = anchor.AbsoluteSize
+local x = math.clamp(origin.X, 8, math.max(8, viewport.X - width - 8))
+local y = origin.Y + size.Y + 6
+if y + height > viewport.Y - 8 then
+y = math.max(8, origin.Y - height - 6)
+end
+card.Position = UDim2.fromOffset(math.floor(x + 0.5), math.floor(y + 0.5))
+end
+function Popup.Close()
+local popup = State.Popup
+if not popup then
+return
+end
+State.Popup = nil
+if popup.Tracker then
+popup.Tracker:Disconnect()
+popup.Tracker = nil
+end
+Util.Try(popup.OnClose)
+local shrink = Anim.Tween(popup.Scale, { Scale = State.UserScale * 0.9 }, 0.1, "In")
+shrink.Completed:Once(function()
+Theme.UnbindTree(popup.Card)
+popup.Card:Destroy()
+if not State.Popup then
+State.Overlay.Visible = false
+end
+end)
+end
+function Popup.SearchBox(parent, width)
+local field = Draw.Box("Frame", { Position = UDim2.fromOffset(6, 6), Size = UDim2.fromOffset(width, Util.Metric("Box")), Parent = parent }, "Element", "Outline", 8, 2)
+local icon = Icons.Vector(field, "search", 14, "SubText")
+icon.AnchorPoint = Vector2.new(0, 0.5)
+icon.Position = UDim2.new(0, 8, 0.5, 0)
+local box = Draw.Text({ ClassName = "TextBox", Text = "", ClearTextOnFocus = false, Position = UDim2.fromOffset(26, 0), Size = UDim2.new(1, -32, 1, 0), Parent = field }, "Body", Util.TextSize("Label"), "Text")
+Lang.Bind(box, Lang.Strings.Search, "PlaceholderText")
+Theme.Bind(box, { PlaceholderColor3 = "Muted" })
+return box
+end
+function Popup.List(options)
+local itemHeight = Util.Metric("Item")
+local searchHeight = options.Search and (Util.Metric("Box") + 6) or 0
+local minWidth = options.Images and Config.Dropdown.MinWidth + itemHeight + 60 or Config.Dropdown.MinWidth
+local viewportW = State.Gui and State.Gui.AbsoluteSize.X or 800
+local maxAllowedW = math.max(160, math.floor((viewportW - 24) / math.max(0.5, State.UserScale or 1)))
+local rawAnchorW = options.Anchor.AbsoluteSize.X / math.max(0.5, State.UserScale or 1)
+local width = math.clamp(math.floor(math.max(minWidth, rawAnchorW)), 140, maxAllowedW)
+local listHeight = math.max(1, math.min(#options.Values, Config.Dropdown.MaxVisible)) * (itemHeight + 2) + 6
+local card, face, scale = Popup.Card(width, listHeight + searchHeight + 12)
+local scroll = Layout.ScrollFrame({ Position = UDim2.fromOffset(6, 6 + searchHeight), Size = UDim2.new(1, -12, 0, listHeight), Parent = face })
+local list = Container.New(scroll, { PadX = 2, PadY = 2, GapY = 2 })
+list:SetWidth(width - 12 - Config.Page.ScrollBar)
+local entries = {}
+local function Refresh()
+for value, parts in pairs(entries) do
+parts.SetSelected(options.IsSelected(value))
+end
+end
+local function Build(values)
+list:Clear()
+table.clear(entries)
+for _, value in ipairs(values) do
+local labelText = Dropdown.FormatValue(value)
+local parts = Selectable.Build(value, {
+Multi = options.Multi,
+Image = options.Images and options.Images[value],
+Tint = options.Colors and options.Colors[value],
+})
+parts.SetSelected(options.IsSelected(value), true)
+parts.Button.Activated:Connect(function()
+local shouldClose = options.OnPick(value)
+Refresh()
+if shouldClose then
+Popup.Close()
+end
+end)
+entries[value] = parts
+list:Add(parts.Button, { Height = itemHeight, Search = labelText:lower() })
+end
+if #values == 0 then
+list:AddLabel(Lang.Strings.NoResults)
+end
+end
+if options.Search then
+local box = Popup.SearchBox(face, width - 12)
+box:GetPropertyChangedSignal("Text"):Connect(function()
+local query = box.Text:lower()
+local changed = false
+for _, entry in ipairs(list.Items) do
+local filtered = query ~= "" and entry.Search ~= nil and not entry.Search:find(query, 1, true)
+if entry.Filtered ~= filtered then
+entry.Filtered = filtered
+changed = true
+end
+end
+if changed then
+list:MarkDirty()
+end
+end)
+end
+Build(options.Values)
+Layout.Flush()
+Popup.Open(card, scale, options.Anchor, function()
+list:Destroy()
+Util.Try(options.OnClose)
+end)
+return { Rebuild = Build }
+end
+function Tooltip.Build()
+local frame = Draw.Box("Frame", { Name = "Tooltip", Visible = false, ZIndex = Config.Layer.Tooltip, Parent = State.Gui }, "Panel", "Outline", 8, 2)
+Tooltip.Label = Draw.Text({ TextWrapped = true, Position = UDim2.fromOffset(10, 6), Size = UDim2.new(1, -20, 1, -12), Parent = frame }, "Desc", Util.TextSize("Desc") + 1, "Text")
+Tooltip.Scale = Draw.New("UIScale", { Parent = frame })
+Tooltip.Frame = frame
+end
+function Tooltip.Attach(gui, text)
+if State.Touch then
+return
+end
+gui.MouseEnter:Connect(function()
+local token = {}
+Tooltip.Token = token
+task.delay(Config.TooltipDelay, function()
+if Tooltip.Token == token then
+Tooltip.Show(text)
+end
+end)
+end)
+gui.MouseLeave:Connect(function()
+Tooltip.Token = nil
+Tooltip.Frame.Visible = false
+end)
+end
+function Tooltip.Show(text)
+if Library.Unloaded then
+return
+end
+local resolved = Lang.Resolve(text)
+local bounds = Layout.Measure(resolved, Tooltip.Label.TextSize, "Desc", 240)
+Tooltip.Label.Text = resolved
+Tooltip.Frame.Size = UDim2.fromOffset(bounds.X + 22, bounds.Y + 14)
+Tooltip.Follow(UserInputService:GetMouseLocation())
+Tooltip.Frame.Visible = true
+Anim.Pop(Tooltip.Scale, 0.8)
+end
+function Tooltip.Follow(position)
+if Tooltip.Frame and Tooltip.Frame.Visible then
+Tooltip.Frame.Position = UDim2.fromOffset(position.X + 14, position.Y + 16)
+end
+end
+function KeyPicker.New(row, idx, info, linked)
+local picker = setmetatable({
+Type = "KeyPicker",
+Value = Util.KeyName(info.Default) or "None",
+Mode = info.Mode or "Toggle",
+Linked = linked,
+Toggled = false,
+Held = false,
+Row = row,
+Item = row.Item,
+Container = row.Container,
+ChangedCallback = info.ChangedCallback,
+}, KeyPicker)
+local height = Util.Metric("Row") - 8
+picker.Button = Draw.Box("TextButton", { Size = UDim2.fromOffset(40, height) }, "Element", "Outline", 6, 2)
+picker.Label = Draw.Text({ Size = UDim2.fromScale(1, 1), TextXAlignment = Enum.TextXAlignment.Center, Parent = picker.Button }, "Strong", Util.TextSize("Small") + 1, "Text")
+row:AddRight(picker.Button, 40)
+picker.Button.Activated:Connect(function()
+if picker.LongPressed then
+picker.LongPressed = false
+return
+end
+picker:Listen()
+end)
+picker.Button.MouseButton2Click:Connect(function()
+picker:OpenModeMenu()
+end)
+picker:BindLongPress()
+Widget.Register(picker, idx, info)
+table.insert(State.KeyPickers, picker)
+picker:Render()
+Lang.OnChange(picker, function()
+picker:Render()
+end)
+return picker
+end
+function KeyPicker:BindLongPress()
+self.Button.InputBegan:Connect(function(input)
+if input.UserInputType ~= Enum.UserInputType.Touch then
+return
+end
+local token = {}
+self.PressToken = token
+task.delay(0.5, function()
+if self.PressToken == token then
+self.LongPressed = true
+self:OpenModeMenu()
+end
+end)
+end)
+self.Button.InputEnded:Connect(function()
+self.PressToken = nil
+end)
+end
+function KeyPicker:Render()
+local text = State.Binding == self and "..." or Keybinds.Short(self.Value)
+self.Label.Text = text
+local width = math.max(34, Layout.Measure(text, self.Label.TextSize, "Strong", 300).X + 18)
+if width ~= self.Button.Size.X.Offset then
+self.Button.Size = UDim2.fromOffset(width, self.Button.Size.Y.Offset)
+self.Button:SetAttribute("RightWidth", width)
+self.Row:RecalcRight()
+end
+Theme.Bind(self.Button, { BackgroundColor3 = State.Binding == self and "Coin" or "Element" })
+end
+function KeyPicker:Listen()
+local previous = State.Binding
+State.Binding = self
+if previous and previous ~= self then
+previous:Render()
+end
+self:Render()
+end
+function KeyPicker:SetKey(name)
+self.Value = name
+self:Render()
+Util.Try(self.ChangedCallback, name)
+for _, callback in ipairs(self.Changed) do
+Util.Try(callback, name)
+end
+end
+function KeyPicker:Press(down)
+if self.Mode == "Always" then
+return
+end
+if self.Mode == "Press" then
+self.Held = down
+if not down then
+return
+end
+Util.Try(self.Callback, true)
+return
+end
+if self.Mode == "Hold" then
+self.Held = down
+if self.Linked then
+self.Linked:SetValue(down)
+end
+Util.Try(self.Callback, down)
+return
+end
+if not down then
+return
+end
+self.Toggled = not self.Toggled
+if self.Linked then
+self.Linked:SetValue(not self.Linked.Value)
+end
+Util.Try(self.Callback, self:GetState())
+end
+function KeyPicker:GetState()
+if self.Mode == "Always" then
+return true
+end
+if self.Mode == "Press" then
+return self.Held
+end
+if self.Mode == "Hold" then
+return self.Held
+end
+return self.Linked and self.Linked.Value or self.Toggled
+end
+function KeyPicker:SetValue(value)
+if type(value) == "table" then
+self:SetMode(value.Mode or value[2] or self.Mode)
+value = value.Key or value[1]
+end
+self:SetKey(Util.KeyName(value) or "None")
+end
+function KeyPicker:Serialize()
+return { Key = self.Value, Mode = self.Mode }
+end
+function KeyPicker:Deserialize(saved)
+self:SetValue(saved)
+end
+function KeyPicker:SetMode(mode)
+self.Mode = mode
+self.Held, self.Toggled = false, false
+if self.Linked and mode == "Always" then
+self.Linked:SetValue(true)
+elseif self.Linked and mode == "Hold" then
+self.Linked:SetValue(false)
+end
+end
+function KeyPicker:OpenModeMenu()
+Popup.List({
+Anchor = self.Button,
+Values = { "Toggle", "Hold", "Press", "Always" },
+IsSelected = function(mode)
+return self.Mode == mode
+end,
+OnPick = function(mode)
+self:SetMode(mode)
+return true
+end,
+})
+end
+Keybinds.ShortNames = {
+LeftControl = "LCtrl", RightControl = "RCtrl", LeftShift = "LShift", RightShift = "RShift",
+LeftAlt = "LAlt", RightAlt = "RAlt", Backquote = "`", Return = "Enter", Escape = "Esc",
+CapsLock = "Caps", PageUp = "PgUp", PageDown = "PgDn", Insert = "Ins",
+}
+function Keybinds.Short(name)
+return Keybinds.ShortNames[name] or name
+end
+function Keybinds.Capture(input)
+local picker = State.Binding
+if input.UserInputType == Enum.UserInputType.Touch then
+State.Binding = nil
+picker:Render()
+return
+end
+local name = Util.InputName(input)
+if not name then
+return
+end
+State.Binding = nil
+if name == "Escape" then
+picker:Render()
+return
+end
+if name == "Backspace" or name == "Delete" then
+name = "None"
+end
+picker:SetKey(name)
+end
+function Keybinds.Dispatch(name, down)
+for index = #State.KeyPickers, 1, -1 do
+local picker = State.KeyPickers[index]
+if not picker.Button.Parent then
+table.remove(State.KeyPickers, index)
+elseif picker.Value == name then
+picker:Press(down)
+end
+end
+end
+function ColorPicker.New(row, idx, info)
+local picker = setmetatable({ Type = "ColorPicker", Value = info.Default or Color3.new(1, 1, 1), Row = row, Item = row.Item, Container = row.Container }, ColorPicker)
+picker.Hue, picker.Sat, picker.Vib = picker.Value:ToHSV()
+picker.Swatch = Draw.Box("TextButton", { Size = UDim2.fromOffset(30, Util.Metric("Row") - 10) }, nil, "Outline", 6, 2)
+picker.Swatch.BackgroundTransparency = 0
+row:AddRight(picker.Swatch, 30)
+picker.Swatch.Activated:Connect(function()
+picker:Open()
+end)
+Widget.Register(picker, idx, info)
+picker:Render()
+return picker
+end
+function ColorPicker:Render()
+self.Swatch.BackgroundColor3 = self.Value
+local view = self.View
+if not view then
+return
+end
+view.Field.BackgroundColor3 = Color3.fromHSV(self.Hue, 1, 1)
+view.Cursor.Position = UDim2.fromScale(self.Sat, 1 - self.Vib)
+view.HueCursor.Position = UDim2.fromScale(0.5, self.Hue)
+view.Preview.BackgroundColor3 = self.Value
+if not view.Hex:IsFocused() then
+view.Hex.Text = Util.Hex(self.Value)
+end
+end
+function ColorPicker:Commit()
+self.Value = Color3.fromHSV(self.Hue, self.Sat, self.Vib)
+self:Render()
+self:Fire()
+end
+function ColorPicker:SetValueRGB(color)
+self.Value = color
+self.Hue, self.Sat, self.Vib = color:ToHSV()
+self:Render()
+self:Fire()
+end
+function ColorPicker:SetValue(value)
+local color = typeof(value) == "Color3" and value or Util.FromHex(value)
+if color then
+self:SetValueRGB(color)
+end
+end
+function ColorPicker:Serialize()
+return Util.Hex(self.Value)
+end
+function ColorPicker:Drag(target, handler)
+target.InputBegan:Connect(function(input)
+if not Util.IsPointer(input) then
+return
+end
+handler(input.Position)
+State.Drag = {
+Move = function(move)
+handler(move.Position)
+end,
+}
+end)
+end
+function ColorPicker:BuildField(face, size)
+local field = Draw.Box("TextButton", { Position = UDim2.fromOffset(10, 10), Size = UDim2.fromOffset(size, size), BackgroundTransparency = 0, Parent = face }, nil, "Outline", 6, 2)
+local white = Draw.Box("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(1, 1, 1), Parent = field }, nil, nil, 6)
+white.BackgroundTransparency = 0
+Draw.New("UIGradient", { Transparency = NumberSequence.new(0, 1), Parent = white })
+local black = Draw.Box("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), Parent = field }, nil, nil, 6)
+black.BackgroundTransparency = 0
+Draw.New("UIGradient", { Rotation = 90, Transparency = NumberSequence.new(1, 0), Parent = black })
+local cursor = Draw.New("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(12, 12), BackgroundTransparency = 1, ZIndex = 3, Parent = field })
+Draw.Corner(cursor, UDim.new(1, 0))
+Draw.New("UIStroke", { Color = Color3.new(1, 1, 1), Thickness = 2, Parent = cursor })
+self:Drag(field, function(position)
+local origin, extent = field.AbsolutePosition, field.AbsoluteSize
+self.Sat = math.clamp((position.X - origin.X) / extent.X, 0, 1)
+self.Vib = 1 - math.clamp((position.Y - origin.Y) / extent.Y, 0, 1)
+self:Commit()
+end)
+return field, cursor
+end
+function ColorPicker:BuildHue(face, size)
+local bar = Draw.Box("TextButton", { Position = UDim2.fromOffset(size + 20, 10), Size = UDim2.fromOffset(Config.ColorPicker.Hue, size), BackgroundColor3 = Color3.new(1, 1, 1), Parent = face }, nil, "Outline", 4, 2)
+bar.BackgroundTransparency = 0
+local keys = {}
+for step = 0, 6 do
+table.insert(keys, ColorSequenceKeypoint.new(step / 6, Color3.fromHSV(step / 6 % 1, 1, 1)))
+end
+Draw.New("UIGradient", { Rotation = 90, Color = ColorSequence.new(keys), Parent = bar })
+local cursor = Draw.Box("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.new(1, 6, 0, 4), ZIndex = 3, Parent = bar }, "White", "Outline", 2, 1)
+self:Drag(bar, function(position)
+self.Hue = math.clamp((position.Y - bar.AbsolutePosition.Y) / bar.AbsoluteSize.Y, 0, 0.999)
+self:Commit()
+end)
+return cursor
+end
+function ColorPicker:Open()
+local size = Config.ColorPicker.Field
+local boxHeight = Util.Metric("Box")
+local width = size + Config.ColorPicker.Hue + 30
+local card, face, scale = Popup.Card(width, size + boxHeight + 30)
+local field, cursor = self:BuildField(face, size)
+local hueCursor = self:BuildHue(face, size)
+local hexField = Draw.Box("Frame", { Position = UDim2.fromOffset(10, size + 20), Size = UDim2.new(1, -60, 0, boxHeight), Parent = face }, "Element", "Outline", 8, 2)
+local hex = Draw.Text({ ClassName = "TextBox", ClearTextOnFocus = false, Size = UDim2.fromScale(1, 1), TextXAlignment = Enum.TextXAlignment.Center, Parent = hexField }, "Body", Util.TextSize("Label"), "Text")
+local preview = Draw.Box("Frame", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, size + 20), Size = UDim2.fromOffset(40, boxHeight), BackgroundTransparency = 0, Parent = face }, nil, "Outline", 8, 2)
+hex.FocusLost:Connect(function()
+local color = Util.FromHex(hex.Text)
+if color then
+self:SetValueRGB(color)
+else
+self:Render()
+end
+end)
+self.View = { Field = field, Cursor = cursor, HueCursor = hueCursor, Hex = hex, Preview = preview }
+self:Render()
+Popup.Open(card, scale, self.Swatch, function()
+self.View = nil
+end)
+end
+function Dialog.Close()
+local cur = Dialog.Current
+if not cur then
+return
+end
+Dialog.Current = nil
+if cur.Container then
+cur.Container:Destroy()
+end
+local shrink = Anim.Tween(cur.Scale, { Scale = State.UserScale * 0.9 }, 0.14, "In")
+Anim.Tween(cur.Backdrop, { BackgroundTransparency = 1 }, 0.14)
+shrink.Completed:Once(function()
+Theme.UnbindTree(cur.Backdrop)
+cur.Backdrop:Destroy()
+end)
+end
+function Dialog.Show(spec)
+spec = spec or {}
+Dialog.Close()
+if not State.Gui then
+return nil
+end
+local backdrop = Draw.New("TextButton", {
+Name = "DialogBackdrop",
+Text = "",
+AutoButtonColor = false,
+BackgroundColor3 = Color3.new(0, 0, 0),
+BackgroundTransparency = 1,
+Size = UDim2.fromScale(1, 1),
+ZIndex = Config.Layer.Modal,
+Parent = State.Gui,
+})
+Anim.Tween(backdrop, { BackgroundTransparency = 0.45 }, Config.Tween.Fast)
+local viewportW = State.Gui.AbsoluteSize.X
+local modalW = math.clamp(spec.Width or 340, 260, math.max(260, math.floor(viewportW / math.max(0.5, State.UserScale or 1) - 32)))
+local card, face, scale = Popup.Card(modalW, 160)
+card.AnchorPoint = Vector2.new(0.5, 0.5)
+card.Position = UDim2.fromScale(0.5, 0.5)
+card.Parent = backdrop
+scale.Scale = State.UserScale * 0.86
+Motion.Spring(scale, "Scale", State.UserScale, "Fast", { Damping = 0.62 })
+local body = Container.New(face, { PadX = 14, PadY = 14, GapY = 8 })
+body:SetWidth(modalW)
+body.OnHeight = function(h)
+local shadow = Config.Group.Shadow
+card.Size = UDim2.fromOffset(modalW + shadow, math.max(120, h) + shadow)
+end
+body:AddParagraph({ Title = spec.Title or "Confirm", Content = spec.Content or spec.Description or "", Icon = spec.Icon })
+local buttons = spec.Buttons or {
+{ Title = spec.CancelText or "Cancel", Style = "Default" },
+{ Title = spec.ConfirmText or "Confirm", Style = spec.Style or "Primary", Callback = spec.Callback or spec.OnConfirm },
+}
+local firstBtn
+for index, btnSpec in ipairs(buttons) do
+local rawStyle = btnSpec.Style or btnSpec.Variant
+if rawStyle == "Secondary" then
+rawStyle = "Default"
+end
+local action = function()
+Dialog.Close()
+Util.Try(btnSpec.Callback or btnSpec.Func)
+end
+if not firstBtn then
+firstBtn = body:AddButton({ Text = btnSpec.Title or btnSpec.Text or "OK", Style = rawStyle or (index == #buttons and "Primary" or "Default"), Icon = btnSpec.Icon }, action)
+else
+firstBtn:AddButton({ Text = btnSpec.Title or btnSpec.Text or "OK", Style = rawStyle or (index == #buttons and "Primary" or "Default"), Icon = btnSpec.Icon }, action)
+end
+end
+Layout.Flush()
+Dialog.Current = { Backdrop = backdrop, Card = card, Scale = scale, Container = body }
+return Dialog.Current
+end
+function Sheet.Close()
+local cur = Sheet.Current
+if not cur then
+return
+end
+Sheet.Current = nil
+if cur.Container then
+cur.Container:Destroy()
+end
+Anim.Tween(cur.Backdrop, { BackgroundTransparency = 1 }, 0.18)
+local slide = Anim.Tween(cur.Panel, { Position = UDim2.new(1, 20, 0, 8) }, 0.2, "In")
+slide.Completed:Once(function()
+Theme.UnbindTree(cur.Backdrop)
+cur.Backdrop:Destroy()
+end)
+end
+function Sheet.Show(spec)
+spec = spec or {}
+Sheet.Close()
+if not State.Gui then
+return nil
+end
+local backdrop = Draw.New("TextButton", {
+Name = "SheetBackdrop",
+Text = "",
+AutoButtonColor = false,
+BackgroundColor3 = Color3.new(0, 0, 0),
+BackgroundTransparency = 1,
+Size = UDim2.fromScale(1, 1),
+ZIndex = Config.Layer.Modal,
+Parent = State.Gui,
+})
+backdrop.Activated:Connect(Sheet.Close)
+Anim.Tween(backdrop, { BackgroundTransparency = 0.45 }, Config.Tween.Fast)
+local sheetW = math.min(spec.Width or 320, math.max(240, State.Gui.AbsoluteSize.X - 40))
+local panel = Draw.Box("TextButton", {
+Name = "SheetPanel",
+AnchorPoint = Vector2.new(1, 0),
+Position = UDim2.new(1, sheetW + 20, 0, 8),
+Size = UDim2.new(0, sheetW, 1, -16),
+Parent = backdrop,
+}, "Panel", "Outline", 12, 3)
+Motion.Spring(panel, "Position", UDim2.new(1, -8, 0, 8), "Normal", { Damping = 0.72 })
+local header = Draw.Box("Frame", { Size = UDim2.new(1, 0, 0, 42), Parent = panel }, "PanelHeader", nil, 12)
+Draw.Box("Frame", { Position = UDim2.new(0, 0, 1, -12), Size = UDim2.new(1, 0, 0, 12), Parent = header }, "PanelHeader")
+Draw.Box("Frame", { AnchorPoint = Vector2.new(0, 1), Position = UDim2.fromScale(0, 1), Size = UDim2.new(1, 0, 0, 2), ZIndex = 2, Parent = header }, "Outline")
+Draw.Text({ Position = UDim2.fromOffset(14, 0), Size = UDim2.new(1, -50, 1, -2), Parent = header }, "Body", Util.TextSize("Group"), "Text", spec.Title or "Details")
+local closeBtn = Draw.Box("TextButton", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -8, 0.5, -1), Size = UDim2.fromOffset(26, 26), ZIndex = 3, Parent = header }, "Element", "Outline", 6, 2)
+Icons.Vector(closeBtn, "close", 14, "Text").Position = UDim2.fromOffset(6, 6)
+closeBtn.Activated:Connect(Sheet.Close)
+local scroll = Layout.ScrollFrame({ Position = UDim2.fromOffset(4, 46), Size = UDim2.new(1, -8, 1, -52), Parent = panel })
+local body = Container.New(scroll, { PadX = 10, PadY = 10, GapY = 8 })
+body:SetWidth(sheetW - 8 - Config.Page.ScrollBar)
+local builder = spec.Build or spec.Render
+if type(builder) == "function" then
+Util.Try(builder, body)
+end
+Layout.Flush()
+Sheet.Current = { Backdrop = backdrop, Panel = panel, Container = body, Close = Sheet.Close }
+return body
+end
+function Gui.ClearPrevious(parent)
+local env = type(getgenv) == "function" and getgenv() or nil
+if env and type(env.MarioHub) == "table" and env.MarioHub ~= Library and not env.MarioHub.Unloaded then
+Util.Try(env.MarioHub.Unload, env.MarioHub)
+end
+if env then
+env.MarioHub = Library
+end
+for _, child in ipairs(parent:GetChildren()) do
+if child:GetAttribute(Config.GuiAttribute) then
+child:Destroy()
+end
+end
+end
+function Gui.Setup()
+if State.Gui then
+return
+end
+local parent = Util.GuiParent()
+Gui.ClearPrevious(parent)
+State.Gui = Draw.New("ScreenGui", {
+Name = "MarioHub",
+ResetOnSpawn = false,
+IgnoreGuiInset = true,
+ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+DisplayOrder = 100,
+Parent = parent,
+})
+State.Gui:SetAttribute(Config.GuiAttribute, Library.Version)
+State.Overlay = Draw.New("Frame", { Name = "Overlay", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Visible = false, ZIndex = Config.Layer.Overlay, Parent = State.Gui })
+local catcher = Draw.New("TextButton", { Text = "", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 1, Parent = State.Overlay })
+catcher.MouseButton1Click:Connect(Popup.Close)
+catcher.MouseButton2Click:Connect(Popup.Close)
+Notify.Build()
+Tooltip.Build()
+Util.Connect(UserInputService.InputBegan, Gui.OnInputBegan)
+Util.Connect(UserInputService.InputChanged, Gui.OnInputChanged)
+Util.Connect(UserInputService.InputEnded, Gui.OnInputEnded)
+Util.Connect(RunService.Heartbeat, Gui.OnHeartbeat)
+Util.Every(20, Theme.Prune)
+end
+function Gui.OnInputBegan(input, processed)
+if State.Binding then
+Keybinds.Capture(input)
+return
+end
+if UserInputService:GetFocusedTextBox() then
+return
+end
+local name = Util.InputName(input)
+if not name then
+return
+end
+if name == State.MenuKey and State.Window and not processed then
+State.Window:Toggle()
+end
+if input.UserInputType == Enum.UserInputType.Keyboard or not processed then
+Keybinds.Dispatch(name, true)
+end
+end
+function Gui.OnInputChanged(input)
+if State.Drag and Util.IsMove(input) then
+State.Drag.Move(input)
+end
+if input.UserInputType == Enum.UserInputType.MouseMovement then
+Tooltip.Follow(UserInputService:GetMouseLocation())
+end
+end
+function Gui.OnInputEnded(input)
+if Util.IsPointer(input) and State.Drag then
+local drag = State.Drag
+State.Drag = nil
+Util.Try(drag.Stop)
+end
+local name = Util.InputName(input)
+if name then
+Keybinds.Dispatch(name, false)
+end
+end
+function Gui.OnHeartbeat(deltaTime)
+if deltaTime > 0 then
+State.Fps = State.Fps * 0.92 + (1 / deltaTime) * 0.08
+end
+for _, job in ipairs(State.Tasks) do
+job.Elapsed += deltaTime
+if job.Elapsed >= job.Interval and not job.Busy then
+job.Elapsed = 0
+job.Busy = true
+task.spawn(function()
+Util.Try(job.Run)
+job.Busy = false
+end)
+end
+end
+end
+function Gui.Draggable(handle, move, exclude)
+handle.InputBegan:Connect(function(input)
+if not Util.IsPointer(input) then
+return
+end
+for _, zone in ipairs(exclude or {}) do
+if zone.Visible and Util.Inside(zone, input.Position) then
+return
+end
+end
+local start = input.Position
+local begin = move(nil)
+State.Drag = {
+Move = function(moved)
+move(begin, moved.Position - start)
+end,
+}
+end)
+end
+function Window.DetectTouch(forced)
+if forced == "Mobile" or forced == "Desktop" then
+State.Touch = forced == "Mobile"
+return
+end
+State.Touch = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+end
+function Window.New(options)
+Window.DetectTouch(options.Layout)
+local size = options.Size or Vector2.new(Config.Window.Width, Config.Window.Height)
+if typeof(size) == "UDim2" then
+size = Vector2.new(size.X.Offset, size.Y.Offset)
+end
+local self = setmetatable({
+Title = options.Title or "Reicht",
+SubTitle = options.SubTitle or "",
+Desired = size,
+Size = size,
+Tabs = {},
+TabOrder = 0,
+ActiveTab = nil,
+Visible = false,
+Minimized = false,
+Compact = false,
+Query = "",
+}, Window)
+State.Window = self
+State.MenuKey = Util.KeyName(options.MenuKey or options.ToggleKey or options.MinimizeKey) or "LeftControl"
+self:BuildFrame()
+self:BuildTopbar()
+self:BuildSidebar()
+self:BuildMain()
+self:BuildGround()
+self:FitViewport()
+Util.Connect(State.Gui:GetPropertyChangedSignal("AbsoluteSize"), function()
+self:FitViewport()
+end)
+Util.Every(Config.TitleWaveInterval, function()
+if self.Visible then
+self:WaveTitle()
+end
+end)
+return self
+end
+function Window:BuildFrame()
+local shadow = Config.Window.Shadow
+local radius = Config.Window.Radius
+self.Root = Draw.New("Frame", { Name = "Window", BackgroundTransparency = 1, AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0.5), Visible = false, ZIndex = Config.Layer.Window, Parent = State.Gui })
+self.UserScale = Draw.New("UIScale", { Parent = self.Root })
+self.Pop = Draw.New("Frame", { BackgroundTransparency = 1, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromScale(1, 1), Parent = self.Root })
+self.PopScale = Draw.New("UIScale", { Parent = self.Pop })
+Draw.Box("Frame", { Position = UDim2.fromOffset(shadow, shadow), Size = UDim2.new(1, -shadow, 1, -shadow), Parent = self.Pop }, "Shadow", nil, radius)
+self.Body = Draw.Box("Frame", { Size = UDim2.new(1, -shadow, 1, -shadow), BackgroundColor3 = Color3.new(1, 1, 1), BackgroundTransparency = 0, ClipsDescendants = true, Parent = self.Pop }, nil, "Outline", radius, Config.Window.Stroke)
+local gradient = Draw.New("UIGradient", { Rotation = 90, Parent = self.Body })
+Theme.OnRender(gradient, function()
+gradient.Color = ColorSequence.new(Theme.Colors.Backdrop, Theme.Colors.BackdropAlt)
+end)
+end
+function Window:BuildTopbar()
+local height, radius = Config.Window.Topbar, Config.Window.Radius
+local topbar = Draw.Box("Frame", { Name = "Topbar", Size = UDim2.new(1, 0, 0, height), ClipsDescendants = true, ZIndex = 5, Parent = self.Body }, "Topbar", nil, radius)
+self.TopbarFill = Draw.Box("Frame", { Position = UDim2.new(0, 0, 1, -radius), Size = UDim2.new(1, 0, 0, radius), Parent = topbar }, "Topbar")
+self.TopbarLine = Draw.Box("Frame", { AnchorPoint = Vector2.new(0, 1), Position = UDim2.fromScale(0, 1), Size = UDim2.new(1, 0, 0, 3), ZIndex = 3, Parent = topbar }, "Outline")
+self.Topbar = topbar
+self:BuildDecor(topbar)
+local left = Draw.New("Frame", { BackgroundTransparency = 1, Position = UDim2.fromOffset(14, 0), Size = UDim2.new(1, -200, 1, -3), ZIndex = 4, Parent = topbar })
+Draw.List(left, 10, true, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Center)
+self.Emblem = Draw.Emblem(left, 40)
+self:BuildTitle(left)
+self.SubtitlePill = self:BuildPill(left, self.SubTitle)
+local right = Draw.New("Frame", { BackgroundTransparency = 1, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -14, 0, 0), Size = UDim2.new(0, 180, 1, -3), ZIndex = 4, Parent = topbar })
+Draw.List(right, 8, true, Enum.HorizontalAlignment.Right, Enum.VerticalAlignment.Center)
+self:BuildLanguagePill(right)
+local _, minimizeFace = self:BuildTopButton(right, "Minimize", "Coin", "CoinDark", "Ink", function()
+self:SetMinimized(not self.Minimized)
+end)
+self.ExpandBar = Draw.Box("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.new(0, 3, 0, 0), Parent = minimizeFace }, "Ink", nil, 2)
+self:BuildTopButton(right, "Close", "Accent", "AccentDark", "White", function()
+self:SetVisible(false)
+if not State.Touch then
+Library:Notify(self.Title, Lang.Format("Hidden", Keybinds.Short(State.MenuKey)), 3, "Info")
+end
+end)
+Gui.Draggable(topbar, function(begin, delta)
+if not delta then
+return self.Root.Position
+end
+self.Root.Position = begin + UDim2.fromOffset(delta.X, delta.Y)
+self:ClampPosition()
+return begin
+end, { right })
+end
+function Window:BuildDecor(topbar)
+self.Clouds, self.Stars = {}, {}
+for index, spot in ipairs({ { 0.44, 8, 42 }, { 0.6, 22, 30 } }) do
+local cloud = Draw.Cloud(topbar, spot[3])
+cloud.Position = UDim2.new(spot[1], 0, 0, spot[2])
+cloud.ZIndex = 2
+Anim.Loop("DecorClouds", cloud, { Position = UDim2.new(spot[1], 14, 0, spot[2] + 2) }, 4 + index, "Sine", true)
+table.insert(self.Clouds, cloud)
+end
+for index, spot in ipairs({ { 0.42, 10, 12 }, { 0.48, 30, 9 }, { 0.54, 14, 14 }, { 0.6, 32, 10 }, { 0.66, 8, 11 }, { 0.71, 26, 8 } }) do
+local star = Draw.Text({ AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(spot[1], 0, 0, spot[2]), Size = UDim2.fromOffset(spot[3] + 4, spot[3] + 4), TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 2, Parent = topbar }, "Glyph", spot[3], "DecorColor")
+star.TextTransparency = 0.15
+Anim.Loop("DecorStars", star, { TextTransparency = 0.8 }, 0.9 + index * 0.37, "Sine", true)
+table.insert(self.Stars, star)
+end
+self.Spooky = {}
+for index, spot in ipairs({ { 0.5, 10, 30, "pumpkin" }, { 0.55, 26, 20, "bat" }, { 0.6, 6, 30, "boo" }, { 0.645, 28, 18, "candy" }, { 0.69, 10, 30, "pumpkin" }, { 0.735, 20, 20, "bat" } }) do
+local item = Sprite.New(topbar, spot[4], spot[3])
+item.AnchorPoint = Vector2.new(0.5, 0)
+item.Position = UDim2.new(spot[1], 0, 0, spot[2])
+item.ZIndex = 2
+local swing = spot[4] == "bat" and 14 or 6
+Anim.Loop("DecorSpooky", item, { Position = UDim2.new(spot[1], 0, 0, spot[2] + (spot[4] == "bat" and 6 or 3)), Rotation = index % 2 == 0 and swing or -swing }, 1.2 + index * 0.35, "Sine", true)
+table.insert(self.Spooky, item)
+end
+self:BuildSpookyBody()
+Theme.OnRender(self.Stars, function()
+self:RenderDecor()
+end)
+end
+function Window:BuildSpookyBody()
+self.SpookyBody = {}
+local shadow, radius = Config.Window.Shadow, Config.Window.Radius
+local glow = Draw.New("Frame", { Name = "Glow", BackgroundTransparency = 1, Position = UDim2.fromOffset(-3, -3), Size = UDim2.new(1, 6 - shadow, 1, 6 - shadow), ZIndex = 0, Parent = self.Pop })
+Draw.Corner(glow, radius + 3)
+local glowStroke = Draw.New("UIStroke", { Thickness = 4, Transparency = 0.25, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = glow })
+Theme.OnRender(glowStroke, function()
+glowStroke.Color = Theme.Colors.Glow or Theme.Colors.Accent
+end)
+Anim.Loop("DecorSpookyGlow", glowStroke, { Transparency = 0.75, Thickness = 2 }, 1.8, "Sine", true)
+self.SpookyGlow = glow
+table.insert(self.SpookyBody, glow)
+local fog = Draw.New("Frame", { Name = "Fog", AnchorPoint = Vector2.new(0, 1), Position = UDim2.fromScale(0, 1), Size = UDim2.new(1, 0, 0, 70), BorderSizePixel = 0, ZIndex = 1, Parent = self.Body })
+Draw.Corner(fog, radius)
+local fogShape = Draw.New("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0.72) }), Parent = fog })
+Theme.OnRender(fog, function()
+fog.BackgroundColor3 = Theme.Colors.Fog or Theme.Colors.Accent
+end)
+Anim.Loop("DecorSpookyBody", fogShape, { Offset = Vector2.new(0, 0.12) }, 3.2, "Sine", true)
+self.SpookyFog = fog
+table.insert(self.SpookyBody, fog)
+local hanger = Draw.New("Frame", { Name = "Spider", BackgroundTransparency = 1, Position = UDim2.new(1, -16, 0, Config.Window.Topbar + 60), Size = UDim2.fromOffset(16, 16), ZIndex = 9, Parent = self.Body })
+Draw.New("Frame", { AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 0, 4), Size = UDim2.new(0, 1, 0, 300), BackgroundColor3 = Color3.fromRGB(200, 186, 222), BackgroundTransparency = 0.5, Parent = hanger })
+local spider = Sprite.New(hanger, "spider", 16)
+Anim.Loop("DecorSpookyBody", hanger, { Position = UDim2.new(1, -16, 0, Config.Window.Topbar + 150) }, 3.4, "Sine", true)
+Anim.Loop("DecorSpookyBody", spider, { Rotation = 10 }, 0.9, "Sine", true)
+self.SpookySpider = hanger
+table.insert(self.SpookyBody, hanger)
+end
+function Window:RenderDecor()
+local wide = self.Size and self.Size.X >= 700
+local decor = Theme.Colors.Decor
+local shown = self.Visible ~= false
+local expanded = shown and not self.Minimized
+local showClouds = shown and wide and decor == "Clouds"
+local showStars = shown and wide and decor == "Stars"
+local showSpooky = shown and wide and decor == "Halloween"
+local showGlow = shown and decor == "Halloween"
+local showSpookyBody = expanded and decor == "Halloween"
+for _, cloud in ipairs(self.Clouds) do
+cloud.Visible = showClouds
+end
+for _, star in ipairs(self.Stars) do
+star.Text = Theme.Colors.DecorGlyph or "✦"
+star.Visible = showStars
+end
+for _, item in ipairs(self.Spooky or {}) do
+item.Visible = showSpooky
+end
+if self.SpookyGlow then
+self.SpookyGlow.Visible = showGlow
+end
+if self.SpookyFog then
+self.SpookyFog.Visible = showSpookyBody
+end
+if self.SpookySpider then
+self.SpookySpider.Visible = showSpookyBody
+end
+Anim.SetGroupActive("Emblem", shown)
+Anim.SetGroupActive("DecorClouds", showClouds)
+Anim.SetGroupActive("DecorStars", showStars)
+Anim.SetGroupActive("DecorSpooky", showSpooky)
+Anim.SetGroupActive("DecorSpookyGlow", showGlow)
+Anim.SetGroupActive("DecorSpookyBody", showSpookyBody)
+end
+function Window:BuildTitle(parent)
+local holder = Draw.New("Frame", { BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.fromOffset(0, 34), LayoutOrder = 1, Parent = parent })
+Draw.List(holder, 1, true, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Center)
+self.Letters = {}
+local size = Config.Text.Title
+local index = 0
+for char in self.Title:upper():gmatch(utf8.charpattern) do
+local bounds = Layout.Measure(char, size, "Logo", 200)
+local slot = Draw.New("Frame", { BackgroundTransparency = 1, Size = UDim2.fromOffset(char == " " and size * 0.3 or bounds.X, size + 4), LayoutOrder = #self.Letters + 1, Parent = holder })
+local letter = Draw.Text({ Text = char, Size = UDim2.fromScale(1, 1), TextXAlignment = Enum.TextXAlignment.Center, Parent = slot }, "Logo", size, Config.TitleColors[index % #Config.TitleColors + 1])
+Draw.Stroke(letter, "Ink", 2)
+table.insert(self.Letters, letter)
+index += char == " " and 0 or 1
+end
+self.TitleHolder = holder
+end
+function Window:WaveTitle()
+for index, letter in ipairs(self.Letters) do
+letter.Position = UDim2.new()
+Anim.Tween(letter, { Position = UDim2.fromOffset(0, -6) }, 0.14, "Out", 0, true, index * 0.045)
+end
+end
+function Window:BuildPill(parent, text)
+local pill = Draw.Box("Frame", { AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.fromOffset(0, 22), LayoutOrder = 2, Parent = parent }, "Shadow", nil, UDim.new(1, 0))
+pill.BackgroundTransparency = 0.45
+Draw.Padding(pill, 0, 10, 0, 10)
+Draw.Text({ AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.fromScale(0, 1), Parent = pill }, "Body", Util.TextSize("Small"), "TopbarText", text)
+pill.Visible = text ~= ""
+return pill
+end
+function Window:BuildLanguagePill(parent)
+local pill = Draw.Box("Frame", { Size = UDim2.fromOffset(74, 28), LayoutOrder = 1, Parent = parent }, "Shadow", "Outline", UDim.new(1, 0), 2)
+pill.BackgroundTransparency = 0.35
+local segments = {}
+for index, code in ipairs({ "EN", "TH" }) do
+local segment = Draw.Box("TextButton", { Position = UDim2.new((index - 1) * 0.5, 2, 0, 2), Size = UDim2.new(0.5, -4, 1, -4), Parent = pill }, "Coin", nil, UDim.new(1, 0))
+local label = Draw.Text({ Text = code, Size = UDim2.fromScale(1, 1), TextXAlignment = Enum.TextXAlignment.Center, Parent = segment }, "Body", 13, "White")
+segment.Activated:Connect(function()
+Library:SetLanguage(code)
+end)
+segments[code] = { Button = segment, Label = label }
+end
+local function Render()
+for code, segment in pairs(segments) do
+local active = State.Language == code
+Anim.Tween(segment.Button, { BackgroundTransparency = active and 0 or 1 }, Config.Tween.Fast)
+Theme.Bind(segment.Label, { TextColor3 = active and "Ink" or "TopbarText" })
+end
+end
+Lang.OnChange(pill, Render)
+Render()
+end
+function Window:BuildTopButton(parent, kind, face, shade, ink, callback)
+local size = State.Touch and 36 or 30
+local holder, top = Draw.Block(parent, face, shade, 8, 3)
+holder.Size = UDim2.fromOffset(size, size + 1)
+holder.LayoutOrder = 2 + #parent:GetChildren()
+local strokes = kind == "Close" and { 45, -45 } or { 0 }
+for _, rotation in ipairs(strokes) do
+Draw.Box("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.new(0.5, 0, 0, 3), Rotation = rotation, Parent = top }, ink, nil, 2)
+end
+local hit = Draw.New("TextButton", { Text = "", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 3, Parent = holder })
+hit.MouseButton1Down:Connect(function()
+Anim.Tween(top, { Position = UDim2.fromOffset(0, 2) }, 0.06, "Linear")
+end)
+hit.MouseButton1Up:Connect(function()
+Anim.Tween(top, { Position = UDim2.new() }, Config.Tween.Normal, "Back")
+end)
+hit.MouseLeave:Connect(function()
+Anim.Tween(top, { Position = UDim2.new() }, Config.Tween.Fast)
+end)
+hit.Activated:Connect(callback)
+return holder, top
+end
+function Window:BuildSidebar()
+local top = Config.Window.Topbar
+local sidebar = Draw.Box("Frame", { Name = "Sidebar", Position = UDim2.fromOffset(0, top), Parent = self.Body }, "Sidebar")
+Draw.Box("Frame", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.fromScale(1, 0), Size = UDim2.new(0, 3, 1, 0), ZIndex = 3, Parent = sidebar }, "Outline")
+Draw.Box("Frame", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -3, 0, 0), Size = UDim2.new(0, 5, 1, 0), BackgroundTransparency = 0, Parent = sidebar }, "SidebarAlt")
+self.Sidebar = sidebar
+local scroll = Layout.ScrollFrame({ Position = UDim2.fromOffset(0, 8), Size = UDim2.new(1, -8, 1, -(Config.Window.UserCard + 8)), Parent = sidebar })
+scroll.ScrollBarThickness = 3
+self.TabScroll = scroll
+self.TabList = Container.New(scroll, { PadX = 8, PadY = 2, GapY = 4, Window = self })
+self:BuildUserCard(sidebar)
+end
+function Window:BuildUserCard(sidebar)
+local card = Draw.New("Frame", { Name = "User", BackgroundTransparency = 1, AnchorPoint = Vector2.new(0, 1), Position = UDim2.fromScale(0, 1), Size = UDim2.new(1, -8, 0, Config.Window.UserCard), Parent = sidebar })
+self.UserCard = card
+Draw.Box("Frame", { Size = UDim2.new(1, 0, 0, 2), BackgroundTransparency = 0.5, Parent = card }, "SidebarAlt")
+local avatar = Draw.Box("ImageLabel", { AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 12, 0.5, 0), Size = UDim2.fromOffset(36, 36), Parent = card }, "PanelHeader", "Outline", UDim.new(1, 0), 2)
+task.spawn(function()
+local ok, image = pcall(Players.GetUserThumbnailAsync, Players, LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100)
+if ok then
+avatar.Image = image
+end
+end)
+self.UserName = Draw.Text({ Text = LocalPlayer.DisplayName, Position = UDim2.fromOffset(56, 11), Size = UDim2.new(1, -62, 0, 18), TextTruncate = Enum.TextTruncate.AtEnd, Parent = card }, "Body", 14, "SidebarText")
+self.UserTag = Draw.Text({ Text = "@" .. LocalPlayer.Name, Position = UDim2.fromOffset(56, 29), Size = UDim2.new(1, -62, 0, 16), TextTruncate = Enum.TextTruncate.AtEnd, Parent = card }, "Desc", 12, "SidebarMuted")
+self.Avatar = avatar
+end
+function Window:BuildMain()
+local header = Config.Window.Header
+local main = Draw.New("Frame", { Name = "Main", BackgroundTransparency = 1, Position = UDim2.fromOffset(0, Config.Window.Topbar), Parent = self.Body })
+self.Main = main
+self.HeaderTitle = Draw.Text({ Position = UDim2.fromOffset(16, 10), Size = UDim2.new(1, -230, 0, 26), TextTruncate = Enum.TextTruncate.AtEnd, Parent = main }, "Display", Config.Text.Header, "Text")
+self.HeaderDesc = Draw.Text({ Position = UDim2.fromOffset(16, 36), Size = UDim2.new(1, -230, 0, 16), TextTruncate = Enum.TextTruncate.AtEnd, Parent = main }, "Desc", Util.TextSize("Desc") + 1, "SubText")
+local field = Draw.Box("Frame", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -16, 0, header / 2), Size = UDim2.fromOffset(200, Util.Metric("Box")), Parent = main }, "Element", "Outline", UDim.new(1, 0), 2)
+local icon = Icons.Vector(field, "search", 14, "SubText")
+icon.AnchorPoint = Vector2.new(0, 0.5)
+icon.Position = UDim2.new(0, 10, 0.5, 0)
+local clearBtn = Draw.Box("TextButton", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -6, 0.5, 0), Size = UDim2.fromOffset(18, 18), Visible = false, Parent = field }, "Hover", nil, UDim.new(1, 0))
+Icons.Vector(clearBtn, "close", 10, "SubText").Position = UDim2.fromOffset(4, 4)
+self.SearchClear = clearBtn
+self.Search = Draw.Text({ ClassName = "TextBox", Text = "", ClearTextOnFocus = false, Position = UDim2.fromOffset(28, 0), Size = UDim2.new(1, -52, 1, 0), Parent = field }, "Body", Util.TextSize("Label"), "Text")
+Lang.Bind(self.Search, Lang.Strings.Search, "PlaceholderText")
+Theme.Bind(self.Search, { PlaceholderColor3 = "Muted" })
+self.SearchField = field
+clearBtn.Activated:Connect(function()
+self.Search.Text = ""
+end)
+self.Search:GetPropertyChangedSignal("Text"):Connect(function()
+self.Query = self.Search.Text:lower()
+clearBtn.Visible = self.Query ~= ""
+self:ApplyFilter()
+end)
+self.PageHost = Draw.New("Frame", { BackgroundTransparency = 1, Position = UDim2.fromOffset(0, header), Size = UDim2.new(1, 0, 1, -header), ClipsDescendants = true, ZIndex = 2, Parent = main })
+local emptyBox = Draw.Box("Frame", { Name = "EmptySearch", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.45), Size = UDim2.fromOffset(200, 74), Visible = false, ZIndex = 5, Parent = self.PageHost }, "Panel", "Outline", 10, 2)
+local booSprite = Sprite.New(emptyBox, "boo", 24)
+booSprite.AnchorPoint = Vector2.new(0.5, 0)
+booSprite.Position = UDim2.new(0.5, 0, 0, 10)
+Draw.Text({ Position = UDim2.fromOffset(8, 40), Size = UDim2.new(1, -16, 0, 24), TextXAlignment = Enum.TextXAlignment.Center, Parent = emptyBox }, "Body", Util.TextSize("Label"), "Muted", Lang.Strings.NoResults)
+self.EmptyState = emptyBox
+Particles.Build(main)
+end
+function Window:BuildGround()
+local height, radius = Config.Window.Ground, Config.Window.Radius
+local ground = Draw.Box("Frame", { Name = "Ground", AnchorPoint = Vector2.new(0, 1), Position = UDim2.fromScale(0, 1), Size = UDim2.new(1, 0, 0, height), ClipsDescendants = true, ZIndex = 3, Parent = self.Body }, "Brick", nil, radius)
+Draw.Box("Frame", { Size = UDim2.new(1, 0, 0, radius), Parent = ground }, "Brick")
+local bricks = Draw.New("Frame", { BackgroundTransparency = 1, Position = UDim2.fromOffset(6, 6), Size = UDim2.new(1, -12, 1, -8), ClipsDescendants = true, Parent = ground })
+Draw.Bricks(bricks, 28, "BrickDark")
+Draw.Box("Frame", { Size = UDim2.new(1, 0, 0, 6), Parent = ground }, "Grass")
+Draw.Box("Frame", { Position = UDim2.fromOffset(0, 6), Size = UDim2.new(1, 0, 0, 2), Parent = ground }, "GrassDark")
+Draw.Box("Frame", { Size = UDim2.new(1, 0, 0, 3), Parent = ground }, "Outline")
+self.Ground = ground
+local gripSize = State.Touch and 34 or 24
+local grip = Draw.New("TextButton", { Name = "Grip", Text = "", AutoButtonColor = false, BackgroundTransparency = 1, AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -2, 1, -2), Size = UDim2.fromOffset(gripSize, gripSize), ZIndex = 4, Parent = ground })
+local gripIcon = Icons.Vector(grip, "grip", 14, "White")
+gripIcon.AnchorPoint = Vector2.new(1, 1)
+gripIcon.Position = UDim2.new(1, -2, 1, -2)
+self.Grip = grip
+Gui.Draggable(grip, function(begin, delta)
+if not delta then
+return { Size = self.Size, Position = self.Root.Position }
+end
+self:ResizeFrom(begin, Vector2.new(delta.X, delta.Y))
+return begin
+end)
+end
+function Window:ResizeFrom(begin, delta)
+if self.Minimized then
+return
+end
+self.Desired = begin.Size + delta / State.UserScale
+self:FitViewport()
+local grown = (self.Size.X - begin.Size.X) * State.UserScale
+self.Root.Position = begin.Position + UDim2.fromOffset(math.floor(grown / 2), 0)
+self:ClampPosition()
+end
+function Window:MinSize()
+if State.Touch then
+return Config.Window.TouchMinWidth, Config.Window.TouchMinHeight
+end
+return Config.Window.MinWidth, Config.Window.MinHeight
+end
+function Window:ClampPosition()
+if not State.Gui or not self.Root then
+return
+end
+local viewport = State.Gui.AbsoluteSize
+if viewport.X <= 0 or viewport.Y <= 0 then
+return
+end
+local scaleFactor = math.max(0.5, State.UserScale or 1)
+local halfW = math.floor((self.Size.X * scaleFactor) / 2)
+local topH = math.floor(Config.Window.Topbar * scaleFactor)
+local pos = self.Root.Position
+local absX = viewport.X * pos.X.Scale + pos.X.Offset
+local absY = viewport.Y * pos.Y.Scale + pos.Y.Offset
+local minX = math.min(halfW + 6, viewport.X / 2)
+local maxX = math.max(minX, viewport.X - halfW - 6)
+local clampedX = math.clamp(absX, minX, maxX)
+local clampedY = math.clamp(absY, 6, math.max(6, viewport.Y - topH - 6))
+self.Root.Position = UDim2.new(pos.X.Scale, math.floor(clampedX - viewport.X * pos.X.Scale + 0.5), pos.Y.Scale, math.floor(clampedY - viewport.Y * pos.Y.Scale + 0.5))
+end
+function Window:FitViewport()
+local viewport = State.Gui.AbsoluteSize
+if viewport.X <= 0 then
+return
+end
+local margin = (State.Touch and Config.Window.TouchMargin or Config.Window.Margin) * 2
+local baseMinW, baseMinH = self:MinSize()
+local scaleFactor = math.max(0.5, State.UserScale or 1)
+local availW = math.max(260, (viewport.X - margin) / scaleFactor)
+local availH = math.max(220, (viewport.Y - margin) / scaleFactor)
+local minWidth = math.min(baseMinW, availW)
+local minHeight = math.min(baseMinH, availH)
+self.Size = Vector2.new(
+math.floor(math.clamp(self.Desired.X, minWidth, availW)),
+math.floor(math.clamp(self.Desired.Y, minHeight, availH))
+)
+self:ApplyLayout()
+self:ClampPosition()
+if Float.Clamp then
+Float.Clamp()
+end
+end
+function Window:ApplyLayout()
+local width, height = self.Size.X, self.Size.Y
+local shadow = Config.Window.Shadow
+self.Compact = width < Config.Window.CompactBreakpoint
+local sidebar = self.Compact and Config.Window.SidebarCompact or Config.Window.Sidebar
+local bodyHeight = height - Config.Window.Topbar - Config.Window.Ground
+self.Root.Size = UDim2.fromOffset(width + shadow, (self.Minimized and Config.Window.Topbar or height) + shadow)
+if not self.Placed then
+self.Placed = true
+self.Root.Position = UDim2.new(0.5, 0, 0.5, -math.floor((height + shadow) * State.UserScale / 2))
+end
+self.UserScale.Scale = State.UserScale
+self.Sidebar.Size = UDim2.fromOffset(sidebar, bodyHeight)
+self.Main.Position = UDim2.fromOffset(sidebar, Config.Window.Topbar)
+self.Main.Size = UDim2.fromOffset(width - sidebar, bodyHeight)
+self.TabList:SetWidth(sidebar - 8 - 3)
+local pageWidth = width - sidebar
+for _, tab in ipairs(self.Tabs) do
+tab.PendingWidth = pageWidth
+tab:ApplyCompact(self.Compact)
+end
+if self.ActiveTab then
+self.ActiveTab:ApplyWidth()
+end
+for _, section in ipairs(self.Sections or {}) do
+section.Hidden = self.Compact
+end
+self.TabList:MarkDirty()
+self:ApplyChrome(width, height)
+end
+function Window:ApplyShort(height)
+local short = height < 430
+local header = short and 46 or Config.Window.Header
+self.UserCard.Visible = not short
+self.TabScroll.Size = UDim2.new(1, -8, 1, -(short and 8 or Config.Window.UserCard + 8))
+self.HeaderDesc.Visible = not short
+self.HeaderTitle.Position = UDim2.fromOffset(16, short and 11 or 10)
+self.SearchField.Position = UDim2.new(1, -16, 0, header / 2)
+self.PageHost.Position = UDim2.fromOffset(0, header)
+self.PageHost.Size = UDim2.new(1, 0, 1, -header)
+end
+function Window:ApplyChrome(width, height)
+self:ApplyShort(height)
+local narrow = width < 460
+self.SubtitlePill.Visible = self.SubTitle ~= "" and width >= 700
+self:RenderDecor()
+self.Emblem.Visible = width >= 380
+self.TitleHolder.Visible = width >= 340
+local searchWidth = self.Compact and (narrow and 110 or 140) or 200
+self.SearchField.Size = UDim2.fromOffset(searchWidth, Util.Metric("Box"))
+self.HeaderTitle.Size = UDim2.new(1, -(searchWidth + 44), 0, 26)
+self.HeaderDesc.Size = UDim2.new(1, -(searchWidth + 44), 0, 16)
+self.UserName.Visible = not self.Compact
+self.UserTag.Visible = not self.Compact
+self.Avatar.Position = UDim2.new(0, self.Compact and 10 or 12, 0.5, 0)
+end
+function Window:AddTabSection(text)
+local label = Draw.Text({ Name = "Section" }, "Body", Config.Text.Section - 1, "SidebarMuted")
+Lang.Bind(label, text, "Text", string.upper)
+Draw.Padding(label, 6, 0, 0, 6)
+local item = self.TabList:Add(label, { Height = 24 })
+self.Sections = self.Sections or {}
+table.insert(self.Sections, item)
+item.Hidden = self.Compact
+return item
+end
+function Window:AddTab(name, icon, description)
+if type(name) == "table" and not name.EN and not name.TH then
+icon = name.Icon or icon
+description = name.Description or name.Desc or description
+name = name.Title or name.Name or name.Text or "Tab"
+end
+local tab = Tab.New(self, name, icon, description)
+table.insert(self.Tabs, tab)
+self:ApplyLayout()
+if not self.ActiveTab then
+self:SelectTab(tab)
+end
+return tab
+end
+function Window:SelectTab(tab)
+if type(tab) == "string" then
+for _, candidate in ipairs(self.Tabs) do
+if Lang.Resolve(candidate.Name) == tab or candidate.Name == tab then
+tab = candidate
+break
+end
+end
+end
+if type(tab) ~= "table" or tab == self.ActiveTab then
+return
+end
+Popup.Close()
+local previous = self.ActiveTab
+self.ActiveTab = tab
+if previous then
+previous.Page.Visible = false
+previous:RenderButton()
+end
+tab:ApplyWidth()
+tab.Page.Visible = true
+tab.Page.Position = UDim2.fromOffset(0, 18)
+Anim.Tween(tab.Page, { Position = UDim2.new() }, Config.Tween.Slide)
+tab:RenderButton()
+Anim.Bump(tab.IconSlot, 6)
+Lang.Bind(self.HeaderTitle, tab.Name)
+Lang.Bind(self.HeaderDesc, tab.Description or "")
+local titleY = self.HeaderDesc.Visible and 10 or 11
+self.HeaderTitle.Position = UDim2.fromOffset(28, titleY)
+Anim.Tween(self.HeaderTitle, { Position = UDim2.fromOffset(16, titleY) }, Config.Tween.Slide, "Back")
+if (tab.FilteredQuery or "") ~= self.Query then
+self:ApplyFilter()
+elseif self.EmptyState then
+self.EmptyState.Visible = false
+end
+local cards = {}
+for _, box in ipairs(tab.Groupboxes) do
+if not box.Item.Filtered and not box.Item.Hidden then
+table.insert(cards, box.Card)
+end
+end
+Fx.StaggerRise(cards)
+end
+function Window:ApplyFilter()
+local tab = self.ActiveTab
+if not tab then
+return
+end
+local query = self.Query
+tab.FilteredQuery = query
+local visibleCount = 0
+local columnChanged = false
+for _, box in ipairs(tab.Groupboxes) do
+local titleMatch = query == "" or box.SearchTitle:find(query, 1, true) ~= nil
+local anyMatch = false
+local boxChanged = false
+for _, entry in ipairs(box.Items) do
+local filtered = not titleMatch and (entry.Search == nil or not entry.Search:find(query, 1, true))
+if entry.Filtered ~= filtered then
+entry.Filtered = filtered
+boxChanged = true
+end
+anyMatch = anyMatch or (entry.Search ~= nil and not filtered)
+end
+local boxFiltered = not titleMatch and not anyMatch
+if box.Item.Filtered ~= boxFiltered then
+box.Item.Filtered = boxFiltered
+columnChanged = true
+end
+if not boxFiltered and not box.Item.Hidden then
+visibleCount += 1
+end
+if boxChanged then
+box:MarkDirty()
+box.Column:MarkDirty()
+columnChanged = true
+end
+end
+if columnChanged then
+tab:ApplyColumns()
+end
+if self.EmptyState then
+self.EmptyState.Visible = query ~= "" and visibleCount == 0
+end
+end
+function Window:SetVisible(visible)
+if visible == self.Visible then
+return
+end
+self.Visible = visible
+Popup.Close()
+if not visible then
+Dialog.Close()
+Sheet.Close()
+end
+Tooltip.Token = nil
+Tooltip.Frame.Visible = false
+Float.Render()
+self:RenderDecor()
+if visible then
+self.Root.Visible = true
+self.PopScale.Scale = 0.82
+Anim.Tween(self.PopScale, { Scale = 1 }, Config.Tween.Pop, "Back")
+self:WaveTitle()
+Particles.Resume()
+return
+end
+if State.Touch and Float.Button and not Float.Button.Visible then
+Float.SetVisible(true)
+end
+local shrink = Anim.Tween(self.PopScale, { Scale = 0.82 }, 0.14, "In")
+shrink.Completed:Once(function()
+if not self.Visible then
+self.Root.Visible = false
+end
+end)
+end
+function Window:Toggle()
+if not self.Ready then
+return
+end
+self:SetVisible(not self.Visible)
+end
+function Window:SetContentVisible(visible)
+self.Sidebar.Visible, self.Main.Visible, self.Ground.Visible = visible, visible, visible
+end
+function Window:SetMinimized(minimized)
+minimized = minimized == true
+if self.Minimized == minimized then
+return
+end
+self.Minimized = minimized
+Popup.Close()
+Dialog.Close()
+Sheet.Close()
+self:RenderDecor()
+if not minimized then
+self:SetContentVisible(true)
+self.TopbarFill.Visible, self.TopbarLine.Visible = true, true
+end
+Anim.Tween(self.TopbarFill, { BackgroundTransparency = minimized and 1 or 0 }, Config.Tween.Fast)
+Anim.Tween(self.TopbarLine, { BackgroundTransparency = minimized and 1 or 0 }, Config.Tween.Fast)
+Anim.Tween(self.ExpandBar, { Size = UDim2.new(0, 3, minimized and 0.5 or 0, 0) }, Config.Tween.Normal, "Back")
+local shadow = Config.Window.Shadow
+local height = minimized and Config.Window.Topbar or self.Size.Y
+local tween = Anim.Tween(self.Root, { Size = UDim2.fromOffset(self.Size.X + shadow, height + shadow) }, 0.34, "Out")
+tween.Completed:Once(function()
+if self.Minimized ~= minimized then
+return
+end
+if minimized then
+self:SetContentVisible(false)
+self.TopbarFill.Visible, self.TopbarLine.Visible = false, false
+else
+Particles.Resume()
+end
+end)
+end
+function Window:SetScale(scale)
+State.UserScale = math.clamp(tonumber(scale) or 1, Config.ScaleRange.Min, Config.ScaleRange.Max)
+self:FitViewport()
+end
+function Tab.New(window, name, icon, description)
+local resolvedIcon = (icon and icon ~= "") and icon or Icons.FromTitle(name, "qblock")
+local tab = setmetatable({ Window = window, Name = name, Icon = resolvedIcon, Description = description, Groupboxes = {} }, Tab)
+tab:BuildButton()
+tab:BuildPage()
+return tab
+end
+function Tab:BuildButton()
+local height = Util.Metric("Tab")
+local holder = Draw.New("TextButton", { Name = "Tab", Text = "", AutoButtonColor = false, BackgroundTransparency = 1 })
+local shade = Draw.Box("Frame", { Position = UDim2.fromOffset(0, 3), Size = UDim2.new(1, 0, 1, -3), BackgroundTransparency = 1, Parent = holder }, "Shadow", nil, 10)
+local face = Draw.Box("Frame", { Size = UDim2.new(1, 0, 1, -3), BackgroundTransparency = 1, Parent = holder }, "TabActive", nil, 10)
+local stroke = Draw.Stroke(face, "Outline", 2, true)
+stroke.Transparency = 1
+self.IconSlot = Draw.New("Frame", { BackgroundTransparency = 1, AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 8, 0.5, 0), Size = UDim2.fromOffset(24, 24), Parent = face })
+Icons.Create(self.IconSlot, self.Icon, 24, nil, self.Name)
+self.Label = Draw.Text({ Position = UDim2.fromOffset(40, 0), Size = UDim2.new(1, -44, 1, 0), TextTruncate = Enum.TextTruncate.AtEnd, Parent = face }, "Body", Util.TextSize("Label") + 1, "SidebarText", self.Name)
+self.Button, self.Face, self.Shade, self.Stroke = holder, face, shade, stroke
+holder.MouseEnter:Connect(function()
+self.Hovered = not State.Touch
+self:RenderButton()
+end)
+holder.MouseLeave:Connect(function()
+self.Hovered = false
+self:RenderButton()
+end)
+holder.Activated:Connect(function()
+self.Window:SelectTab(self)
+end)
+self.Window.TabList:Add(holder, { Height = height })
+Theme.OnRender(self, function()
+self:RenderButton(true)
+end)
+if self.Description then
+Tooltip.Attach(holder, self.Description)
+end
+end
+function Tab:RenderButton(instant)
+local active = self.Window.ActiveTab == self
+local duration = instant and 0 or Config.Tween.Normal
+local faceAlpha = active and 0 or (self.Hovered and 0.8 or 1)
+Anim.Tween(self.Face, { BackgroundTransparency = faceAlpha }, duration)
+Anim.Tween(self.Shade, { BackgroundTransparency = active and 0 or 1 }, duration)
+Anim.Tween(self.Stroke, { Transparency = active and 0 or 1 }, duration)
+Theme.Bind(self.Label, { TextColor3 = active and "TabActiveText" or "SidebarText" })
+end
+function Tab:Select()
+self.Window:SelectTab(self)
+end
+function Tab:ApplyWidth()
+local width = self.PendingWidth
+if not width then
+return
+end
+self.PendingWidth = nil
+self.Root:SetWidth(width - Config.Page.ScrollBar)
+self:ApplyColumns(width)
+end
+function Tab:ApplyCompact(compact)
+self.Label.Visible = not compact
+self.IconSlot.AnchorPoint = Vector2.new(compact and 0.5 or 0, 0.5)
+self.IconSlot.Position = compact and UDim2.fromScale(0.5, 0.5) or UDim2.new(0, 8, 0.5, 0)
+end
+function Tab:BuildPage()
+local page = Layout.ScrollFrame({ Name = "Page", Size = UDim2.fromScale(1, 1), Visible = false, Parent = self.Window.PageHost })
+local gap = Config.Gap.Column
+self.Page = page
+self.Root = Container.New(page, { PadX = Config.Page.Pad, PadY = 6, GapX = gap, GapY = gap, Window = self.Window, Tab = self })
+local leftHost = Draw.New("Frame", { Name = "Left", BackgroundTransparency = 1 })
+local rightHost = Draw.New("Frame", { Name = "Right", BackgroundTransparency = 1 })
+self.Left = Container.New(leftHost, { GapY = gap })
+self.Right = Container.New(rightHost, { GapY = gap })
+self.LeftItem = self.Root:Add(leftHost, { Width = 0.5, Height = function()
+return self.Left.ContentHeight
+end, Child = self.Left })
+self.Root:SameLine()
+self.RightItem = self.Root:Add(rightHost, { Height = function()
+return self.Right.ContentHeight
+end, Child = self.Right })
+end
+function Tab.ColumnHasVisible(column)
+for _, entry in ipairs(column.Items) do
+if not entry.Hidden and not entry.Filtered then
+return true
+end
+end
+return false
+end
+function Tab:ApplyColumns(pageWidth)
+self.PageWidth = pageWidth or self.PageWidth or 0
+local hasLeft = Tab.ColumnHasVisible(self.Left)
+local hasRight = Tab.ColumnHasVisible(self.Right)
+local single = self.PageWidth < Config.Window.TwoColumnMin or not hasLeft or not hasRight
+self.LeftItem.Hidden = not hasLeft
+self.RightItem.Hidden = not hasRight
+self.LeftItem.Width = (not single) and 0.5 or nil
+self.RightItem.SameLine = not single
+self.Root:MarkDirty()
+end
+function Tab:AddGroupbox(info, side)
+if type(info) ~= "table" or info.EN then
+info = { Name = info, Side = side }
+else
+info.Name = info.Name or info.Title or info.Text or ""
+end
+local column = info.Side == "Right" and self.Right or self.Left
+local shadow, header, radius = Config.Group.Shadow, Config.Group.Header, Config.Group.Radius
+local collapsed = info.Collapsed == true
+local initOpen = collapsed and 0 or 1
+local holder = Draw.New("Frame", { Name = "Groupbox", BackgroundTransparency = 1 })
+Draw.Box("Frame", { Position = UDim2.fromOffset(shadow, shadow), Size = UDim2.new(1, -shadow, 1, -shadow), Parent = holder }, "Shadow", nil, radius)
+local card = Draw.Box("Frame", { Size = UDim2.new(1, -shadow, 1, -shadow), Parent = holder }, "Panel", "Outline", radius, Config.Group.Stroke)
+local body = Draw.New("Frame", { BackgroundTransparency = 1, Position = UDim2.fromOffset(0, header), Size = UDim2.new(1, 0, 1, -header), ClipsDescendants = true, Visible = not collapsed, Parent = card })
+local box = Container.New(body, { PadX = Config.Group.PadX, PadY = Config.Group.PadY, Window = self.Window, Tab = self })
+setmetatable(box, Groupbox)
+box.Column, box.Card, box.Body, box.Collapsed, box.SearchTitle = column, card, body, collapsed, Lang.SearchText(info.Name)
+box.Open = Draw.New("NumberValue", { Value = initOpen })
+box:BuildHeader(card, info)
+box.Item = column:Add(holder, {
+Height = function()
+return header + math.floor(box.ContentHeight * box.Open.Value) + shadow
+end,
+Child = box,
+ChildInset = shadow,
+})
+box.Open.Changed:Connect(function(v)
+local show = v > 0.02
+box.Body.Visible = show
+if box.HeaderPatch then
+box.HeaderPatch.Visible = show
+box.HeaderPatch.BackgroundTransparency = math.clamp(1 - v * 1.4, 0, 1)
+end
+if box.HeaderDivider then
+box.HeaderDivider.Visible = show
+box.HeaderDivider.BackgroundTransparency = math.clamp(1 - v * 1.4, 0, 1)
+end
+column:MarkDirty()
+end)
+table.insert(self.Groupboxes, box)
+self:ApplyColumns()
+return box
+end
+function Tab:AddLeftGroupbox(name, icon, badge)
+return self:AddGroupbox({ Name = name, Side = "Left", Icon = icon, Badge = badge })
+end
+function Tab:AddRightGroupbox(name, icon, badge)
+return self:AddGroupbox({ Name = name, Side = "Right", Icon = icon, Badge = badge })
+end
+function Tab:EnsureGroup()
+if not self.DefaultGroup then
+self.DefaultGroup = self:AddLeftGroupbox(self.Name)
+end
+return self.DefaultGroup
+end
+Window.Tab = Window.AddTab
+Window.Section = Window.AddTabSection
+function Window:Dialog(spec)
+return Dialog.Show(spec)
+end
+function Window:Sheet(spec)
+return Sheet.Show(spec)
+end
+Tab.Section = Tab.AddGroupbox
+for _, method in ipairs({ "AddToggle", "AddCheckbox", "AddSlider", "AddDropdown", "AddInput", "AddButton", "AddKeybind", "AddColorPicker", "AddLabel", "AddParagraph", "AddStepper", "AddRangeSlider", "AddSegmented", "AddStat", "AddStatus", "AddTable", "Toggle", "Checkbox", "Slider", "Dropdown", "Input", "Button", "Keybind", "Colorpicker", "Label", "Paragraph" }) do
+Tab[method] = function(tabSelf, ...)
+local grp = tabSelf:EnsureGroup()
+return grp[method](grp, ...)
+end
+end
+function Groupbox:BuildHeader(card, info)
+local height, radius = Config.Group.Header, Config.Group.Radius
+local collapsed = info.Collapsed == true
+local bar = Draw.Box("TextButton", { Name = "Header", Size = UDim2.new(1, 0, 0, height), Parent = card }, "PanelHeader", nil, radius)
+self.HeaderPatch = Draw.Box("Frame", { Position = UDim2.new(0, 0, 1, -radius), Size = UDim2.new(1, 0, 0, radius), Visible = not collapsed, BackgroundTransparency = collapsed and 1 or 0, Parent = bar }, "PanelHeader")
+self.HeaderDivider = Draw.Box("Frame", { AnchorPoint = Vector2.new(0, 1), Position = UDim2.fromScale(0, 1), Size = UDim2.new(1, 0, 0, 2), ZIndex = 2, Visible = not collapsed, BackgroundTransparency = collapsed and 1 or 0, Parent = bar }, "Outline")
+local iconSpec = (info.Icon and info.Icon ~= "") and info.Icon or Icons.FromTitle(info.Name, "qblock")
+local icon = Icons.Create(bar, iconSpec, 20, nil, info.Name)
+icon.AnchorPoint = Vector2.new(0, 0.5)
+icon.Position = UDim2.new(0, 10, 0.5, -1)
+local offset = 36
+local badgeWidth = 0
+if info.Badge then
+badgeWidth = #tostring(info.Badge) * 8 + 16
+local pill = Draw.Box("Frame", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -34, 0.5, -1), Size = UDim2.fromOffset(badgeWidth, 18), Parent = bar }, "Danger", "DangerDark", 4, 2)
+Draw.Text({ Size = UDim2.fromScale(1, 1), TextXAlignment = Enum.TextXAlignment.Center, Parent = pill }, "Body", 12, "OnAccent", tostring(info.Badge))
+badgeWidth += 6
+end
+Draw.Text({ Position = UDim2.fromOffset(offset, 0), Size = UDim2.new(1, -(offset + 34 + badgeWidth), 1, -2), TextTruncate = Enum.TextTruncate.AtEnd, Parent = bar }, "Body", Util.TextSize("Group"), "Text", info.Name or "")
+self.Chevron = Icons.Vector(bar, "chevron_down", 14, "Muted")
+self.Chevron.AnchorPoint = Vector2.new(1, 0.5)
+self.Chevron.Position = UDim2.new(1, -12, 0.5, 0)
+self.Chevron.Rotation = collapsed and -90 or 0
+bar.Activated:Connect(function()
+self:SetCollapsed(not self.Collapsed)
+end)
+end
+function Groupbox:SetCollapsed(collapsed)
+collapsed = collapsed == true
+if self.Collapsed == collapsed then
+return
+end
+self.Collapsed = collapsed
+if collapsed then
+Popup.Close()
+end
+Anim.Tween(self.Open, { Value = collapsed and 0 or 1 }, Config.Tween.Collapse)
+Anim.Tween(self.Chevron, { Rotation = collapsed and -90 or 0 }, Config.Tween.Collapse)
+end
+function Float.Clamp()
+local button = Float.Button
+if not button or not State.Gui then
+return
+end
+local viewport = State.Gui.AbsoluteSize
+if viewport.X <= 0 or viewport.Y <= 0 then
+return
+end
+local pos = button.Position
+local absX = viewport.X * pos.X.Scale + pos.X.Offset
+local absY = viewport.Y * pos.Y.Scale + pos.Y.Offset
+local size = Float.Size or 48
+local clampedX = math.clamp(absX, 6, math.max(6, viewport.X - size - 6))
+local clampedY = math.clamp(absY, 6, math.max(6, viewport.Y - size - 6))
+button.Position = UDim2.fromOffset(math.floor(clampedX + 0.5), math.floor(clampedY + 0.5))
+end
+function Float.Build()
+local size = State.Touch and 56 or 48
+local button = Draw.New("TextButton", { Name = "Float", Text = "", AutoButtonColor = false, BackgroundTransparency = 1, Position = UDim2.new(0, 18, 0.45, 0), Size = UDim2.fromOffset(size, size), ZIndex = Config.Layer.Float, Visible = State.Touch, Parent = State.Gui })
+local shadow = Draw.Box("Frame", { Position = UDim2.fromOffset(4, 4), Size = UDim2.fromScale(1, 1), BackgroundTransparency = 0.55, Parent = button }, "Shadow", nil, 4)
+shadow.ZIndex = 1
+local slot = Draw.New("Frame", { BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 2, Parent = button })
+Float.Button, Float.Slot, Float.Size = button, slot, size
+Anim.Tween(slot, { Position = UDim2.fromOffset(0, -3) }, 0.9, "Sine", -1, true)
+Float.Render()
+local moved = false
+Gui.Draggable(button, function(begin, delta)
+if not delta then
+moved = false
+return button.Position
+end
+moved = moved or delta.Magnitude > Config.DragThreshold
+if moved then
+button.Position = begin + UDim2.fromOffset(delta.X, delta.Y)
+Float.Clamp()
+end
+return begin
+end)
+button.Activated:Connect(function()
+if moved or not State.Window then
+return
+end
+Anim.Bump(Float.Sprite, 10)
+Anim.CoinPop(button, UDim2.new(0.5, 0, 0, 0), 20)
+State.Window:Toggle()
+end)
+end
+function Float.Render()
+if not Float.Slot then
+return
+end
+if not Float.Sprite then
+Float.Sprite = Sprite.New(Float.Slot, "qblock", Float.Size)
+Float.Sprite.Name = "Block"
+end
+end
+function Float.SetVisible(visible)
+if Float.Button then
+Float.Button.Visible = visible
+if visible then
+Float.Clamp()
+end
+end
+end
+function Watermark.Build(title)
+local frame = Draw.Box("Frame", { Name = "Watermark", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 10), AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.fromOffset(0, 30), ZIndex = Config.Layer.Watermark, Parent = State.Gui }, "Shadow", "Outline", 10, 2)
+frame.BackgroundTransparency = 0.25
+Draw.Padding(frame, 0, 12, 0, 8)
+Draw.List(frame, 10, true, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Center)
+local slot = Draw.New("Frame", { BackgroundTransparency = 1, Size = UDim2.fromOffset(18, 18), LayoutOrder = 1, Parent = frame })
+local coin = Sprite.New(slot, "coin", 18)
+coin.AnchorPoint = Vector2.new(0.5, 0)
+coin.Position = UDim2.fromScale(0.5, 0)
+Anim.Loop("Watermark", coin, { Size = UDim2.fromOffset(3, 18) }, 0.45, "Sine", true)
+local name = Draw.Text({ Text = title:upper(), AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.fromOffset(0, 20), LayoutOrder = 2, Parent = frame }, "Logo", Config.Text.Watermark + 1, "Coin")
+Draw.Stroke(name, "Ink", 1.5)
+Watermark.Stats = {}
+for index, key in ipairs({ "Fps", "Ping", "Time" }) do
+Watermark.Stats[key] = Draw.Text({ AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.fromOffset(0, 20), LayoutOrder = 2 + index, Parent = frame }, "Body", Config.Text.Watermark, "White")
+end
+Watermark.Frame = frame
+Gui.Draggable(frame, function(begin, delta)
+if not delta then
+return frame.Position
+end
+frame.Position = begin + UDim2.fromOffset(delta.X, delta.Y)
+return begin
+end)
+Watermark.Update()
+Util.Every(0.5, Watermark.Update)
+end
+function Watermark.Update()
+if not Watermark.Frame or not Watermark.Frame.Visible then
+return
+end
+local ok, ping = pcall(function()
+return Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
+end)
+local elapsed = math.floor(os.clock() - State.StartTime)
+Watermark.Stats.Fps.Text = string.format("FPS %d", math.floor(State.Fps + 0.5))
+Watermark.Stats.Ping.Text = ok and string.format("PING %dms", math.floor(ping + 0.5)) or "PING --"
+Watermark.Stats.Time.Text = string.format("%s %02d:%02d", Lang.Get("Session"), math.floor(elapsed / 60) % 100, elapsed % 60)
+end
+function Watermark.SetVisible(visible)
+if Watermark.Frame then
+Watermark.Frame.Visible = visible
+Anim.SetGroupActive("Watermark", visible)
+Watermark.Update()
+end
+end
+function Particles.Build(parent)
+local layer = Draw.New("Frame", { Name = "Particles", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ClipsDescendants = true, ZIndex = 1, Parent = parent })
+Particles.Layer = layer
+for _ = 1, Config.Particles.Count do
+local label = Draw.Text({ AnchorPoint = Vector2.new(0.5, 0.5), TextXAlignment = Enum.TextXAlignment.Center, TextTransparency = 1, Parent = layer }, "Glyph", 12, "ParticleColor")
+table.insert(Particles.Pool, { Label = label, Busy = false })
+end
+Theme.OnRender(Particles, Particles.Restyle)
+end
+function Particles.Restyle()
+for _, entry in ipairs(Particles.Pool) do
+entry.Label.Text = Particles.Glyph()
+end
+end
+function Particles.Glyph()
+local glyphs = Theme.Colors.ParticleGlyphs
+if glyphs and #glyphs > 1 then
+return glyphs[math.random(#glyphs)]
+end
+return Theme.Colors.ParticleGlyph or "✦"
+end
+function Particles.Active()
+local window = State.Window
+return Particles.Enabled and window ~= nil and window.Visible and not window.Minimized
+end
+function Particles.Launch(entry, delay)
+if not Particles.Active() or not entry.Label.Parent then
+entry.Busy = false
+return
+end
+entry.Busy = true
+local label = entry.Label
+label.Text = Particles.Glyph()
+local fall = Theme.Colors.ParticleFall == true
+local size = math.random(9, 16)
+local x = math.random()
+label.Size = UDim2.fromOffset(size + 4, size + 4)
+label.TextSize = size
+label.Rotation = 0
+label.TextTransparency = 0.35 + math.random() * 0.4
+label.Position = UDim2.new(x, 0, fall and -0.06 or 1.06, 0)
+local goal = { Position = UDim2.new(x + (math.random() - 0.5) * 0.15, 0, fall and 1.06 or -0.06, 0), Rotation = math.random(-120, 120) }
+local duration = Config.Particles.MinTime + math.random() * (Config.Particles.MaxTime - Config.Particles.MinTime)
+local tween = Anim.Tween(label, goal, duration, "Linear", 0, false, delay or 0)
+tween.Completed:Once(function()
+Particles.Launch(entry)
+end)
+end
+function Particles.Resume()
+for index, entry in ipairs(Particles.Pool) do
+if not entry.Busy then
+Particles.Launch(entry, (index - 1) * 0.9)
+end
+end
+end
+function Particles.SetEnabled(enabled)
+Particles.Enabled = enabled
+if Particles.Layer then
+Particles.Layer.Visible = enabled
+end
+if enabled then
+Particles.Resume()
+end
+end
+Notify.Icons = { Info = "qblock", Success = "star", Warning = "bomb", Error = "bomb", Coin = "coin", Power = "mushroom" }
+function Notify.Build()
+local width = State.Touch and Config.Notify.TouchWidth or Config.Notify.Width
+State.NotifyHost = Draw.New("Frame", { Name = "Notifications", BackgroundTransparency = 1, AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -14, 1, -14), Size = UDim2.new(0, width + 8, 1, -28), ZIndex = Config.Layer.Notify, Parent = State.Gui })
+Draw.List(State.NotifyHost, Config.Notify.Gap, false, Enum.HorizontalAlignment.Right, Enum.VerticalAlignment.Bottom)
+end
+function Notify.Push(title, content, duration, kind)
+local width = State.NotifyHost.Size.X.Offset - 8
+local text = Lang.Resolve(content or "")
+local textHeight = Layout.Measure(text, Fonts.Size("Desc", Util.TextSize("Desc") + 1), "Desc", width - 68).Y
+local height = math.max(58, textHeight + 44)
+local holder = Draw.New("Frame", { BackgroundTransparency = 1, Size = UDim2.fromOffset(width + 8, height + 4), ClipsDescendants = false, Parent = State.NotifyHost })
+local card = Draw.New("TextButton", { Text = "", AutoButtonColor = false, BackgroundTransparency = 1, Position = UDim2.fromOffset(width + 60, 0), Size = UDim2.fromOffset(width, height), Parent = holder })
+Draw.Box("Frame", { Position = UDim2.fromOffset(4, 4), Size = UDim2.fromScale(1, 1), Parent = card }, "Shadow", nil, 12)
+local face = Draw.Box("Frame", { Size = UDim2.fromScale(1, 1), ClipsDescendants = true, Parent = card }, "Panel", "Outline", 12, 2)
+local icon = Sprite.New(face, Notify.Icons[kind or "Coin"] or "coin", 36)
+icon.Position = UDim2.fromOffset(12, 11)
+Draw.Text({ Position = UDim2.fromOffset(58, 9), Size = UDim2.new(1, -68, 0, 18), TextTruncate = Enum.TextTruncate.AtEnd, Parent = face }, "Body", Util.TextSize("Group"), "Text", title or "Reicht")
+Draw.Text({ Text = text, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, Position = UDim2.fromOffset(58, 29), Size = UDim2.new(1, -68, 0, textHeight), Parent = face }, "Desc", Util.TextSize("Desc") + 1, "SubText")
+local timer = Draw.Box("Frame", { AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 0, 1, 0), Size = UDim2.new(1, 0, 0, 4), Parent = face }, "Accent")
+duration = duration or Config.Notify.Duration
+Anim.Tween(card, { Position = UDim2.fromOffset(0, 0) }, Config.Tween.Notify, "Back")
+Anim.Tween(timer, { Size = UDim2.new(0, 0, 0, 4) }, duration, "Linear")
+Anim.Bump(icon, 6)
+local closed = false
+local function Dismiss()
+if closed then
+return
+end
+closed = true
+local slide = Anim.Tween(card, { Position = UDim2.fromOffset(width + 60, 0) }, 0.22, "In")
+slide.Completed:Once(function()
+local collapse = Anim.Tween(holder, { Size = UDim2.fromOffset(width + 8, 0) }, 0.16)
+collapse.Completed:Once(function()
+holder:Destroy()
+end)
+end)
+end
+card.Activated:Connect(Dismiss)
+task.delay(duration, Dismiss)
+end
+Intro.Width, Intro.Height, Intro.Ground = 600, 320, 44
+Intro.MinStep = 0.22
+Intro.StepTimeout = 15
+function Intro.Play(settings)
+local screen = Draw.New("Frame", { Name = "Loader", BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = Config.Layer.Intro, Parent = State.Gui })
+local ok = Util.Try(Intro.Show, settings, screen)
+screen:Destroy()
+if Library.Unloaded then
+return
+end
+if not ok and not settings.Ran then
+Intro.RunSteps(settings, nil)
+end
+Util.Try(settings.OnDone)
+end
+function Intro.Show(settings, screen)
+Anim.Tween(screen, { BackgroundTransparency = 0.35 }, 0.3)
+local card, scene, scale = Intro.BuildCard(screen)
+Intro.BuildScenery(scene)
+local block = Sprite.New(scene, "qblock", 48)
+block.AnchorPoint = Vector2.new(0.5, 0)
+block.Position = UDim2.new(0.5, 0, 0, -70)
+local letters = Intro.Letters(scene, settings.Title)
+local pill = Intro.Pill(scene, settings.SubTitle)
+local track = Intro.Track(scene)
+Anim.Tween(scale, { Scale = State.UserScale }, 0.45, "Back")
+Anim.Tween(block, { Position = UDim2.new(0.5, 0, 0, 22) }, 0.4, "Bounce")
+task.wait(0.42)
+Intro.HitBlock(scene, block)
+Intro.DropLetters(letters, pill)
+Intro.RunSteps(settings, track)
+if Library.Unloaded then
+return
+end
+Intro.Finale(scene, track)
+task.wait(0.3)
+Anim.Tween(scale, { Scale = State.UserScale * 1.06 }, 0.2, "In")
+Anim.Tween(card, { GroupTransparency = 1 }, 0.2)
+Anim.Tween(screen, { BackgroundTransparency = 1 }, 0.2)
+task.wait(0.2)
+end
+function Intro.BuildCard(screen)
+local width, height = Intro.Width, Intro.Height
+local pad, shadow = 4, 6
+local card = Draw.New("CanvasGroup", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(width + pad + shadow, height + pad + shadow), BackgroundTransparency = 1, Parent = screen })
+local scale = Draw.New("UIScale", { Scale = State.UserScale * 0.6, Parent = card })
+Draw.Box("Frame", { Position = UDim2.fromOffset(pad + shadow, pad + shadow), Size = UDim2.fromOffset(width, height), Parent = card }, "Shadow", nil, 18)
+local scene = Draw.Box("Frame", { Position = UDim2.fromOffset(pad, pad), Size = UDim2.fromOffset(width, height), BackgroundColor3 = Color3.new(1, 1, 1), BackgroundTransparency = 0, ClipsDescendants = true, Parent = card }, nil, nil, 18)
+local gradient = Draw.New("UIGradient", { Rotation = 90, Color = ColorSequence.new(Theme.Colors.Topbar, Theme.Colors.Backdrop), Parent = scene })
+gradient.Enabled = true
+local border = Draw.New("Frame", { BackgroundTransparency = 1, Position = UDim2.fromOffset(pad, pad), Size = UDim2.fromOffset(width, height), ZIndex = 20, Parent = card })
+Draw.Corner(border, 18)
+Draw.Stroke(border, "Outline", 3, true)
+return card, scene, scale
+end
+function Intro.BuildScenery(scene)
+local ground = Intro.Ground
+local sky = Draw.New("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, -ground), ClipsDescendants = true, ZIndex = 1, Parent = scene })
+for _, hill in ipairs({ { 0.14, 150, "GrassDark" }, { 0.3, 90, "Grass" }, { 0.8, 120, "GrassDark" } }) do
+local mound = Draw.Box("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(hill[1], 0, 1, 0), Size = UDim2.fromOffset(hill[2], hill[2]), BackgroundTransparency = 0.35, Parent = sky }, hill[3], nil, UDim.new(1, 0))
+mound.ZIndex = 1
+end
+for index, spot in ipairs({ { 0.12, 30, 64 }, { 0.62, 18, 50 }, { 0.84, 64, 40 } }) do
+local cloud = Draw.Cloud(sky, spot[3])
+cloud.Position = UDim2.new(spot[1], 0, 0, spot[2])
+cloud.ZIndex = 1
+Anim.Tween(cloud, { Position = UDim2.new(spot[1], 36, 0, spot[2]) }, 5 + index, "Sine", -1, true)
+end
+local floor = Draw.Box("Frame", { AnchorPoint = Vector2.new(0, 1), Position = UDim2.fromScale(0, 1), Size = UDim2.new(1, 0, 0, ground), ClipsDescendants = true, ZIndex = 3, Parent = scene }, "Brick", nil, 18)
+Draw.Box("Frame", { Size = UDim2.new(1, 0, 0, 18), ZIndex = 3, Parent = floor }, "Brick")
+local bricks = Draw.New("Frame", { BackgroundTransparency = 1, Position = UDim2.fromOffset(6, 10), Size = UDim2.new(1, -12, 1, -14), ClipsDescendants = true, ZIndex = 3, Parent = floor })
+Draw.Bricks(bricks, 18, "BrickDark")
+for _, line in ipairs(bricks:GetChildren()) do
+line.ZIndex = 3
+end
+Draw.Box("Frame", { Size = UDim2.new(1, 0, 0, 8), ZIndex = 4, Parent = floor }, "Grass")
+Draw.Box("Frame", { Position = UDim2.fromOffset(0, 8), Size = UDim2.new(1, 0, 0, 2), ZIndex = 4, Parent = floor }, "GrassDark")
+end
+function Intro.Letters(scene, title)
+local row = Draw.New("Frame", { BackgroundTransparency = 1, AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 92), Size = UDim2.fromOffset(Intro.Width, 54), ZIndex = 5, Parent = scene })
+Draw.List(row, 2, true, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Center)
+local letters = {}
+local size, colorIndex = 46, 0
+for char in tostring(title):upper():gmatch(utf8.charpattern) do
+local bounds = Layout.Measure(char, size, "Logo", 300)
+local slot = Draw.New("Frame", { BackgroundTransparency = 1, Size = UDim2.fromOffset(char == " " and 14 or bounds.X, size + 8), LayoutOrder = #letters + 1, ZIndex = 5, Parent = row })
+local letter = Draw.Text({ Text = char, Size = UDim2.fromScale(1, 1), Position = UDim2.fromOffset(0, -140), TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 5, Parent = slot }, "Logo", size, Config.TitleColors[colorIndex % #Config.TitleColors + 1])
+Draw.Stroke(letter, "Ink", 3)
+table.insert(letters, letter)
+colorIndex += char == " " and 0 or 1
+end
+return letters
+end
+function Intro.Pill(scene, text)
+local pill = Draw.Box("Frame", { AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 156), AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.fromOffset(0, 26), BackgroundTransparency = 1, ZIndex = 5, Parent = scene }, "Shadow", nil, UDim.new(1, 0))
+Draw.Padding(pill, 0, 14, 0, 14)
+local label = Draw.Text({ Text = "WORLD 1-1" .. ((text and text ~= "") and ("  ·  " .. text) or ""), AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.fromScale(0, 1), TextTransparency = 1, ZIndex = 6, Parent = pill }, "Body", 14, "White")
+return { Frame = pill, Label = label }
+end
+function Intro.Track(scene)
+local ground = Intro.Ground
+local status = Draw.Text({ Position = UDim2.new(0, 22, 1, -(ground + 58)), Size = UDim2.new(1, -120, 0, 20), ZIndex = 6, Parent = scene }, "Body", 15, "White")
+Draw.Stroke(status, "Ink", 1.5)
+local percent = Draw.Text({ AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -22, 1, -(ground + 60)), Size = UDim2.fromOffset(80, 22), TextXAlignment = Enum.TextXAlignment.Right, Text = "0%", ZIndex = 6, Parent = scene }, "Logo", 20, "Coin")
+Draw.Stroke(percent, "Ink", 2)
+local flag = Sprite.New(scene, "flag", 36)
+flag.AnchorPoint = Vector2.new(1, 1)
+flag.Position = UDim2.new(1, -18, 1, -ground)
+flag.ZIndex = 5
+local runner = Draw.New("Frame", { BackgroundTransparency = 1, AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 18, 1, -ground), Size = UDim2.fromOffset(28, 28), ZIndex = 6, Parent = scene })
+local body = Sprite.New(runner, "mushroom", 24)
+body.Position = UDim2.fromOffset(2, 4)
+Anim.Tween(body, { Position = UDim2.fromOffset(2, 0) }, 0.16, "Sine", -1, true)
+local progress = Draw.New("NumberValue", { Value = 0 })
+progress.Changed:Connect(function(value)
+percent.Text = math.floor(value * 100 + 0.5) .. "%"
+runner.Position = UDim2.new(0, 18 + (Intro.Width - 100) * value, 1, -ground)
+end)
+return { Status = status, Progress = progress, Flag = flag, Runner = runner }
+end
+function Intro.HitBlock(scene, block)
+Anim.Bump(block, 14)
+Anim.CoinPop(scene, UDim2.new(0.5, 0, 0, 22), 30)
+task.delay(0.1, function()
+local used = Sprite.New(scene, "used", 48)
+used.AnchorPoint, used.Position, used.ZIndex = block.AnchorPoint, UDim2.new(0.5, 0, 0, 22), block.ZIndex
+block:Destroy()
+end)
+end
+function Intro.DropLetters(letters, pill)
+for index, letter in ipairs(letters) do
+Anim.Tween(letter, { Position = UDim2.new() }, 0.55, "Bounce", 0, false, index * 0.05)
+end
+Anim.Tween(pill.Frame, { BackgroundTransparency = 0.45 }, 0.3, "Out", 0, false, 0.4)
+Anim.Tween(pill.Label, { TextTransparency = 0 }, 0.3, "Out", 0, false, 0.4)
+end
+function Intro.RunSteps(settings, track)
+local steps = settings.Steps
+for index, step in ipairs(steps) do
+if Library.Unloaded then
+return
+end
+if step.Started then
+continue
+end
+step.Started = true
+if track then track.Status.Text = Lang.Resolve(step.Label) end
+local started = os.clock()
+if step.Run then
+Util.Await(Intro.StepTimeout, step.Run)
+end
+if not track then
+continue
+end
+Anim.Tween(track.Progress, { Value = index / #steps }, 0.2, "Out")
+local remaining = Intro.MinStep - (os.clock() - started)
+if remaining > 0 then
+task.wait(remaining)
+end
+end
+settings.Ran = true
+end
+function Intro.Finale(scene, track)
+Anim.Bump(track.Flag, 10)
+local origin = UDim2.new(1, -36, 1, -(Intro.Ground + 30))
+for index = 1, 8 do
+local angle = math.rad(index * 45)
+local star = Sprite.New(scene, "star", 18)
+star.AnchorPoint = Vector2.new(0.5, 0.5)
+star.Position = origin
+star.ZIndex = 7
+local fly = Anim.Tween(star, { Position = origin + UDim2.fromOffset(math.cos(angle) * 70, math.sin(angle) * 70), Rotation = 180 }, 0.5, "Out")
+fly.Completed:Once(function()
+star:Destroy()
+end)
+end
+end
+local Visuals = {
+Settings = {
+Enabled = false,
+Preview = false,
+Box = true,
+BoxStyle = "Full",
+BoxFill = false,
+Name = true,
+Health = true,
+HealthText = false,
+Distance = true,
+Tracer = false,
+TracerOrigin = "Bottom",
+HeadDot = false,
+Chams = false,
+Arrows = false,
+Radar = false,
+RadarRange = 250,
+RadarSize = 180,
+TeamCheck = true,
+MaxDistance = 2000,
+TextSize = 13,
+EnemyColor = Color3.fromRGB(232, 88, 76),
+FriendColor = Color3.fromRGB(96, 196, 120),
+},
+Entries = {},
+Targets = {},
+Provider = nil,
+LastScan = 0,
+ScanInterval = 0.2,
+Preview = {},
+}
+function Visuals.DefaultProvider()
+local targets = {}
+for _, player in ipairs(Players:GetPlayers()) do
+if player == LocalPlayer then
+continue
+end
+local char = player.Character
+local hum = char and char:FindFirstChildOfClass("Humanoid")
+if hum then
+targets[#targets + 1] = {
+Model = char,
+Name = player.DisplayName,
+Health = hum.Health,
+MaxHealth = hum.MaxHealth,
+Friendly = player.Team ~= nil and player.Team == LocalPlayer.Team,
+}
+end
+end
+return targets
+end
+function Visuals.EnsureGui()
+if Visuals.Gui and Visuals.Gui.Parent then
+return Visuals.Gui
+end
+Visuals.Gui = Draw.New("ScreenGui", { Name = "MarioVisuals", IgnoreGuiInset = true, ResetOnSpawn = false, DisplayOrder = 5, ZIndexBehavior = Enum.ZIndexBehavior.Sibling, Parent = Util.GuiParent() })
+return Visuals.Gui
+end
+function Visuals.Line(parent, color)
+return Draw.New("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = color, Visible = false, Parent = parent })
+end
+function Visuals.Label(parent, alignY)
+local label = Draw.New("TextLabel", {
+BackgroundTransparency = 1,
+AnchorPoint = Vector2.new(0.5, alignY),
+Size = UDim2.fromOffset(200, 16),
+Font = Enum.Font.GothamBold,
+TextColor3 = Color3.new(1, 1, 1),
+TextStrokeTransparency = 0.35,
+Visible = false,
+Parent = parent,
+})
+return label
+end
+function Visuals.BuildEntry(parent)
+local entry = {}
+entry.Box = Draw.New("Frame", { BackgroundTransparency = 1, Visible = false, Parent = parent })
+entry.BoxStroke = Draw.New("UIStroke", { Thickness = 1.5, Parent = entry.Box })
+entry.BoxOutline = Draw.New("Frame", { BackgroundTransparency = 1, Position = UDim2.fromOffset(-1, -1), Size = UDim2.new(1, 2, 1, 2), Parent = entry.Box })
+Draw.New("UIStroke", { Thickness = 1, Color = Color3.new(0, 0, 0), Transparency = 0.3, Parent = entry.BoxOutline })
+entry.Corners = {}
+for index = 1, 8 do
+entry.Corners[index] = Draw.New("Frame", { BorderSizePixel = 0, Visible = false, Parent = parent })
+end
+entry.HealthBack = Draw.New("Frame", { BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.35, Visible = false, Parent = parent })
+entry.HealthFill = Draw.New("Frame", { AnchorPoint = Vector2.new(0, 1), Position = UDim2.fromScale(0, 1), Parent = entry.HealthBack })
+entry.HealthText = Visuals.Label(parent, 0.5)
+entry.Name = Visuals.Label(parent, 1)
+entry.Distance = Visuals.Label(parent, 0)
+entry.Tracer = Visuals.Line(parent, Color3.new(1, 1, 1))
+entry.Dot = Draw.New("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(6, 6), Visible = false, Parent = parent })
+Draw.Corner(entry.Dot, 3)
+entry.Arrow = Visuals.Label(parent, 0.5)
+entry.Arrow.Text = "▲"
+entry.Arrow.Size = UDim2.fromOffset(20, 20)
+return entry
+end
+function Visuals.HideEntry(entry)
+entry.Box.Visible = false
+for _, corner in ipairs(entry.Corners) do
+corner.Visible = false
+end
+entry.HealthBack.Visible, entry.HealthText.Visible = false, false
+entry.Name.Visible, entry.Distance.Visible = false, false
+entry.Tracer.Visible, entry.Dot.Visible, entry.Arrow.Visible = false, false, false
+if entry.Highlight then
+entry.Highlight.Enabled = false
+end
+end
+function Visuals.DestroyEntry(entry)
+for _, key in ipairs({ "Box", "HealthBack", "HealthText", "Name", "Distance", "Tracer", "Dot", "Arrow", "Highlight" }) do
+if entry[key] then
+entry[key]:Destroy()
+end
+end
+for _, corner in ipairs(entry.Corners) do
+corner:Destroy()
+end
+end
+function Visuals.SetLine(line, from, to, thickness)
+local delta = to - from
+line.Position = UDim2.fromOffset((from.X + to.X) / 2, (from.Y + to.Y) / 2)
+line.Size = UDim2.fromOffset(delta.Magnitude, thickness)
+line.Rotation = math.deg(math.atan2(delta.Y, delta.X))
+line.Visible = true
+end
+function Visuals.Layout(entry, x, y, w, h, info, color, origin)
+local settings = Visuals.Settings
+local full = settings.Box and settings.BoxStyle ~= "Corner"
+entry.Box.Visible = full
+if full then
+entry.Box.Position, entry.Box.Size = UDim2.fromOffset(x, y), UDim2.fromOffset(w, h)
+entry.BoxStroke.Color = color
+entry.Box.BackgroundTransparency = settings.BoxFill and 0.82 or 1
+entry.Box.BackgroundColor3 = color
+end
+local corner = settings.Box and settings.BoxStyle == "Corner"
+local cw, ch = math.max(w / 4, 3), math.max(h / 5, 3)
+local spots = {
+{ x, y, cw, 2 }, { x, y, 2, ch }, { x + w - cw, y, cw, 2 }, { x + w - 2, y, 2, ch },
+{ x, y + h - 2, cw, 2 }, { x, y + h - ch, 2, ch }, { x + w - cw, y + h - 2, cw, 2 }, { x + w - 2, y + h - ch, 2, ch },
+}
+for index, piece in ipairs(entry.Corners) do
+piece.Visible = corner
+if corner then
+local spot = spots[index]
+piece.Position, piece.Size, piece.BackgroundColor3 = UDim2.fromOffset(spot[1], spot[2]), UDim2.fromOffset(spot[3], spot[4]), color
+end
+end
+local ratio = math.clamp((info.Health or 0) / math.max(info.MaxHealth or 100, 1), 0, 1)
+entry.HealthBack.Visible = settings.Health
+if settings.Health then
+entry.HealthBack.Position, entry.HealthBack.Size = UDim2.fromOffset(x - 6, y), UDim2.fromOffset(3, h)
+entry.HealthFill.Size = UDim2.fromScale(1, ratio)
+entry.HealthFill.BackgroundColor3 = Color3.fromRGB(232, 88, 76):Lerp(Color3.fromRGB(96, 214, 110), ratio)
+end
+entry.HealthText.Visible = settings.HealthText
+if settings.HealthText then
+local hpInt = math.floor(info.Health or 0)
+if entry.LastHp ~= hpInt then
+entry.LastHp = hpInt
+entry.HealthText.Text = tostring(hpInt)
+end
+entry.HealthText.TextSize = settings.TextSize - 2
+entry.HealthText.Position = UDim2.fromOffset(x - 20, y + h * (1 - ratio))
+end
+entry.Name.Visible = settings.Name
+if settings.Name then
+local nameStr = info.Name or ""
+if entry.LastName ~= nameStr then
+entry.LastName = nameStr
+entry.Name.Text = nameStr
+end
+entry.Name.TextSize, entry.Name.TextColor3 = settings.TextSize, color
+entry.Name.Position = UDim2.fromOffset(x + w / 2, y - 2)
+end
+entry.Distance.Visible = settings.Distance and info.Distance ~= nil
+if entry.Distance.Visible then
+local distInt = math.floor(info.Distance)
+if entry.LastDist ~= distInt then
+entry.LastDist = distInt
+entry.Distance.Text = distInt .. "m"
+end
+entry.Distance.TextSize = settings.TextSize - 1
+entry.Distance.Position = UDim2.fromOffset(x + w / 2, y + h + 2)
+end
+entry.Dot.Visible = settings.HeadDot
+if settings.HeadDot then
+entry.Dot.Position, entry.Dot.BackgroundColor3 = UDim2.fromOffset(x + w / 2, y + h * 0.1), color
+end
+if settings.Tracer and origin then
+entry.Tracer.BackgroundColor3 = color
+Visuals.SetLine(entry.Tracer, origin, Vector2.new(x + w / 2, y + h), 1.5)
+else
+entry.Tracer.Visible = false
+end
+end
+function Visuals.TracerOrigin(viewport)
+local mode = Visuals.Settings.TracerOrigin
+if mode == "Center" then
+return viewport / 2
+end
+if mode == "Mouse" then
+return UserInputService:GetMouseLocation()
+end
+return Vector2.new(viewport.X / 2, viewport.Y)
+end
+function Visuals.Chams(entry, model, color, on)
+if not on then
+if entry.Highlight then
+entry.Highlight.Enabled = false
+end
+return
+end
+if not entry.Highlight then
+entry.Highlight = Draw.New("Highlight", { DepthMode = Enum.HighlightDepthMode.AlwaysOnTop, FillTransparency = 0.55, OutlineTransparency = 0, Parent = Visuals.EnsureGui() })
+end
+entry.Highlight.Adornee = model
+entry.Highlight.FillColor, entry.Highlight.OutlineColor = color, color
+entry.Highlight.Enabled = true
+end
+function Visuals.Arrow(entry, screen, viewport, color)
+local center = viewport / 2
+local dir = Vector2.new(screen.X, screen.Y) - center
+if screen.Z < 0 then
+dir = -dir
+end
+if dir.Magnitude < 1 then
+return
+end
+local unit = dir.Unit
+local radius = math.min(viewport.X, viewport.Y) / 2 - 40
+local pos = center + unit * radius
+entry.Arrow.Position = UDim2.fromOffset(pos.X, pos.Y)
+entry.Arrow.Rotation = math.deg(math.atan2(unit.Y, unit.X)) + 90
+entry.Arrow.TextColor3 = color
+entry.Arrow.TextSize = 18
+entry.Arrow.Visible = true
+end
+function Visuals.Scan()
+local now = os.clock()
+if now - Visuals.LastScan < Visuals.ScanInterval then
+return
+end
+Visuals.LastScan = now
+local ok, list = pcall(Visuals.Provider or Visuals.DefaultProvider)
+Visuals.Targets = ok and type(list) == "table" and list or {}
+end
+function Visuals.Render()
+local settings = Visuals.Settings
+if not settings.Enabled then
+return
+end
+Visuals.Scan()
+local cam = Workspace.CurrentCamera
+if not cam then
+return
+end
+local gui = Visuals.EnsureGui()
+local viewport = cam.ViewportSize
+local origin = Visuals.TracerOrigin(viewport)
+local camPos = cam.CFrame.Position
+local seen = {}
+for _, info in ipairs(Visuals.Targets) do
+local model = info.Model
+if typeof(model) ~= "Instance" or not model.Parent then
+continue
+end
+if settings.TeamCheck and info.Friendly then
+continue
+end
+local root = info.Root or model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
+if not root then
+continue
+end
+local distance = (root.Position - camPos).Magnitude
+if distance > settings.MaxDistance then
+continue
+end
+seen[model] = true
+local entry = Visuals.Entries[model]
+if not entry then
+entry = Visuals.BuildEntry(gui)
+Visuals.Entries[model] = entry
+end
+local color = info.Color or (info.Friendly and settings.FriendColor or settings.EnemyColor)
+Visuals.Chams(entry, info.Adornee or model, color, settings.Chams and (info.Adornee ~= false))
+local top, onTop = cam:WorldToViewportPoint(root.Position + Vector3.new(0, 3, 0))
+local bottom, onBottom = cam:WorldToViewportPoint(root.Position - Vector3.new(0, 3.5, 0))
+if not (onTop and onBottom) then
+Visuals.HideEntry(entry)
+if settings.Chams and entry.Highlight then
+entry.Highlight.Enabled = true
+end
+if settings.Arrows then
+Visuals.Arrow(entry, cam:WorldToViewportPoint(root.Position), viewport, color)
+end
+continue
+end
+entry.Arrow.Visible = false
+local h = math.max(bottom.Y - top.Y, 4)
+local w = h * 0.55
+info.Distance = distance
+Visuals.Layout(entry, top.X - w / 2, top.Y, w, h, info, color, origin)
+end
+for model, entry in pairs(Visuals.Entries) do
+if not seen[model] then
+if model.Parent then
+Visuals.HideEntry(entry)
+else
+Visuals.DestroyEntry(entry)
+Visuals.Entries[model] = nil
+end
+end
+end
+end
+function Visuals.ClearAll()
+for model, entry in pairs(Visuals.Entries) do
+Visuals.DestroyEntry(entry)
+Visuals.Entries[model] = nil
+end
+end
+function Visuals:SetProvider(provider)
+self.Provider = provider
+self.LastScan = 0
+end
+function Visuals:Set(key, value)
+self.Settings[key] = value
+if key == "Enabled" and not value then
+Visuals.ClearAll()
+elseif key == "Preview" then
+Visuals.PreviewSetVisible(value)
+end
+Visuals.PreviewRender()
+end
+function Visuals:Get(key)
+return self.Settings[key]
+end
+function Visuals:SetEnabled(on)
+self:Set("Enabled", on == true)
+end
+function Visuals:SetPreview(on)
+self:Set("Preview", on == true)
+end
+function Visuals.PreviewBuild()
+local window = State.Window
+if not window or Visuals.Preview.Frame then
+return
+end
+local panel = Draw.Box("Frame", { Name = "EspPreview", Position = UDim2.new(1, 6, 0, 0), Size = UDim2.new(0, 230, 1, -Config.Window.Shadow), BackgroundTransparency = 0, Visible = false, ClipsDescendants = true, Parent = window.Root }, "Backdrop", "Outline", Config.Window.Radius, Config.Window.Stroke)
+local title = Draw.Text({ Position = UDim2.fromOffset(12, 8), Size = UDim2.new(1, -24, 0, 22) }, "Display", Util.TextSize("Group"), "Text", { EN = "ESP Preview", TH = "ตัวอย่าง ESP" })
+title.Parent = panel
+local view = Draw.New("ViewportFrame", { Position = UDim2.fromOffset(10, 38), Size = UDim2.new(1, -20, 1, -48), BackgroundColor3 = Color3.fromRGB(18, 18, 24), BackgroundTransparency = 0.15, Ambient = Color3.fromRGB(180, 180, 190), LightColor = Color3.new(1, 1, 1), Parent = panel })
+Draw.Corner(view, 8)
+local cam = Draw.New("Camera", { FieldOfView = 40, Parent = view })
+view.CurrentCamera = cam
+local overlay = Draw.New("Frame", { BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 3, Parent = view })
+Visuals.Preview = { Frame = panel, View = view, Camera = cam, Overlay = overlay, Entry = Visuals.BuildEntry(overlay), Angle = 0 }
+Util.Connect(view:GetPropertyChangedSignal("AbsoluteSize"), Visuals.PreviewRender)
+Util.Connect(window.Root:GetPropertyChangedSignal("Size"), Visuals.PreviewRender)
+end
+function Visuals.PreviewModel()
+local preview = Visuals.Preview
+if preview.Model and preview.Model.Parent then
+return preview.Model
+end
+local char = LocalPlayer.Character
+if not char then
+return nil
+end
+local archivable = char.Archivable
+char.Archivable = true
+local ok, clone = pcall(char.Clone, char)
+char.Archivable = archivable
+if not ok or not clone then
+return nil
+end
+for _, item in ipairs(clone:GetDescendants()) do
+if item:IsA("LuaSourceContainer") or item:IsA("Sound") or item:IsA("ForceField") then
+item:Destroy()
+elseif item:IsA("BasePart") then
+item.Anchored = true
+item:SetAttribute("MarioColor", item.Color)
+end
+end
+clone:PivotTo(CFrame.new())
+clone.Parent = preview.View
+local box, size = clone:GetBoundingBox()
+preview.Model, preview.Size, preview.Center = clone, size, box.Position
+return clone
+end
+function Visuals.PreviewChams(model, color, on)
+for _, part in ipairs(model:GetDescendants()) do
+if part:IsA("BasePart") and part.Transparency < 1 then
+local base = part:GetAttribute("MarioColor")
+if base then
+part.Color = on and color or base
+part.Material = on and Enum.Material.ForceField or Enum.Material.SmoothPlastic
+end
+end
+end
+end
+function Visuals.PreviewWanted()
+local window = State.Window
+return Visuals.Settings.Preview and window ~= nil and window.Visible and not window.Minimized
+and (Visuals.PreviewTab == nil or window.ActiveTab == Visuals.PreviewTab)
+end
+function Visuals.PreviewShow(on)
+local preview = Visuals.Preview
+if not preview.Frame or preview.Shown == on then
+return
+end
+preview.Shown = on
+local open, tucked = UDim2.new(1, 6, 0, 0), UDim2.new(1, -236, 0, 0)
+if on then
+preview.Frame.Position = tucked
+preview.Frame.Visible = true
+preview.Pulse = 0
+Anim.Tween(preview.Frame, { Position = open }, Config.Tween.Pop, "Back")
+Anim.Bump(preview.View, 8)
+Visuals.PreviewRender()
+return
+end
+local slide = Anim.Tween(preview.Frame, { Position = tucked }, Config.Tween.Fast, "In")
+slide.Completed:Once(function()
+if not preview.Shown then
+preview.Frame.Visible = false
+end
+end)
+end
+function Visuals.PreviewRender()
+local preview = Visuals.Preview
+local window = State.Window
+if not (preview.Frame and window and preview.Shown) then
+return
+end
+preview.Frame.Size = UDim2.fromOffset(230, window.Size.Y)
+local model = Visuals.PreviewModel()
+if model then
+local root = Visuals.PreviewRoot()
+local center = (root and root.Position or Vector3.zero) - Vector3.new(0, 0.25, 0)
+local fit = 6.5 / 0.55 / (2 * math.tan(math.rad(preview.Camera.FieldOfView) / 2))
+preview.Camera.CFrame = CFrame.lookAt(center + Vector3.new(0, 0, fit), center)
+local settings = Visuals.Settings
+Visuals.PreviewChams(model, settings.EnemyColor, settings.Enabled and settings.Chams)
+end
+Visuals.PreviewDraw()
+end
+function Visuals.PreviewRoot()
+local model = Visuals.Preview.Model
+return model and (model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart)
+end
+function Visuals.PreviewProject(pos, size)
+local cam = Visuals.Preview.Camera
+local rel = cam.CFrame:PointToObjectSpace(pos)
+local depth = math.max(-rel.Z, 0.01)
+local half = math.tan(math.rad(cam.FieldOfView) / 2)
+return Vector2.new((0.5 + rel.X / depth / (2 * half * size.X / size.Y)) * size.X, (0.5 - rel.Y / depth / (2 * half)) * size.Y)
+end
+function Visuals.PreviewDraw()
+local preview = Visuals.Preview
+local size = preview.View.AbsoluteSize
+local root = Visuals.PreviewRoot()
+if size.X <= 0 or size.Y <= 0 or not root or not Visuals.Settings.Enabled then
+Visuals.HideEntry(preview.Entry)
+return
+end
+local t = preview.Pulse or 0
+local top = Visuals.PreviewProject(root.Position + Vector3.new(0, 3, 0), size)
+local bottom = Visuals.PreviewProject(root.Position - Vector3.new(0, 3.5, 0), size)
+local h = math.max(bottom.Y - top.Y, 4)
+local w = h * 0.55
+local x, y = top.X - w / 2, top.Y
+local info = {
+Name = LocalPlayer.DisplayName,
+Health = 55 + 45 * math.cos(t * 0.9),
+MaxHealth = 100,
+Distance = 24 + 10 * math.sin(t * 0.5),
+}
+Visuals.Layout(preview.Entry, x, y, w, h, info, Visuals.Settings.EnemyColor, Vector2.new(size.X / 2, size.Y))
+end
+function Visuals.PreviewSetVisible()
+Visuals.PreviewBuild()
+Visuals.PreviewShow(Visuals.PreviewWanted())
+end
+function Visuals.PreviewStep(deltaTime)
+local preview = Visuals.Preview
+if not preview.Frame then
+return
+end
+local wanted = Visuals.PreviewWanted()
+if wanted ~= (preview.Shown == true) then
+Visuals.PreviewShow(wanted)
+end
+if not preview.Shown then
+return
+end
+preview.Pulse = (preview.Pulse or 0) + deltaTime
+Visuals.PreviewDraw()
+if preview.Model then
+preview.Angle = (preview.Angle + deltaTime * 0.6) % (math.pi * 2)
+preview.Model:PivotTo(CFrame.Angles(0, preview.Angle, 0))
+end
+end
+Visuals.Radar = { Dots = {} }
+function Visuals.RadarBuild()
+local radar = Visuals.Radar
+if radar.Frame and radar.Frame.Parent then
+return radar
+end
+local gui = Visuals.EnsureGui()
+local frame = Draw.New("Frame", { Name = "Radar", Position = UDim2.fromOffset(24, 180), BackgroundColor3 = Color3.fromRGB(16, 16, 22), BackgroundTransparency = 0.25, Visible = false, Parent = gui })
+Draw.New("UICorner", { CornerRadius = UDim.new(0.5, 0), Parent = frame })
+Draw.New("UIStroke", { Thickness = 2, Color = Color3.fromRGB(232, 160, 76), Transparency = 0.2, Parent = frame })
+for _, horizontal in ipairs({ true, false }) do
+Draw.New("Frame", {
+AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
+Size = horizontal and UDim2.new(1, -12, 0, 1) or UDim2.new(0, 1, 1, -12),
+BackgroundColor3 = Color3.new(1, 1, 1), BackgroundTransparency = 0.8, Parent = frame,
+})
+end
+local ring = Draw.New("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromScale(0.5, 0.5), BackgroundTransparency = 1, Parent = frame })
+Draw.New("UICorner", { CornerRadius = UDim.new(0.5, 0), Parent = ring })
+Draw.New("UIStroke", { Thickness = 1, Color = Color3.new(1, 1, 1), Transparency = 0.75, Parent = ring })
+local me = Draw.New("TextLabel", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(16, 16), BackgroundTransparency = 1, Text = "▲", TextSize = 14, Font = Enum.Font.GothamBold, TextColor3 = Color3.new(1, 1, 1), ZIndex = 3, Parent = frame })
+radar.Frame, radar.Me = frame, me
+Gui.Draggable(frame, function(begin, delta)
+if not begin then
+return frame.Position
+end
+frame.Position = begin + UDim2.fromOffset(delta.X, delta.Y)
+end)
+return radar
+end
+function Visuals.RadarDot(index)
+local radar = Visuals.Radar
+local dot = radar.Dots[index]
+if not dot then
+dot = Draw.New("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(7, 7), ZIndex = 2, Parent = radar.Frame })
+Draw.New("UICorner", { CornerRadius = UDim.new(0.5, 0), Parent = dot })
+radar.Dots[index] = dot
+end
+return dot
+end
+function Visuals.RadarRender()
+local settings = Visuals.Settings
+local radar = Visuals.Radar
+if not settings.Radar then
+if radar.Frame then
+radar.Frame.Visible = false
+end
+return
+end
+Visuals.RadarBuild()
+Visuals.Scan()
+local cam = Workspace.CurrentCamera
+local char = LocalPlayer.Character
+local root = char and char:FindFirstChild("HumanoidRootPart")
+local size = settings.RadarSize
+radar.Frame.Size = UDim2.fromOffset(size, size)
+radar.Frame.Visible = cam ~= nil and root ~= nil
+if not radar.Frame.Visible then
+return
+end
+local look = cam.CFrame.LookVector * Vector3.new(1, 0, 1)
+look = look.Magnitude > 0 and look.Unit or Vector3.new(0, 0, -1)
+local right = Vector3.new(-look.Z, 0, look.X)
+local radius = size / 2 - 6
+local used = 0
+for _, info in ipairs(Visuals.Targets) do
+local model = info.Model
+local part = info.Root or (typeof(model) == "Instance" and (model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart))
+if not part or (settings.TeamCheck and info.Friendly) then
+continue
+end
+local rel = part.Position - root.Position
+local offset = Vector2.new(rel:Dot(right), -rel:Dot(look)) / (settings.RadarRange or 250) * radius
+local outside = offset.Magnitude > radius
+if outside then
+offset = offset.Unit * radius
+end
+used += 1
+local dot = Visuals.RadarDot(used)
+dot.Position = UDim2.new(0.5, offset.X, 0.5, offset.Y)
+dot.BackgroundColor3 = info.Color or (info.Friendly and settings.FriendColor or settings.EnemyColor)
+dot.BackgroundTransparency = outside and 0.55 or 0
+dot.Visible = true
+end
+for index = used + 1, #radar.Dots do
+radar.Dots[index].Visible = false
+end
+end
+function Visuals.Start()
+if Visuals.Started then
+return
+end
+Visuals.Started = true
+Util.Connect(RunService.RenderStepped, function(deltaTime)
+Visuals.Render()
+Visuals.RadarRender()
+Visuals.PreviewStep(deltaTime)
+end)
+table.insert(State.UnloadHooks, function()
+Visuals.ClearAll()
+if Visuals.Gui then
+Visuals.Gui:Destroy()
+Visuals.Gui = nil
+end
+end)
+end
+function Window:AddVisualsTab(options)
+options = options or {}
+Visuals.Start()
+if options.Provider then
+Visuals:SetProvider(options.Provider)
+end
+local T = function(en, th) return { EN = en, TH = th } end
+local function Bind(key)
+return function(value)
+Visuals:Set(key, value)
+end
+end
+local tab = self:AddTab(options.Name or T("Visuals", "การมองเห็น"), options.Icon or "eye", options.Description or T("Player ESP", "ESP ผู้เล่น"))
+Visuals.PreviewTab = tab
+Visuals:SetPreview(options.Preview == true)
+local main = tab:AddLeftGroupbox(T("ESP", "ESP"), "eye")
+main:AddToggle("MarioEsp", { Text = T("Enable ESP", "เปิด ESP"), Callback = Bind("Enabled") })
+main:AddToggle("MarioEspTeam", { Text = T("Team check", "เช็คทีม"), Default = true, Callback = Bind("TeamCheck") })
+main:AddSlider("MarioEspRange", { Text = T("Max distance", "ระยะสูงสุด"), Min = 50, Max = 5000, Default = 2000, Suffix = "m", Callback = Bind("MaxDistance") })
+main:AddSlider("MarioEspText", { Text = T("Text size", "ขนาดตัวอักษร"), Min = 9, Max = 20, Default = 13, Callback = Bind("TextSize") })
+local look = tab:AddRightGroupbox(T("Elements", "องค์ประกอบ"), "star")
+look:AddToggle("MarioEspBox", { Text = T("Box", "กล่อง"), Default = true, Callback = Bind("Box") })
+look:AddDropdown("MarioEspBoxStyle", { Text = T("Box style", "แบบกล่อง"), Values = { "Full", "Corner" }, Default = "Full", Callback = Bind("BoxStyle") })
+look:AddToggle("MarioEspFill", { Text = T("Box fill", "ถมสีกล่อง"), Callback = Bind("BoxFill") })
+look:AddToggle("MarioEspName", { Text = T("Name", "ชื่อ"), Default = true, Callback = Bind("Name") })
+look:AddToggle("MarioEspHealth", { Text = T("Health bar", "แถบเลือด"), Default = true, Callback = Bind("Health") })
+look:AddToggle("MarioEspHealthText", { Text = T("Health number", "ตัวเลขเลือด"), Callback = Bind("HealthText") })
+look:AddToggle("MarioEspDistance", { Text = T("Distance", "ระยะ"), Default = true, Callback = Bind("Distance") })
+look:AddToggle("MarioEspDot", { Text = T("Head dot", "จุดหัว"), Callback = Bind("HeadDot") })
+look:AddToggle("MarioEspTracer", { Text = T("Tracers", "เส้นนำสายตา"), Callback = Bind("Tracer") })
+look:AddDropdown("MarioEspTracerFrom", { Text = T("Tracer from", "เส้นเริ่มจาก"), Values = { "Bottom", "Center", "Mouse" }, Default = "Bottom", Callback = Bind("TracerOrigin") })
+look:AddToggle("MarioEspChams", { Text = T("Chams", "เรืองแสงทะลุกำแพง"), Callback = Bind("Chams") })
+look:AddToggle("MarioEspArrows", { Text = T("Off-screen arrows", "ลูกศรนอกจอ"), Callback = Bind("Arrows") })
+local colors = tab:AddLeftGroupbox(T("Colors", "สี"), "flower")
+colors:AddLabel(T("Enemy", "ศัตรู")):AddColorPicker("MarioEspEnemyColor", { Default = Visuals.Settings.EnemyColor, Callback = Bind("EnemyColor") })
+colors:AddLabel(T("Friendly", "พวกเดียวกัน")):AddColorPicker("MarioEspFriendColor", { Default = Visuals.Settings.FriendColor, Callback = Bind("FriendColor") })
+local radar = tab:AddLeftGroupbox(T("Radar", "เรดาร์"), "target")
+radar:AddToggle("MarioRadar", { Text = T("Radar", "เรดาร์"), Description = T("Minimap of nearby players, drag to move", "มินิแมพผู้เล่นรอบตัว ลากย้ายได้"), Callback = Bind("Radar") })
+radar:AddSlider("MarioRadarRange", { Text = T("Radar range", "ระยะเรดาร์"), Min = 50, Max = 1000, Default = 250, Suffix = "m", Callback = Bind("RadarRange") })
+radar:AddSlider("MarioRadarSize", { Text = T("Radar size", "ขนาดเรดาร์"), Min = 100, Max = 320, Default = 180, Suffix = "px", Callback = Bind("RadarSize") })
+return tab
+end
+Library.Visuals = Visuals
+local Compat = { Probes = {}, Restores = {}, Deferred = setmetatable({}, { __mode = "k" }), CallTimeout = 8 }
+Library.Compat = Compat
+Compat.Api = {
+HookFunction = hookfunction or replaceclosure,
+HookMetamethod = hookmetamethod,
+RestoreFunction = restorefunction,
+IsFunctionHooked = isfunctionhooked,
+GetNamecallMethod = getnamecallmethod,
+CheckCaller = checkcaller,
+NewCClosure = newcclosure,
+GetConnections = getconnections or get_signal_cons,
+GetGc = getgc,
+GetUpvalue = getupvalue or (debug and debug.getupvalue),
+FireSignal = firesignal,
+FirePrompt = fireproximityprompt,
+FireTouch = firetouchinterest,
+SetIdentity = setthreadidentity or setidentity or (syn and syn.set_thread_identity),
+GetIdentity = getthreadidentity or getidentity or (syn and syn.get_thread_identity),
+QueueOnTeleport = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport),
+Request = request or http_request or (syn and syn.request),
+}
+Compat.Caps = setmetatable({}, {
+__index = function(caps, name)
+local probe = Compat.Probes[name]
+if not probe then
+return nil
+end
+local thread = coroutine.create(probe)
+local ok, works = coroutine.resume(thread)
+local has = ok and coroutine.status(thread) == "dead" and works == true
+if coroutine.status(thread) == "suspended" then
+pcall(coroutine.close, thread)
+end
+rawset(caps, name, has)
+return has
+end,
+})
+function Compat.Probes.HookFunction()
+local hook = Compat.Api.HookFunction
+if not hook then
+return false
+end
+local function Target()
+return "plain"
+end
+local original = hook(Target, function()
+return "hooked"
+end)
+local works = Target() == "hooked" and type(original) == "function" and original() == "plain"
+if type(original) == "function" then
+pcall(hook, Target, original)
+end
+return works
+end
+function Compat.Probes.Namecall()
+local api = Compat.Api
+if not (api.HookMetamethod and api.GetNamecallMethod) then
+return false
+end
+local proxy = newproxy(true)
+getmetatable(proxy).__index = function()
+return "plain"
+end
+local original = api.HookMetamethod(proxy, "__index", function()
+return "hooked"
+end)
+return type(original) == "function" and proxy.probe == "hooked" and original(proxy, "probe") == "plain"
+end
+function Compat.Probes.Hook()
+return Compat.Caps.HookFunction and Compat.Caps.Namecall
+end
+function Compat.Probes.CheckCaller()
+return Compat.Api.CheckCaller ~= nil and Compat.Api.CheckCaller() == true
+end
+function Compat.Probes.Connections()
+if not Compat.Api.GetConnections then
+return false
+end
+local event = Instance.new("BindableEvent")
+local hits = 0
+local function Handler()
+hits += 1
+end
+local conn = event.Event:Connect(Handler)
+local mine
+for _, entry in ipairs(Compat.Api.GetConnections(event.Event)) do
+if entry.Function == Handler then
+mine = entry
+end
+end
+if mine then
+pcall(mine.Fire, mine)
+end
+conn:Disconnect()
+event:Destroy()
+return hits == 1
+end
+function Compat.Probes.Gc()
+if not Compat.Api.GetGc then
+return false
+end
+local function Marker()
+return "gc"
+end
+for _, value in ipairs(Compat.Api.GetGc(false)) do
+if value == Marker then
+return true
+end
+end
+return false
+end
+function Compat.Probes.Upvalues()
+if not Compat.Api.GetUpvalue then
+return false
+end
+local marker = {}
+local function Holder()
+return marker
+end
+return Compat.Api.GetUpvalue(Holder, 1) == marker
+end
+function Compat.Probes.Drawing()
+if type(Drawing) ~= "table" and type(Drawing) ~= "userdata" then
+return false
+end
+local label = Drawing.new("Text")
+local box = Drawing.new("Square")
+local ok = pcall(function()
+label.Text, label.Size, label.Center, label.Outline = "probe", 13, true, true
+label.Position, label.ZIndex, label.Visible = Vector2.new(-100, -100), 2, false
+label.Font = Drawing.Fonts and Drawing.Fonts.Plex or 2
+box.Filled, box.Thickness, box.Visible = false, 1, false
+end)
+for _, object in ipairs({ label, box }) do
+pcall(object.Remove or object.Destroy, object)
+end
+return ok
+end
+function Compat.Probes.Signals()
+if not Compat.Api.FireSignal then
+return false
+end
+local event = Instance.new("BindableEvent")
+local got
+local conn = event.Event:Connect(function(value)
+got = value
+end)
+pcall(Compat.Api.FireSignal, event.Event, 7)
+conn:Disconnect()
+event:Destroy()
+return got == 7
+end
+function Compat.Probes.Identity()
+local api = Compat.Api
+if not (api.SetIdentity and api.GetIdentity) then
+return false
+end
+local before = api.GetIdentity()
+local target = before == 2 and 8 or 2
+api.SetIdentity(target)
+local after = api.GetIdentity()
+api.SetIdentity(before)
+return after == target
+end
+function Compat.Probes.FileSystem()
+if not Util.FileApi() then
+return false
+end
+local stamp = tostring(os.clock())
+local wrote = pcall(writefile, "mariohub_probe.txt", stamp)
+local ok, read = pcall(readfile, "mariohub_probe.txt")
+return wrote and ok and read == stamp
+end
+function Compat.Probes.Hui()
+if type(gethui) ~= "function" then
+return false
+end
+local ok, hidden = pcall(gethui)
+return ok and typeof(hidden) == "Instance"
+end
+function Compat.Probes.Http()
+return Compat.Api.Request ~= nil
+end
+function Compat.Probes.Queue()
+return Compat.Api.QueueOnTeleport ~= nil
+end
+function Compat.Probes.Clipboard()
+return type(setclipboard or toclipboard) == "function"
+end
+function Compat.Probes.Prompt()
+return Compat.Api.FirePrompt ~= nil
+end
+function Compat.Probes.Touch()
+return Compat.Api.FireTouch ~= nil
+end
+function Compat.Probes.Raknet()
+return type(raknet) == "table" and type(raknet.add_send_hook) == "function" and type(raknet.remove_send_hook) == "function" and type(raknet.send) == "function"
+end
+function Compat.Has(caps)
+for _, name in ipairs(type(caps) == "table" and caps or { caps }) do
+if not Compat.Caps[name] then
+return false, name
+end
+end
+return true
+end
+function Compat.NeedCap(option, caps)
+option = type(option) == "string" and Library.Options[option] or option
+if type(option) ~= "table" or type(option.AddGuard) ~= "function" then
+return
+end
+option:AddGuard(function(value)
+if value ~= true or Compat.Has(caps) then
+return true
+end
+local feature = option.Info and option.Info.Text and Lang.Resolve(option.Info.Text) or option.Idx
+Library:Notify("Reicht", Library:T(tostring(feature) .. " is not supported on this executor", tostring(feature) .. " ใช้กับ executor นี้ไม่ได้"), 4, "Warn")
+task.defer(option.SetValue, option, false)
+return false
+end)
+end
+function Compat.Block(option, reason)
+option = type(option) == "string" and Library.Options[option] or option
+if type(option) ~= "table" or type(option.AddGuard) ~= "function" then
+return
+end
+option.Blocked = reason
+option:AddGuard(function(value)
+if value ~= true then
+return true
+end
+local feature = option.Info and option.Info.Text and Lang.Resolve(option.Info.Text) or option.Idx
+Library:Notify("Reicht", tostring(feature) .. ": " .. tostring(Lang.Resolve(reason) or reason), 4, "Warn")
+task.defer(option.SetValue, option, false)
+return false
+end)
+end
+function Compat.Require(module)
+local ok, loaded = pcall(require, module)
+if ok or not Compat.Caps.Identity then
+return ok, loaded
+end
+local finished, okAgain, again = Util.Await(Compat.CallTimeout, function()
+Compat.Api.SetIdentity(2)
+return pcall(require, module)
+end)
+if finished and okAgain then
+return true, again
+end
+return false, loaded
+end
+function Compat.Call(fn, ...)
+if not Compat.Deferred[fn] then
+local result = table.pack(pcall(fn, ...))
+if result[1] then
+return table.unpack(result, 2, result.n)
+end
+if not Compat.Caps.Identity or not tostring(result[2]):find("non-RobloxScript", 1, true) then
+error(result[2], 0)
+end
+Compat.Deferred[fn] = true
+end
+local args = table.pack(...)
+local box
+task.defer(function()
+Compat.Api.SetIdentity(2)
+box = table.pack(pcall(fn, table.unpack(args, 1, args.n)))
+end)
+local deadline = os.clock() + Compat.CallTimeout
+while not box and os.clock() < deadline do
+task.wait()
+end
+if not box then
+error("game call timed out", 0)
+end
+if not box[1] then
+error(box[2], 0)
+end
+return table.unpack(box, 2, box.n)
+end
+local function Wrap(handler)
+local okWrap, wrapped = pcall(Compat.Api.NewCClosure or error, handler)
+return okWrap and type(wrapped) == "function" and wrapped or handler
+end
+function Compat.Unhook(target, rehook)
+local api = Compat.Api
+if target and api.RestoreFunction and pcall(api.RestoreFunction, target) then
+if not api.IsFunctionHooked then
+return
+end
+local ok, still = pcall(api.IsFunctionHooked, target)
+if ok and not still then
+return
+end
+end
+rehook()
+end
+local function Track(putBack)
+table.insert(Compat.Restores, putBack)
+return function()
+local index = table.find(Compat.Restores, putBack)
+if not index then
+return
+end
+table.remove(Compat.Restores, index)
+Util.Try(putBack)
+end
+end
+function Compat.HookMeta(object, method, handler)
+if not Compat.Caps.Namecall then
+return nil
+end
+local api = Compat.Api
+local ok, original = pcall(api.HookMetamethod, object, method, Wrap(handler))
+if not ok or type(original) ~= "function" then
+return nil
+end
+return original, Track(function()
+api.HookMetamethod(object, method, original)
+end)
+end
+function Compat.HookFunction(target, handler)
+if not Compat.Caps.HookFunction then
+return nil
+end
+local api = Compat.Api
+local ok, original = pcall(api.HookFunction, target, Wrap(handler))
+if not ok or type(original) ~= "function" then
+return nil
+end
+return original, Track(function()
+Compat.Unhook(target, function()
+pcall(api.HookFunction, target, original)
+end)
+end)
+end
+function Compat.RestoreAll()
+for index = #Compat.Restores, 1, -1 do
+Util.Try(Compat.Restores[index])
+end
+table.clear(Compat.Restores)
+end
+function Compat.RaknetLive(timeout)
+if not Compat.Caps.Raknet then
+return false
+end
+local seen = false
+local function Watch()
+seen = true
+end
+if not pcall(raknet.add_send_hook, Watch) then
+return false
+end
+local deadline = os.clock() + (timeout or 2)
+while not seen and os.clock() < deadline do
+task.wait(0.1)
+end
+pcall(raknet.remove_send_hook, Watch)
+return seen
+end
+function Compat.Warm()
+for name in pairs(Compat.Probes) do
+task.defer(function()
+local _ = Compat.Caps[name]
+end)
+end
+end
+function Lang.Format(key, ...)
+local spec = Lang.Strings[key] or { EN = key, TH = key }
+local args = table.pack(...)
+return {
+EN = string.format(spec.EN, table.unpack(args, 1, args.n)),
+TH = string.format(spec.TH or spec.EN, table.unpack(args, 1, args.n)),
+}
+end
+function Configs.SetFolder(name)
+Configs.Folder = Config.ConfigRoot .. "/" .. Util.Sanitize(name)
+if Util.FileApi() then
+Util.EnsureFolder(Configs.Folder)
+end
+end
+function Configs.Path(name)
+return Configs.Folder .. "/" .. Util.Sanitize(name) .. ".json"
+end
+function Configs.Save(name)
+if not Util.FileApi() then
+return false, Lang.Get("NoFileApi")
+end
+local snapshot = {}
+for idx, option in pairs(Library.Options) do
+if not option.NoSave and option.Serialize then
+snapshot[idx] = { Type = option.Type, Value = option:Serialize() }
+end
+end
+return (pcall(writefile, Configs.Path(name), HttpService:JSONEncode(snapshot)))
+end
+function Configs.Load(name)
+local path = Configs.Path(name)
+if not Util.FileApi() or not Util.Exists(path) then
+return false, Lang.Get("ConfigMissing")
+end
+local read, raw = pcall(readfile, path)
+local ok, snapshot = pcall(HttpService.JSONDecode, HttpService, read and raw or "")
+if not ok or type(snapshot) ~= "table" then
+return false, Lang.Get("ConfigBroken")
+end
+for idx, saved in pairs(snapshot) do
+local option = Library.Options[idx]
+if option and not option.NoSave and option.Type == saved.Type then
+Util.Try(option.Deserialize, option, saved.Value)
+end
+end
+return true
+end
+function Configs.Delete(name)
+local path = Configs.Path(name)
+if type(delfile) ~= "function" or not Util.FileApi() or not Util.Exists(path) then
+return false, Lang.Get("ConfigMissing")
+end
+return (pcall(delfile, path))
+end
+function Configs.List()
+if type(listfiles) ~= "function" or not Util.FileApi() then
+return {}
+end
+local ok, files = pcall(listfiles, Configs.Folder)
+local names = {}
+for _, path in ipairs(ok and files or {}) do
+local name = path:match("([^/\\]+)%.json$")
+if name then
+table.insert(names, name)
+end
+end
+table.sort(names)
+return names
+end
+function Configs.SetAutoload(name)
+if not Util.FileApi() then
+return false, Lang.Get("NoFileApi")
+end
+return (pcall(writefile, Configs.Folder .. "/autoload.txt", name))
+end
+function Configs.GetAutoload()
+local path = Configs.Folder .. "/autoload.txt"
+if not Util.FileApi() or not Util.Exists(path) then
+return nil
+end
+local ok, name = pcall(readfile, path)
+return ok and type(name) == "string" and name ~= "" and name or nil
+end
+function Configs.BuildSection(group)
+local nameInput = group:AddInput("MarioConfigName", { Text = Lang.Strings.ConfigName, Placeholder = "default", NoSave = true })
+local list = group:AddListBox("MarioConfigList", { Text = Lang.Strings.SavedConfigs, Values = Configs.List(), Height = 4, NoSave = true })
+local autoload = group:AddLabel(Lang.Format("Autoload", Configs.GetAutoload() or Lang.Get("None")))
+local function Selected()
+local typed = nameInput.Value:gsub("^%s+", ""):gsub("%s+$", "")
+return typed ~= "" and typed or list.Value
+end
+local function Run(actionKey, handler)
+local name = Selected()
+if not name then
+Library:Notify(Lang.Strings.Configs, Lang.Strings.PickConfig, 3, "Warning")
+return
+end
+local ok, reason = handler(name)
+local action = Lang.Strings[actionKey]
+local message = ok and { EN = action.EN .. ": " .. name, TH = action.TH .. ": " .. name }
+or { EN = action.EN .. " failed: " .. tostring(reason), TH = action.TH .. " ไม่สำเร็จ: " .. tostring(reason) }
+Library:Notify(Lang.Strings.Configs, message, 3, ok and "Success" or "Error")
+list:SetValues(Configs.List())
+end
+group:AddButton({ Text = Lang.Strings.Save, Style = "Primary", Func = function()
+Run("Save", Configs.Save)
+end }):AddButton({ Text = Lang.Strings.Load, Style = "Success", Func = function()
+Run("Load", Configs.Load)
+end })
+group:AddButton({ Text = Lang.Strings.Delete, Style = "Danger", DoubleClick = true, Func = function()
+Run("Delete", Configs.Delete)
+end }):AddButton({ Text = Lang.Strings.Refresh, Func = function()
+list:SetValues(Configs.List())
+end })
+group:AddButton({ Text = Lang.Strings.SetAutoload, Style = "Warning", Func = function()
+Run("SetAutoload", function(name)
+local ok, reason = Configs.SetAutoload(name)
+if ok then
+autoload:SetText(Lang.Format("Autoload", name))
+end
+return ok, reason
+end)
+end })
+end
+function Window:AddSettingsTab()
+local tab = self:AddTab(Lang.Strings.Settings, "gear", Lang.Strings.SettingsDesc)
+local interface = tab:AddLeftGroupbox(Lang.Strings.Interface, "mushroom")
+interface:AddDropdown("MarioLanguage", {
+Text = Lang.Strings.Language,
+Values = { "English", "ไทย" },
+Default = State.Language == "TH" and "ไทย" or "English",
+Callback = function(value)
+Library:SetLanguage(value == "ไทย" and "TH" or "EN")
+end,
+})
+interface:AddDropdown("MarioTheme", { Text = Lang.Strings.ThemeName, Values = Themes.Order, Default = State.ThemeName, Callback = function(name)
+Library:SetTheme(name)
+end })
+interface:AddSlider("MarioScale", { Text = Lang.Strings.Scale, Min = Config.ScaleRange.Min * 100, Max = Config.ScaleRange.Max * 100, Default = State.UserScale * 100, Suffix = "%", Finished = true, Callback = function(value)
+self:SetScale(value / 100)
+end })
+interface:AddKeybind("MarioMenuKey", { Text = Lang.Strings.MenuKey, Default = State.MenuKey, Mode = "Always", ChangedCallback = function(name)
+State.MenuKey = name
+end })
+interface:AddToggle("MarioParticles", { Text = Lang.Strings.Particles, Description = Lang.Strings.ParticlesDesc, Default = Particles.Enabled, Callback = Particles.SetEnabled })
+interface:AddToggle("MarioFloat", { Text = Lang.Strings.FloatButton, Description = Lang.Strings.FloatDesc, Default = Float.Button ~= nil and Float.Button.Visible, Callback = Float.SetVisible })
+local about = tab:AddLeftGroupbox(Lang.Strings.About, "star")
+about:AddLabel(string.format("%s v%s - %s", self.Title, Library.Version, self.SubTitle ~= "" and self.SubTitle or tostring(game.PlaceId)))
+about:AddLabel(Lang.Format("Device", State.Touch and "Mobile" or "PC"))
+about:AddButton({ Text = Lang.Strings.Rejoin, Func = function()
+game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+end }):AddButton({ Text = Lang.Strings.Unload, Style = "Danger", DoubleClick = true, Func = function()
+Library:Unload()
+end })
+Configs.BuildSection(tab:AddRightGroupbox(Lang.Strings.Configs, "qblock"))
+return tab
+end
+function Library:CreateWindow(options)
+options = options or {}
+local language = options.Language
+if language == "Auto" then
+language = tostring(LocalPlayer.LocaleId):sub(1, 2) == "th" and "TH" or "EN"
+end
+State.Language = language == "TH" and "TH" or "EN"
+State.UserScale = math.clamp(options.Scale or 1, Config.ScaleRange.Min, Config.ScaleRange.Max)
+Theme.Apply(options.Theme or Config.SeasonTheme or "Overworld")
+Assets.Configure(Config.DefaultAssets)
+Assets.Configure(options.Assets)
+Window.DetectTouch(options.Layout)
+Gui.Setup()
+Library:OnUnload(Compat.RestoreAll)
+task.delay(3, Compat.Warm)
+if State.Language == "TH" then
+Fonts.LoadThaiAsync()
+end
+local window = Window.New(options)
+self.Window = window
+Float.Build()
+Watermark.SetVisible(false)
+Configs.SetFolder(options.ConfigFolder or options.Folder or window.Title)
+local function Build()
+if Library.Unloaded then
+return
+end
+Util.Try(options.OnUnlocked)
+Layout.Flush()
+end
+local function Reveal()
+if Library.Unloaded then
+return
+end
+window.Ready = true
+window:SetVisible(true)
+Library:Notify(window.Title, Lang.Format(State.Touch and "ReadyTouch" or "Ready", Keybinds.Short(State.MenuKey)), 5, "Power")
+end
+local function Open()
+if Library.Unloaded then
+return
+end
+if options.Intro == false then
+Build()
+Reveal()
+return
+end
+local built = false
+task.spawn(function()
+Build()
+built = true
+end)
+local function WaitBuilt()
+while not built and not Library.Unloaded do
+task.wait()
+end
+end
+local steps = Lang.Strings.IntroSteps
+task.spawn(Intro.Play, {
+Title = window.Title,
+SubTitle = window.SubTitle,
+Steps = {
+{ Label = { EN = steps.EN[1], TH = steps.TH[1] } },
+{ Label = { EN = steps.EN[2], TH = steps.TH[2] } },
+{ Label = { EN = steps.EN[3], TH = steps.TH[3] }, Run = WaitBuilt },
+{ Label = { EN = steps.EN[4], TH = steps.TH[4] } },
+},
+OnDone = Reveal,
+})
+end
+Open()
+return window
+end
+function Library:SetLanguage(code)
+if code ~= "EN" and code ~= "TH" then
+return
+end
+Lang.Set(code)
+local option = self.Options.MarioLanguage
+if option then
+option.Value = code == "TH" and "ไทย" or "English"
+option:Render()
+end
+end
+function Library:GetLanguage()
+return State.Language
+end
+function Library:T(english, thai)
+return { EN = english, TH = thai or english }
+end
+function Library:SetTheme(name)
+Theme.Apply(name)
+local option = self.Options.MarioTheme
+if option and option.Value ~= State.ThemeName then
+option.Value = State.ThemeName
+option:Render()
+end
+end
+function Library:SetAssets(map)
+Assets.Configure(map)
+end
+function Library:Notify(info, content, duration, kind)
+if type(info) == "table" and not info.EN then
+info, content, duration, kind = info.Title, info.Content or info.Description, info.Duration, info.Type or info.Icon
+end
+if self.Unloaded or not State.NotifyHost then
+return
+end
+Notify.Push(Lang.Resolve(info), content, duration, kind)
+end
+function Library:Toggle()
+if self.Window then
+self.Window:Toggle()
+end
+end
+function Library:Every(interval, callback)
+Util.Every(interval, callback)
+end
+function Library:SaveConfig(name)
+return Configs.Save(name)
+end
+function Library:LoadConfig(name)
+return Configs.Load(name)
+end
+function Library:LoadAutoloadConfig()
+local name = Configs.GetAutoload()
+if not name then
+return
+end
+local ok, reason = Configs.Load(name)
+local message = ok and { EN = "Autoloaded: " .. name, TH = "โหลดอัตโนมัติ: " .. name } or { EN = "Autoload failed: " .. tostring(reason), TH = "โหลดอัตโนมัติไม่สำเร็จ: " .. tostring(reason) }
+self:Notify(Lang.Strings.Configs, message, 3, ok and "Success" or "Error")
+end
+function Library:OnUnload(callback)
+table.insert(State.UnloadHooks, callback)
+end
+function Library:Unload()
+if self.Unloaded then
+return
+end
+self.Unloaded = true
+for _, callback in ipairs(State.UnloadHooks) do
+Util.Try(callback)
+end
+if Reactive and Reactive.DisposeAll then
+Reactive.DisposeAll()
+end
+if Motion then
+if Motion.Connection then
+Motion.Connection:Disconnect()
+Motion.Connection = nil
+end
+if Motion.Springs then
+table.clear(Motion.Springs)
+end
+if Motion.Tickers then
+table.clear(Motion.Tickers)
+end
+end
+for _, list in pairs(Anim.Loops or {}) do
+for _, entry in ipairs(list) do
+if entry.Tween then
+pcall(entry.Tween.Cancel, entry.Tween)
+end
+end
+end
+table.clear(Anim.Loops)
+table.clear(Anim.GroupState)
+for _, connection in ipairs(State.Connections) do
+connection:Disconnect()
+end
+table.clear(State.Connections)
+table.clear(State.KeyPickers)
+table.clear(State.Tasks)
+table.clear(Layout.Dirty)
+table.clear(Layout.All)
+table.clear(Layout.Measured)
+Layout.MeasuredCount = 0
+table.clear(Theme.Bound)
+table.clear(Theme.Renderers)
+table.clear(Theme.InstanceRenderers)
+table.clear(Lang.Bound)
+table.clear(Lang.Listeners)
+table.clear(Lang.InstanceListeners)
+table.clear(Fonts.Texts)
+State.Drag, State.Binding, State.Popup, State.Window, State.NotifyHost = nil, nil, nil, nil, nil
+if State.Gui then
+State.Gui:Destroy()
+State.Gui = nil
+end
+end
+Library.Themes = Themes.Order
+Library.Ref = Reactive.Ref
+Library.Computed = Reactive.Computed
+Library.Effect = Reactive.Effect
+Library.Watch = Reactive.Watch
+Library.Batch = Reactive.Batch
+Library.Store = Reactive.Store
+Library.IsRef = Reactive.IsRef
+Library.tw = Tailwind.Apply
+Library.h = Tailwind.CreateElement
+Library.Component = function(self, name, renderFn)
+if type(self) == "string" then
+return Tailwind.Component(self, name)
+end
+return Tailwind.Component(name, renderFn)
+end
+Library.Show = Tailwind.Show
+Library.For = Tailwind.For
+Library.Icons = Icons
+Library.Icon = function(self, parent, name, size, color)
+if typeof(self) == "Instance" then
+return Icons.Create(self, parent, name, size)
+end
+return Icons.Create(parent, name, size, color)
+end
+Library.Gui = Gui
+Library.Motion = Motion
+Library.Fx = Fx
+Library.Dialog = function(self, spec)
+return Dialog.Show(type(self) == "table" and self ~= Library and self or spec)
+end
+Library.CloseDialog = Dialog.Close
+Library.Sheet = function(self, spec)
+return Sheet.Show(type(self) == "table" and self ~= Library and self or spec)
+end
+Library.CloseSheet = Sheet.Close
+do
+Config.SeasonTheme = "Minimal"
+Config.Particles.Count = 0
+Themes.Minimal = Palette({
+Backdrop = "0E1014", BackdropAlt = "12151A", Topbar = "14181E",
+Sidebar = "11141A", SidebarAlt = "161A21",
+SidebarText = "E7E9ED", SidebarMuted = "8B929E",
+TabActive = "1F242C", TabActiveText = "FFFFFF",
+Panel = "161A21", PanelHeader = "1A1F27", Element = "1E232B", Hover = "252B34",
+Outline = "262C35", Shadow = "000000",
+Text = "E8EAEE", SubText = "A5ACB8", Muted = "6E7581", Track = "262C35",
+Cloud = "0E1014", CloudAlpha = 0,
+Accent = "D64C40", AccentDark = "A0342C",
+Grass = "1A1F27", GrassDark = "14181E", Brick = "1E232B", BrickDark = "14181E",
+Decor = { "None" },
+Particle = { ".", false, "262C35" },
+})
+table.insert(Themes.Order, 1, "Minimal")
+local W = Config.Window
+W.Width, W.Height = 720, 500
+W.MinWidth, W.MinHeight = 300, 240
+W.TouchMinWidth, W.TouchMinHeight = 300, 240
+W.Topbar, W.Sidebar, W.SidebarCompact = 46, 168, 56
+W.Header, W.UserCard = 52, 46
+W.Ground = 0
+W.Margin, W.TouchMargin = 16, 8
+W.Radius, W.Stroke, W.Shadow = 10, 1, 0
+local T = Config.Metrics.Touch
+T.Row, T.Box, T.Item, T.Tab = 40, 40, 38, 46
+T.Check, T.Knob = 26, 22
+T.Switch = Vector2.new(50, 26)
+T.SwitchKnob = 20
+T.Radius = 10
+local D = Config.Metrics.Desktop
+D.Radius, D.Depth = 9, 2
+Config.Group.Radius, Config.Group.Stroke, Config.Group.Shadow = 10, 1, 0
+Config.Button.Depth, Config.Button.PadX = 2, 12
+Config.Selectable.Radius = 8
+Config.Page.ScrollBar = 4
+end
+Library.Window = Library.CreateWindow
+return Library]]
 local function LoadUiSource()
 for _, url in ipairs(UI_URLS) do
 local ok, src = pcall(game.HttpGet, game, url)
 if ok and type(src) == "string" and #src > 1024 then
 if writefile then pcall(writefile, UI_CACHE, src) end
-return src
+return src, "network"
 end
+end
+if type(UI_EMBEDDED) == "string" and #UI_EMBEDDED > 1024 then
+return UI_EMBEDDED, "embedded"
 end
 if isfile and readfile and isfile(UI_CACHE) then
 local ok, src = pcall(readfile, UI_CACHE)
 if ok and type(src) == "string" and #src > 1024 then
-return src
+return src, "cache"
 end
 end
-return nil
+return nil, "none"
 end
+local UiOrigin = "none"
 local Library = Safe(function()
-local src = LoadUiSource()
+local src, origin = LoadUiSource()
+UiOrigin = origin or "none"
 if type(src) ~= "string" or #src < 1024 then return nil end
 local chunk = loadstring(src)
 if not chunk then return nil end
@@ -367,6 +8610,11 @@ if type(Library) ~= "table" then
 Alert("The menu failed to load on this executor.")
 return
 end
+getgenv().ReichtUiSource = UiOrigin
+warn(string.format("[Reicht] ui source: %s (embedded ready: %s, %d bytes)",
+tostring(UiOrigin),
+tostring(type(UI_EMBEDDED) == "string" and #UI_EMBEDDED > 1024),
+type(UI_EMBEDDED) == "string" and #UI_EMBEDDED or 0))
 local Window = Library:CreateWindow({
 Title = "Reicht",
 SubTitle = "Doors - Lonely Hub",
@@ -16380,6 +24628,1736 @@ while not Globals.MainUI do task.wait() end
 Abysall.Interface.ApplySettingsTab(Window)
 Functions.Notify({ Title = "Successfully loaded in " .. math.floor((tick() - LoadStart) * 1000) / 1000 .. " seconds." , Body = "Press '" .. tostring(Options.MenuKeybind.Value) .. "' to toggle the UI."})
 ]=]
+local ABYSALL_COMPONENT_BASE = "https://raw.githubusercontent.com/therealcookiemonsterof1966/AbysallContinued/main/Components/"
+local ABYSALL_LEGACY_BASE = "https://raw.githubusercontent.com/bocaj111004/Abysall/refs/heads/main/"
+local ABYSALL_COMPONENTS = {
+[ABYSALL_COMPONENT_BASE .. "Environment.luau"] = [=[local Environment = {}
+local Log = {}
+local Tested = 0
+local Failed = 0
+local Passed = 0
+
+local BrokenFeatures = {
+	["Volcano"] = {"run_on_actor", "oth"},
+	["Opiumware"] = {"gethiddenproperty"},
+	["Solara"] = {"require"},
+	["Xeno"] = {"require"},
+}
+
+local RootEnv = getfenv(0)
+
+local function GetGlobal(Path)
+	local Value = RootEnv
+	while Value ~= nil and Path ~= "" do
+		local Name, NextPath = string.match(Path, "^([^.]+)%.?(.*)$")
+		Value = Value[Name]
+		Path = NextPath
+	end
+	return Value
+end
+
+local Global = setmetatable({}, {
+	__index = function(Self, Name)
+		return GetGlobal(Name)
+	end,
+})
+
+local Services = setmetatable({}, {
+	__index = function(Self, Name)
+		return game:GetService(Name)
+	end,
+})
+
+local Results = {}
+
+local function AddResult(Name, Text, DidPass)
+	table.insert(Results, Text)
+	Log[Name] = {
+		Passed = DidPass,
+		Reason = Text,
+	}
+end
+
+Environment.Results = Results
+Environment.PrintResults = function()
+	local Executor = Environment.identifyexecutor and Environment.identifyexecutor() or "Unknown"
+	print("Test Result")
+	for _, Result in ipairs(Results) do
+		print(Result)
+		task.wait()
+	end
+	print("Executor - " .. Executor)
+	print("Tests Passed: " .. Passed .. "/" .. Tested)
+	print("Test Score: " .. math.floor((Passed / Tested) * 100 + 0.5) .. "%")
+end
+
+local function RunTest(Name, Test, InternalName)
+	local TimedOut = false
+	Tested = Tested + 1
+
+	local ExecutorName = Global.identifyexecutor and Global.identifyexecutor() or "Unknown"
+	local BrokenList = BrokenFeatures[ExecutorName]
+	if BrokenList and table.find(BrokenList, Name) then
+		AddResult(Name, "❌ " .. Name .. " failed: test has been skipped", false)
+		Failed = Failed + 1
+		return
+	end
+
+	local TargetGlobal = Global[Name]
+	if not TargetGlobal then
+		AddResult(Name, "❌ " .. Name .. " failed: function is nil", false)
+		Failed = Failed + 1
+		return
+	end
+
+	local Time = 0
+	local Finished = false
+
+	task.spawn(function()
+		local Success, Result = pcall(Test)
+		if not TimedOut then
+			if Success then
+				local Key = InternalName or Name
+				Environment[Key] = TargetGlobal
+				AddResult(Name, "✅ " .. Name, true)
+				Passed = Passed + 1
+			else
+				AddResult(Name, "❌ " .. Name .. " failed: " .. tostring(Result), false)
+				Failed = Failed + 1
+			end
+		end
+		Finished = true
+	end)
+
+	while not Finished do
+		Time = Time + 1
+		if Time > 100 then
+			AddResult(Name, "❌ " .. Name .. " failed: test timed out", false)
+			Failed = Failed + 1
+			TimedOut = true
+			break
+		end
+		task.wait(0.1)
+	end
+end
+
+RunTest("getgenv", function()
+	assert(typeof(Global.getgenv()) == "table", "Did not return a table")
+	Global.getgenv().Example = "Test"
+	assert(Example == "Test", "Failed to set a global variable")
+	Global.getgenv().Example = nil
+end)
+
+RunTest("getrenv", function()
+	assert(Environment.getgenv, "getgenv is required to test")
+	local Env = Global.getrenv()
+	assert(typeof(Env) == "table", "Did not return a table")
+	assert(typeof(Env.print) == "function", "Did not return an environment table")
+	assert(Global.getrenv ~= Global.getgenv, "getrenv is an alias of getgenv")
+	assert(Global.getgenv() ~= Global.getrenv(), "Returned executor environment")
+	local Success = pcall(function()
+		return Env.loadstring([[return 10]])()
+	end)
+	assert(Success == false, "Should error when calling loadstring from roblox environment")
+end)
+
+RunTest("getgc", function()
+	local TestFunction = function()
+		return 10
+	end
+	local TestTable = { Value = 10 }
+	local YesTables = Global.getgc(true)
+	local NoTables = Global.getgc(false)
+	assert(table.find(YesTables, TestTable), "Failed to find a table")
+	assert(table.find(YesTables, TestFunction), "Failed to find a function")
+	assert(not table.find(NoTables, TestTable), "Should not return a table when called with false")
+	assert(table.find(NoTables, TestFunction), "Failed to find a function")
+end)
+
+RunTest("identifyexecutor", function()
+	assert(typeof(Global.identifyexecutor()) == "string", "Did not return a string")
+end)
+
+RunTest("request", function()
+	local Response = Global.request({
+		Url = "https://raw.githubusercontent.com/bocaj111004/Abysall/refs/heads/main/Components/Environment.luau",
+		Method = "GET",
+	})
+	assert(Response.StatusCode == 200, "Status code should be 200")
+	assert(typeof(Response.Body) == "string", "Body should be a string")
+end)
+
+RunTest("cloneref", function()
+	local TestPart = Instance.new("Part")
+	local Clone = Global.cloneref(TestPart)
+	assert(typeof(Clone) == "Instance", "Should return an Instance")
+	assert(TestPart ~= Clone, "Clone should not be equal to original")
+	TestPart.Name = "Test"
+	assert(Clone.Name == "Test", "Changing the original did not change the clone")
+	TestPart:Destroy()
+end)
+
+RunTest("gethui", function()
+	local Hui = Global.gethui()
+	assert(typeof(Hui) == "Instance", "Should return an instance")
+	local ValidClasses = { "ScreenGui", "Folder", "BasePlayerGui", "CoreGui" }
+	if not Hui:IsDescendantOf(Services.CoreGui) and Hui.ClassName ~= "CoreGui" or not table.find(ValidClasses, Hui.ClassName) then
+		error("Did not return a valid gui container")
+	end
+end)
+
+RunTest("getcallbackvalue", function()
+	local TestBindable = Instance.new("BindableFunction")
+	TestBindable.OnInvoke = function(Value)
+		return Value * 10
+	end
+	local Callback = Global.getcallbackvalue(TestBindable, "OnInvoke")
+	local Success, Result = pcall(function()
+		assert(typeof(Callback) == "function", "Did not return a function")
+		assert(Callback(5) == 50, "Did not return the callback value")
+	end)
+	TestBindable:Destroy()
+	assert(Success, Result)
+end)
+
+RunTest("getinstances", function()
+	local TestPart1 = Instance.new("Part")
+	local TestPart2 = Instance.new("Part", Services.Workspace)
+	local InstanceList = Global.getinstances()
+	local Found1 = table.find(InstanceList, TestPart1)
+	local Found2 = table.find(InstanceList, TestPart2)
+	TestPart1:Destroy()
+	TestPart2:Destroy()
+	assert(Found2, "Did not return an instance")
+	assert(Found1, "Did not return an instance parented to nil")
+end)
+
+RunTest("getnilinstances", function()
+	local TestPart1 = Instance.new("Part")
+	local TestPart2 = Instance.new("Part", Services.Workspace)
+	local InstanceList = Global.getnilinstances()
+	local FoundNil = table.find(InstanceList, TestPart1)
+	local FoundParented = table.find(InstanceList, TestPart2)
+	TestPart1:Destroy()
+	TestPart2:Destroy()
+	assert(not FoundParented, "Returned an instance not parented to nil")
+	assert(FoundNil, "Did not return an instance parented to nil")
+end)
+
+RunTest("fireproximityprompt", function()
+	local TestPart = Instance.new("Part", Services.Workspace)
+	local TestPrompt = Instance.new("ProximityPrompt", TestPart)
+	local Fired = false
+	local Connection = TestPrompt.Triggered:Connect(function()
+		Fired = true
+	end)
+	Global.fireproximityprompt(TestPrompt)
+	local Tries = 0
+	while not Fired and Tries < 10 do
+		Tries = Tries + 1
+		task.wait(0.1)
+	end
+	Connection:Disconnect()
+	TestPart:Destroy()
+	assert(Fired == true, "Failed to fire a proximity prompt")
+end)
+
+RunTest("fireclickdetector", function()
+	local TestPart = Instance.new("Part", Services.Workspace)
+	local TestClick = Instance.new("ClickDetector", TestPart)
+	local Fired = false
+	local Connection = TestClick.MouseClick:Connect(function()
+		Fired = true
+	end)
+	Global.fireclickdetector(TestClick)
+	local Tries = 0
+	while not Fired and Tries < 10 do
+		Tries = Tries + 1
+		task.wait(0.1)
+	end
+	Connection:Disconnect()
+	TestPart:Destroy()
+	assert(Fired == true, "Failed to fire a click detector")
+end)
+
+RunTest("firetouchinterest", function()
+	local TestPart1 = Instance.new("Part", Services.Workspace)
+	TestPart1.Position = Vector3.new(0, 1000, 0)
+	local TestPart2 = Instance.new("Part", Services.Workspace)
+	TestPart2.Position = Vector3.new(0, 1000, 0)
+	local Fired = false
+	local Connection = TestPart1.Touched:Connect(function(Child)
+		if Child == TestPart2 then
+			Fired = true
+		end
+	end)
+	Global.firetouchinterest(TestPart1, TestPart2, 0)
+	task.wait()
+	Global.firetouchinterest(TestPart1, TestPart2, 1)
+	local Tries = 0
+	while not Fired and Tries < 10 do
+		Tries = Tries + 1
+		task.wait(0.1)
+	end
+	Connection:Disconnect()
+	TestPart1:Destroy()
+	TestPart2:Destroy()
+	assert(Fired == true, "Failed to fire a touch interest")
+end)
+
+RunTest("clonefunction", function()
+	local TestFunction = function()
+		return 10
+	end
+	local TestClone = Global.clonefunction(TestFunction)
+	assert(TestFunction ~= TestClone, "Returned the original function")
+	assert(TestFunction() == TestClone(), "Clone did not return the same as the original")
+end)
+
+RunTest("newcclosure", function()
+	local TestFunction = function()
+		return 10
+	end
+	local TestC = Global.newcclosure(TestFunction)
+	assert(TestFunction ~= TestC, "Returned the original function")
+	assert(TestFunction() == TestC(), "Did not return the same value as the original")
+	assert(TestC() == 10, "Did not return the correct value")
+	assert(debug.info(TestC, "s") == "[C]", "Did not return a C function")
+end)
+
+RunTest("hookfunction", function()
+	local TestFunction = function()
+		return 10
+	end
+	local TestC = Global.newcclosure(function()
+		return 25
+	end)
+	local TestHook = function()
+		return 100
+	end
+	local Old = Global.hookfunction(TestFunction, TestHook)
+	local OldC = Global.hookfunction(TestC, TestHook)
+	assert(TestFunction ~= TestHook, "Original and hook are the same function")
+	assert(debug.info(TestC, "s") == "[C]", "Hooked C function is no longer in C")
+	assert(TestFunction() == 100, "Did not change the return value")
+	assert(Old() == 10, "Did not return the original function")
+	assert(OldC() == 25, "Did not return the original C function")
+end)
+
+RunTest("restorefunction", function()
+	assert(Environment.hookfunction, "hookfunction is required to test")
+	local TestFunction = function()
+		return 10
+	end
+	local TestHook = function()
+		return 100
+	end
+	Global.hookfunction(TestFunction, TestHook)
+	Global.restorefunction(TestFunction)
+	assert(TestFunction() == 10, "Failed to unhook a function")
+end)
+
+RunTest("isfunctionhooked", function()
+	assert(Environment.hookfunction, "hookfunction is required to test")
+	assert(Environment.restorefunction, "restorefunction is required to test")
+	local TestFunction = function()
+		return 10
+	end
+	local TestHook = function()
+		return 100
+	end
+	Global.hookfunction(TestFunction, TestHook)
+	assert(Global.isfunctionhooked(TestFunction) == true, "Did not return true for a hooked function")
+	Global.restorefunction(TestFunction)
+	assert(Global.isfunctionhooked(TestFunction) == false, "Did not return false for an unhooked function")
+end)
+
+RunTest("isexecutorclosure", function()
+	assert(Environment.newcclosure, "newcclosure is required to test")
+	local TestFunction = function()
+		return 10
+	end
+	local TestC = Global.newcclosure(TestFunction)
+	assert(Global.isexecutorclosure(TestFunction) == true, "Did not return true for an executor function")
+	assert(Global.isexecutorclosure(Global.newcclosure) == true, "Did not return true for an executor global")
+	assert(Global.isexecutorclosure(warn) == false, "Did not return false for a Roblox global")
+	assert(Global.isexecutorclosure(TestC) == true, "Did not return true for an executor C function")
+end)
+
+RunTest("getnamecallmethod", function()
+	pcall(function()
+		game:ExampleNamecall()
+	end)
+	assert(typeof(Global.getnamecallmethod()) == "string", "Did not return a string")
+	assert(Global.getnamecallmethod() == "ExampleNamecall", "Did not return the correct method")
+end)
+
+RunTest("hookmetamethod", function()
+	assert(Environment.getnamecallmethod, "getnamecallmethod is required to test")
+	assert(Environment.newcclosure, "newcclosure is required to test")
+	local TestTable = setmetatable({}, {
+		__index = Global.newcclosure(function()
+			return "normal"
+		end),
+	})
+	Global.hookmetamethod(TestTable, "__index", Global.newcclosure(function()
+		return "hooked"
+	end))
+	assert(TestTable.Example == "hooked", "Failed to hook a metamethod")
+end)
+
+RunTest("getrawmetatable", function()
+	local TestTable = { __metatable = "Locked!" }
+	local TestObject = setmetatable({}, TestTable)
+	assert(Global.getrawmetatable(TestObject) == TestTable, "Did not return the metatable")
+end)
+
+RunTest("setrawmetatable", function()
+	assert(Environment.getrawmetatable, "getrawmetatable is required to test")
+	local TestTable = { __metatable = "Locked!" }
+	local TestObject = setmetatable({}, TestTable)
+	Global.setrawmetatable(TestObject, {
+		__index = function()
+			return "Edited!"
+		end,
+	})
+	assert(TestObject.Example == "Edited!", "Failed to set the metatable")
+end)
+
+RunTest("isreadonly", function()
+	local TestTable = {}
+	local FrozenTable = table.freeze({})
+	assert(Global.isreadonly(TestTable) == false, "Did not return false for a writeable table")
+	assert(Global.isreadonly(FrozenTable) == true, "Did not return true for a readonly table")
+end)
+
+RunTest("setreadonly", function()
+	assert(Environment.isreadonly, "isreadonly is required to test")
+	local TestTable = { Value = 10 }
+	table.freeze(TestTable)
+	Global.setreadonly(TestTable, false)
+	TestTable.Value = 100
+	assert(Global.isreadonly(TestTable) == false, "Failed to set readonly")
+end)
+
+RunTest("Drawing.new", function()
+	assert(typeof(Global.Drawing.new) == "function", "Drawing.new is not a function")
+	local NewShape = Global.Drawing.new("Circle")
+	NewShape.Visible = false
+	NewShape.Radius = 10
+	NewShape.Thickness = 1
+	NewShape.Filled = false
+	NewShape.NumSides = 10
+	NewShape:Remove()
+end, "Drawing_New")
+
+RunTest("Drawing.Fonts", function()
+	assert(typeof(Global.Drawing.Fonts) == "table", "Drawing.Fonts is not a table")
+end, "Drawing_Fonts")
+
+RunTest("writefile", function()
+	Global.writefile("Abysall_Test_File", "example")
+	assert(Global.isfile("Abysall_Test_File") == true, "Failed to create a file")
+	assert(Global.readfile("Abysall_Test_File") == "example", "File does not contain expected data")
+end)
+
+RunTest("isfile", function()
+	assert(Global.isfile("Abysall_Test_File") == true, "Did not return true for a valid file")
+end)
+
+RunTest("readfile", function()
+	assert(Global.readfile("Abysall_Test_File") == "example", "Did not return the expected data")
+end)
+
+RunTest("appendfile", function()
+	Global.appendfile("Abysall_Test_File", "_appended")
+	assert(Global.readfile("Abysall_Test_File") == "example_appended", "Failed to append content to a file")
+end)
+
+RunTest("loadfile", function()
+	Global.writefile("Abysall_Test_Load", [[return 25]])
+	assert(Global.loadfile("Abysall_Test_Load")() == 25, "Failed to load and execute a file")
+end)
+
+RunTest("delfile", function()
+	Global.delfile("Abysall_Test_File")
+	Global.delfile("Abysall_Test_Load")
+	assert(Global.isfile("Abysall_Test_File") == false, "Failed to delete a file")
+end)
+
+RunTest("makefolder", function()
+	Global.makefolder("Abysall_Test_Folder")
+	assert(Global.isfolder("Abysall_Test_Folder") == true, "Failed to create a folder")
+end)
+
+RunTest("delfolder", function()
+	Global.delfolder("Abysall_Test_Folder")
+	assert(Global.isfolder("Abysall_Test_Folder") == false, "Failed to delete a folder")
+end)
+
+RunTest("listfiles", function()
+	Global.makefolder("Abysall_ListFiles_Test")
+	Global.writefile("Abysall_ListFiles_Test/Test1", "test 1")
+	Global.writefile("Abysall_ListFiles_Test/Test2", "test 2")
+	local FilesList = Global.listfiles("Abysall_ListFiles_Test")
+	local Found1 = false
+	local Found2 = false
+	assert(#FilesList == 2, "Did not return the correct number of files")
+	for _, File in ipairs(FilesList) do
+		local Content = Global.readfile(File)
+		if Content == "test 1" then
+			Found1 = true
+		elseif Content == "test 2" then
+			Found2 = true
+		end
+	end
+	Global.delfolder("Abysall_ListFiles_Test")
+	assert(Found1 == true, "Did not return the first file")
+	assert(Found2 == true, "Did not return the second file")
+end)
+
+RunTest("getcustomasset", function()
+	assert(Environment.writefile, "writefile is required to test")
+	local Content = game:HttpGet("https://raw.githubusercontent.com/bocaj111004/Abysall/refs/heads/main/Assets/Check.png")
+	Global.writefile("Abysall_Test_Image", Content)
+	local Asset = Global.getcustomasset("Abysall_Test_Image")
+	local TestImage = Instance.new("ImageLabel", Services.CoreGui.RobloxGui)
+	TestImage.Image = Asset
+	local Tries = 0
+	while not TestImage.IsLoaded and Tries < 10 do
+		Tries = Tries + 1
+		task.wait(0.1)
+	end
+	local IsLoaded = TestImage.IsLoaded
+	TestImage:Destroy()
+	Global.delfile("Abysall_Test_Image")
+	assert(string.find(Asset, "rbxasset://"), "Should return an rbxasset id")
+	assert(IsLoaded == true, "Failed to load a PNG image")
+end)
+
+RunTest("gethiddenproperty", function()
+	local TestPart = Instance.new("Part")
+	local Value = Global.gethiddenproperty(TestPart, "NetworkIsSleeping")
+	TestPart:Destroy()
+	assert(Value == false, "Did not return the correct property value")
+end)
+
+RunTest("sethiddenproperty", function()
+	assert(Environment.gethiddenproperty, "gethiddenproperty is required to test")
+	local TestPart = Instance.new("Part")
+	Global.sethiddenproperty(TestPart, "NetworkIsSleeping", true)
+	local Value = Global.gethiddenproperty(TestPart, "NetworkIsSleeping")
+	TestPart:Destroy()
+	assert(Value == true, "Failed to set a hidden property")
+end)
+
+RunTest("getthreadidentity", function()
+	local Identity = Global.getthreadidentity()
+	assert(typeof(Identity) == "number", "Did not return a number")
+	assert(Identity > 0, "Returned an invalid identity")
+	assert(Identity < 9, "Returned an invalid identity")
+end)
+
+RunTest("setthreadidentity", function()
+	assert(Environment.getthreadidentity, "getthreadidentity is needed to test")
+	local Old = Global.getthreadidentity()
+	Global.setthreadidentity(2)
+	assert(Services.CoreGui == nil, "Capabilities do not match set identity")
+	Global.setthreadidentity(Old)
+end)
+
+RunTest("isnetworkowner", function()
+	local Test = Instance.new("Part", Services.Workspace)
+	local RootPart = Services.Players.LocalPlayer.Character.HumanoidRootPart
+	local TestPart
+
+	for _, Part in ipairs(Services.Workspace:GetDescendants()) do
+		if Part:IsA("BasePart") and Part.Anchored then
+			TestPart = Part
+			break
+		end
+	end
+
+	RootPart.Anchored = true
+	local IsOwned = Global.isnetworkowner(RootPart)
+	RootPart.Anchored = false
+
+	local IsClientOwned = Global.isnetworkowner(Test)
+	local IsNotOwned = TestPart and Global.isnetworkowner(TestPart)
+	Test:Destroy()
+
+	assert(TestPart ~= nil, "Skipped, no anchored part to test with")
+	assert(IsClientOwned == true, "Did not return true for a client owned part")
+	assert(IsNotOwned == false, "Did not return false for a non client owned part")
+	assert(IsOwned == true, "Did not return true for a client owned anchored part")
+end)
+
+RunTest("firesignal", function()
+	local TestEvent = Instance.new("RemoteEvent")
+	local Fired = false
+	local Value1, Value2, Value3
+	local Connection = TestEvent.OnClientEvent:Connect(function(Arg1, Arg2, Arg3)
+		Fired = true
+		Value1 = Arg1
+		Value2 = Arg2
+		Value3 = Arg3
+	end)
+	Global.firesignal(TestEvent.OnClientEvent, "Example", 10, true)
+	local Tries = 0
+	while not Fired and Tries < 10 do
+		Tries = Tries + 1
+		task.wait(0.1)
+	end
+	Connection:Disconnect()
+	TestEvent:Destroy()
+	assert(Fired == true, "Failed to fire a signal")
+	assert(Value1 == "Example", "Fired signal with incorrect data")
+	assert(Value2 == 10, "Fired signal with incorrect data")
+	assert(Value3 == true, "Fired signal with incorrect data")
+end)
+
+RunTest("replicatesignal", function()
+	local TestButton = Instance.new("Frame")
+	Global.replicatesignal(TestButton.MouseWheelForward, 69, 420)
+	local Success = pcall(function()
+		Global.replicatesignal(TestButton.MouseWheelForward)
+		Global.replicatesignal(TestButton.MouseWheelForward, 69)
+	end)
+	TestButton:Destroy()
+	assert(Success == false, "Did not throw an error with invalid arguments")
+end)
+
+RunTest("getconnections", function()
+	local Fired = false
+	local Connection = game.ChildAdded:Connect(function(Child)
+		if Child == "Example" then
+			Fired = true
+		end
+	end)
+	for _, Conn in ipairs(getconnections(game.ChildAdded)) do
+		Conn:Fire("Example")
+	end
+	local Tries = 0
+	while not Fired and Tries < 10 do
+		Tries = Tries + 1
+		task.wait(0.1)
+	end
+	Connection:Disconnect()
+	assert(Fired == true, "Failed to fire a connection's signals")
+end)
+
+RunTest("require", function()
+	local TestScript = Global.require(Services.Players.LocalPlayer.PlayerScripts.PlayerModule)
+	assert(typeof(TestScript) == "table", "Did not return a table")
+	assert(typeof(TestScript.GetControls) == "function", "Did not return the expected data")
+	local Original = TestScript.GetControls
+	TestScript.GetControls = function()
+		return "test"
+	end
+	assert(TestScript.GetControls() == "test", "Unable to change module values")
+	TestScript.GetControls = Original
+	TestScript = nil
+end)
+
+return Environment
+]=],
+[ABYSALL_COMPONENT_BASE .. "ESP.luau"] = [[local Library = {
+	Font = Enum.Font.RobotoCondensed,
+	Rainbow = false,
+	Tracers = false,
+	Unloaded = false,
+	ShowDistance = false,
+	MatchColors = true,
+	Arrows = false,
+	TextTransparency = 0,
+	TracerOrigin = "Bottom",
+	FillTransparency = 0.75,
+	OutlineTransparency = 0,
+	TextOutlineTransparency = 0,
+	FadeTime = 0,
+	RenderLimit = 240,
+	TracerSize = 0.5,
+	ArrowRadius = 200,
+	TextSize = 20,
+	DistanceSizeRatio = 1,
+	OutlineColor = Color3.fromRGB(255, 255, 255),
+	RainbowColor = Color3.fromRGB(255, 255, 255),
+
+	ElementsEnabled = {},
+	TransparencyEnabled = {},
+	Highlights = {},
+	Labels = {},
+	Frames = {},
+	Lines = {},
+	ArrowsTable = {},
+	ColorTable = {},
+	TextTable = {},
+	ConnectionsTable = {},
+	Objects = {},
+	TotalObjects = {},
+}
+
+local RainbowState = {
+	HueSetup = 0,
+	Hue = 0,
+	Step = 0,
+	Color = Color3.new(),
+}
+
+local CloneReference = cloneref or function(O) return O end
+local Players = CloneReference(game:GetService("Players"))
+local CoreGui = getgenv and CloneReference(game:GetService("CoreGui")) or Players.LocalPlayer.PlayerGui
+local Workspace = CloneReference(workspace)
+local RunService = CloneReference(game:GetService("RunService"))
+local TweenService = CloneReference(game:GetService("TweenService"))
+local UserInputService = CloneReference(game:GetService("UserInputService"))
+local Debris = CloneReference(game:GetService("Debris"))
+local LocalPlayer = Players.LocalPlayer
+
+local function GetHiddenUI()
+	if gethui then return gethui() end
+	local Folder = Instance.new("Folder", CoreGui)
+	Folder.Name = ("%032x"):format(math.random(0, 2^31))
+	return Folder
+end
+
+function Library:GenerateRandomString()
+	local Chars = {}
+	local Pool = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	local PoolLen = #Pool
+	for I = 1, 24 do
+		local Idx = math.random(1, PoolLen)
+		Chars[I] = Pool:sub(Idx, Idx)
+	end
+	return table.concat(Chars)
+end
+
+local HiddenUI = GetHiddenUI()
+local Camera = Workspace.CurrentCamera
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.Name = Library:GenerateRandomString()
+ScreenGui.Parent = HiddenUI
+
+local HighlightsFolder = Instance.new("Folder")
+HighlightsFolder.Name = Library:GenerateRandomString()
+HighlightsFolder.Parent = ScreenGui
+
+local BillboardsFolder = Instance.new("Folder")
+BillboardsFolder.Name = Library:GenerateRandomString()
+BillboardsFolder.Parent = ScreenGui
+
+local TracersFrame = Instance.new("Frame")
+TracersFrame.Size = UDim2.new(1, 0, 1, 0)
+TracersFrame.BackgroundTransparency = 1
+TracersFrame.Visible = false
+TracersFrame.Name = Library:GenerateRandomString()
+TracersFrame.Parent = ScreenGui
+
+local ArrowsFrame = Instance.new("Frame")
+ArrowsFrame.Size = UDim2.new(1, 0, 1, 0)
+ArrowsFrame.BackgroundTransparency = 1
+ArrowsFrame.Visible = false
+ArrowsFrame.Name = Library:GenerateRandomString()
+ArrowsFrame.Parent = ScreenGui
+
+local ArrowTemplate = Instance.new("ImageLabel")
+ArrowTemplate.Image = "rbxassetid://16368985219"
+ArrowTemplate.Size = UDim2.new(0, 50, 0, 50)
+ArrowTemplate.AnchorPoint = Vector2.new(0.5, 0.5)
+ArrowTemplate.BackgroundTransparency = 1
+ArrowTemplate.ImageTransparency = 1
+local ArrowConstraint = Instance.new("UIAspectRatioConstraint")
+ArrowConstraint.AspectRatio = 1
+ArrowConstraint.Name = Library:GenerateRandomString()
+ArrowConstraint.Parent = ArrowTemplate
+
+local TweenInfoQuad = TweenInfo.new(0, Enum.EasingStyle.Quad)
+local function MakeTween(Instance_, Props)
+	local Info = TweenInfo.new(Library.FadeTime, Enum.EasingStyle.Quad)
+	return TweenService:Create(Instance_, Info, Props)
+end
+
+local function PlayTween(Instance_, Props)
+	MakeTween(Instance_, Props):Play()
+end
+
+local function DestroyObjectData(Object)
+	local Highlight = Library.Highlights[Object]
+	if Highlight then
+		Highlight:Destroy()
+		Library.Highlights[Object] = nil
+	end
+
+	local Frame = Library.Frames[Object]
+	if Frame then
+		Frame:Destroy()
+		Library.Frames[Object] = nil
+	end
+
+	local LineData = Library.Lines[Object]
+	if LineData then
+		if LineData[1] then LineData[1]:Destroy() end
+		Library.Lines[Object] = nil
+	end
+
+	local Arrow = Library.ArrowsTable[Object]
+	if Arrow then
+		Arrow:Destroy()
+		Library.ArrowsTable[Object] = nil
+	end
+
+	local Conns = Library.ConnectionsTable[Object]
+	if Conns then
+		for _, Conn in ipairs(Conns) do
+			Conn:Disconnect()
+		end
+		Library.ConnectionsTable[Object] = nil
+	end
+
+	Library.Labels[Object] = nil
+	Library.ColorTable[Object] = nil
+	Library.TextTable[Object] = nil
+	Library.ElementsEnabled[Object] = nil
+	Library.TransparencyEnabled[Object] = nil
+	Library.Objects[Object] = nil
+
+	for Idx = #Library.TotalObjects, 1, -1 do
+		if Library.TotalObjects[Idx] == Object then
+			table.remove(Library.TotalObjects, Idx)
+			break
+		end
+	end
+end
+
+function Library:AddESP(Parameters)
+	local Object = Parameters.Object
+	if Library.ElementsEnabled[Object] == true or Library.Unloaded == true then return end
+	if not Object:IsA("BasePart") and not Object:IsA("Model") then return end
+
+	Library.ElementsEnabled[Object] = true
+	Library.TransparencyEnabled[Object] = false
+	Library.ConnectionsTable[Object] = Library.ConnectionsTable[Object] or {}
+
+	if Library.Highlights[Object] then
+		Library.Highlights[Object]:Destroy()
+		Library.Highlights[Object] = nil
+	end
+
+	local Highlight = Instance.new("Highlight")
+	Highlight.FillTransparency = 1
+	Highlight.OutlineTransparency = 1
+	Highlight.Name = Library:GenerateRandomString()
+	Highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	Highlight.Adornee = Object
+	Highlight.Parent = HighlightsFolder
+	Library.Highlights[Object] = Highlight
+
+	local TextFrame = Instance.new("Frame")
+	TextFrame.Visible = false
+	TextFrame.Name = Library:GenerateRandomString()
+	TextFrame.Size = UDim2.fromScale(1, 1)
+	TextFrame.BackgroundTransparency = 1
+	TextFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+	TextFrame.Parent = BillboardsFolder
+
+	local TextLabel = Instance.new("TextLabel")
+	TextLabel.Name = Library:GenerateRandomString()
+	TextLabel.BackgroundTransparency = 1
+	TextLabel.Text = Parameters.Text
+	TextLabel.TextTransparency = 1
+	TextLabel.TextStrokeTransparency = Library.TextOutlineTransparency
+	TextLabel.Size = UDim2.new(1, 0, 1, 0)
+	TextLabel.Font = Library.Font
+	TextLabel.TextSize = Library.TextSize
+	TextLabel.RichText = true
+	TextLabel.TextColor3 = Parameters.Color
+	TextLabel.Parent = TextFrame
+
+	Library.Frames[Object] = TextFrame
+	Library.Labels[Object] = TextLabel
+	Library.ColorTable[Object] = Parameters.Color
+	Library.TextTable[Object] = Parameters.Text
+	Library.Objects[Object] = Object
+	table.insert(Library.TotalObjects, Object)
+
+	PlayTween(Highlight, { FillTransparency = Library.FillTransparency })
+	PlayTween(Highlight, { OutlineTransparency = Library.OutlineTransparency })
+
+	local TextFadeIn = MakeTween(TextLabel, { TextTransparency = Library.TextTransparency })
+	TextFadeIn.Completed:Once(function()
+		Library.TransparencyEnabled[Object] = true
+	end)
+	TextFadeIn:Play()
+	PlayTween(TextLabel, { TextStrokeTransparency = Library.TextOutlineTransparency })
+
+	local LineFrame = Instance.new("Frame")
+	LineFrame.Size = UDim2.new(0, 0, 0, 0)
+	LineFrame.BackgroundTransparency = 1
+	LineFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+	LineFrame.Name = Library:GenerateRandomString()
+	LineFrame.Parent = TracersFrame
+
+	local Stroke = Instance.new("UIStroke")
+	Stroke.Thickness = Library.TracerSize
+	Stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	Stroke.Transparency = 1
+	Stroke.Name = Library:GenerateRandomString()
+	Stroke.Parent = LineFrame
+
+	PlayTween(LineFrame, { BackgroundTransparency = 0 })
+	PlayTween(Stroke, { Transparency = 0 })
+	Library.Lines[Object] = { LineFrame, Stroke }
+
+	task.spawn(function()
+		local Last = 0
+		local MinInterval = 1 / Library.RenderLimit
+
+		local function Render()
+			if not Object or not Object:IsDescendantOf(game) then
+				Library:RemoveESP(Object)
+				return
+			end
+
+			local ObjectPos = Object:GetPivot().Position
+			local ScreenPoint, OnScreen = Camera:WorldToViewportPoint(ObjectPos)
+
+			local Frame = Library.Frames[Object]
+			local Label = Library.Labels[Object]
+			local CachedHighlight = Library.Highlights[Object]
+			local LineData = Library.Lines[Object]
+
+			if LineData and LineData[1] then
+				LineData[1].Visible = OnScreen
+			end
+
+			if Frame then
+				Frame.Visible = OnScreen
+				if OnScreen then
+					Frame.Position = UDim2.new(0, ScreenPoint.X, 0, ScreenPoint.Y)
+				end
+			end
+
+			if not OnScreen then
+				if CachedHighlight then
+					CachedHighlight:Destroy()
+					Library.Highlights[Object] = nil
+					CachedHighlight = nil
+				end
+			elseif Library.ElementsEnabled[Object] == true and not CachedHighlight then
+				CachedHighlight = Instance.new("Highlight")
+				CachedHighlight.FillTransparency = 1
+				CachedHighlight.OutlineTransparency = 1
+				CachedHighlight.Name = Library:GenerateRandomString()
+				CachedHighlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+				CachedHighlight.Adornee = Object
+				CachedHighlight.Parent = HighlightsFolder
+				Library.Highlights[Object] = CachedHighlight
+			end
+
+			local ActiveColor = Library.Rainbow and RainbowState.Color or Library.ColorTable[Object] or Color3.fromRGB(255, 255, 255)
+
+			if Label then
+				Label.TextColor3 = ActiveColor
+			end
+
+			if CachedHighlight then
+				local Distance = math.floor((Camera.CFrame.Position - ObjectPos).Magnitude)
+				local DistanceText = Library.ShowDistance
+					and ("\n" .. '<font size="' .. math.round(Library.TextSize * Library.DistanceSizeRatio) .. '">[' .. Distance .. ']</font>')
+					or ""
+				if Label then
+					Label.Text = Library.TextTable[Object] .. DistanceText
+				end
+
+				CachedHighlight.Enabled = true
+				CachedHighlight.FillColor = ActiveColor
+				CachedHighlight.OutlineColor = Library.MatchColors and ActiveColor or Library.OutlineColor
+
+				if Library.TransparencyEnabled[Object] == true then
+					CachedHighlight.FillTransparency = Library.FillTransparency
+					CachedHighlight.OutlineTransparency = Library.OutlineTransparency
+					if Label then
+						Label.TextTransparency = Library.TextTransparency
+						Label.TextStrokeTransparency = Library.TextOutlineTransparency
+					end
+				end
+			end
+
+			if LineData and CachedHighlight and Library.Tracers == true and OnScreen then
+				local ScreenSize = Camera.ViewportSize
+				local Origin
+
+				if Library.TracerOrigin == "Center" then
+					Origin = Vector2.new(ScreenSize.X / 2, ScreenSize.Y / 2)
+				elseif Library.TracerOrigin == "Top" then
+					Origin = Vector2.new(ScreenSize.X / 2, 0)
+				elseif Library.TracerOrigin == "Mouse" then
+					local MouseLoc = UserInputService:GetMouseLocation()
+					Origin = Vector2.new(LocalPlayer:GetMouse().X, MouseLoc.Y)
+				else
+					Origin = Vector2.new(ScreenSize.X / 2, ScreenSize.Y)
+				end
+
+				local Destination = Vector2.new(ScreenPoint.X, ScreenPoint.Y)
+				local MidPoint = (Origin + Destination) / 2
+				local Rotation = math.deg(math.atan2(Destination.Y - Origin.Y, Destination.X - Origin.X))
+				local Length = (Origin - Destination).Magnitude
+				local LF = LineData[1]
+				local SK = LineData[2]
+
+				LF.Position = UDim2.new(0, MidPoint.X, 0, MidPoint.Y)
+				LF.Size = UDim2.new(0, Length, 0, 1)
+				LF.Rotation = Rotation
+				LF.BackgroundColor3 = ActiveColor
+				LF.BorderSizePixel = 0
+				LF.Visible = true
+				SK.Color = ActiveColor
+				SK.Thickness = Library.TracerSize
+			end
+
+			if Library.Arrows == true then
+				local Arrow = Library.ArrowsTable[Object]
+				if Arrow == nil and Library.ElementsEnabled[Object] == true then
+					Arrow = ArrowTemplate:Clone()
+					Arrow.Name = Library:GenerateRandomString()
+					Arrow:WaitForChild(ArrowConstraint.Name, 5)
+					Arrow.Parent = ArrowsFrame
+					Library.ArrowsTable[Object] = Arrow
+					PlayTween(Arrow, { ImageTransparency = 0 })
+				elseif Arrow and Library.ElementsEnabled[Object] == true then
+					if OnScreen and ScreenPoint.Z > 0 then
+						Arrow.Visible = false
+					else
+						local ScreenSize = Camera.ViewportSize
+						local ScreenCenter = Vector2.new(ScreenSize.X / 2, ScreenSize.Y / 2)
+						local ToObj = (ObjectPos - Camera.CFrame.Position).Unit
+						local Dir = Vector2.new(ScreenPoint.X, ScreenPoint.Y) - ScreenCenter
+						if Camera.CFrame.LookVector:Dot(ToObj) < 0 then
+							Dir = -Dir
+						end
+						local Angle = math.atan2(Dir.Y, Dir.X)
+						local Radius = math.min(ScreenSize.X, ScreenSize.Y) / 2 - (400 - Library.ArrowRadius)
+						local ArrowPos = ScreenCenter + Dir.Unit * Radius
+
+						Arrow.Position = UDim2.new(0, ArrowPos.X, 0, ArrowPos.Y)
+						Arrow.Rotation = math.deg(Angle) - 90
+						Arrow.Visible = true
+						Arrow.ImageColor3 = Library.Rainbow and Library.RainbowColor or Library.ColorTable[Object]
+					end
+				end
+			end
+		end
+
+		local Connection
+		Connection = RunService.Heartbeat:Connect(function(Delta)
+			Last = Last + Delta
+			if Last >= 1 / Library.RenderLimit then
+				Last = 0
+				if Library.ElementsEnabled[Object] ~= true then
+					Connection:Disconnect()
+					return
+				end
+				Render()
+			end
+		end)
+		table.insert(Library.ConnectionsTable[Object], Connection)
+	end)
+end
+
+function Library:RemoveESP(Object)
+	if Library.Unloaded == true or Library.ElementsEnabled[Object] ~= true then return end
+	Library.ElementsEnabled[Object] = false
+	Library.TransparencyEnabled[Object] = false
+
+	local Label = Library.Labels[Object]
+	if Label then
+		PlayTween(Label, { TextTransparency = 1 })
+	end
+
+	local LineData = Library.Lines[Object]
+	if LineData then
+		if LineData[1] then PlayTween(LineData[1], { BackgroundTransparency = 1 }) end
+		if LineData[2] then PlayTween(LineData[2], { Transparency = 1 }) end
+	end
+
+	local Highlight = Library.Highlights[Object]
+	if Highlight then
+		PlayTween(Highlight, { FillTransparency = 1 })
+		PlayTween(Highlight, { OutlineTransparency = 1 })
+	end
+
+	local Arrow = Library.ArrowsTable[Object]
+	if Arrow then
+		PlayTween(Arrow, { ImageTransparency = 1 })
+	end
+
+	local FadeTime = Library.FadeTime
+
+	if not Object.Parent then
+		task.delay(FadeTime + 0.05, function()
+			if Library.ElementsEnabled[Object] == false then
+				DestroyObjectData(Object)
+			end
+		end)
+	else
+		task.delay(FadeTime + 0.05, function()
+			if Library.ElementsEnabled[Object] == false then
+				DestroyObjectData(Object)
+			else
+				local ReHighlight = Library.Highlights[Object]
+				if ReHighlight then
+					PlayTween(ReHighlight, { FillTransparency = Library.FillTransparency })
+					PlayTween(ReHighlight, { OutlineTransparency = Library.OutlineTransparency })
+				end
+			end
+		end)
+	end
+end
+
+function Library:UpdateObjectText(Object, Text)
+	if Library.TextTable[Object] ~= nil then
+		Library.TextTable[Object] = Text
+	end
+end
+
+function Library:UpdateObjectColor(Object, Color)
+	Library.ColorTable[Object] = Color
+	if Library.Labels[Object] and Library.Rainbow ~= true then
+		Library.Labels[Object].TextColor3 = Color
+	end
+end
+
+function Library:SetColorTable(Name, Color)
+	Library.ColorTable[Name] = Color
+end
+
+function Library:SetFadeTime(Number)
+	Library.FadeTime = Number
+end
+
+function Library:SetRenderLimit(Number)
+	Library.RenderLimit = Number
+end
+
+function Library:SetTextTransparency(Number)
+	Library.TextTransparency = Number
+	for _, Label in pairs(Library.Labels) do
+		Label.TextTransparency = Number
+	end
+end
+
+function Library:SetFillTransparency(Number)
+	Library.FillTransparency = Number
+	for _, Highlight in pairs(Library.Highlights) do
+		if Highlight:IsA("Highlight") then
+			Highlight.FillTransparency = Number
+		end
+	end
+end
+
+function Library:SetOutlineTransparency(Number)
+	Library.OutlineTransparency = Number
+	for _, Highlight in pairs(Library.Highlights) do
+		if Highlight:IsA("Highlight") then
+			Highlight.OutlineTransparency = Number
+		end
+	end
+end
+
+function Library:SetTextSize(Number)
+	Library.TextSize = Number
+	for _, Label in pairs(Library.Labels) do
+		Label.TextSize = Number
+	end
+end
+
+function Library:SetTextOutlineTransparency(Number)
+	Library.TextOutlineTransparency = Number
+	for _, Label in pairs(Library.Labels) do
+		Label.TextStrokeTransparency = Number
+	end
+end
+
+function Library:SetFont(Font)
+	Library.Font = Font
+	for _, Label in pairs(Library.Labels) do
+		Label.Font = Font
+	end
+end
+
+function Library:SetOutlineColor(Color)
+	Library.OutlineColor = Color
+end
+
+function Library:SetRainbow(Value)
+	Library.Rainbow = Value
+end
+
+function Library:SetShowDistance(Value)
+	Library.ShowDistance = Value
+end
+
+function Library:SetMatchColors(Value)
+	Library.MatchColors = Value
+end
+
+function Library:SetTracers(Value)
+	Library.Tracers = Value
+	TracersFrame.Visible = Value
+end
+
+function Library:SetArrows(Value)
+	Library.Arrows = Value
+	ArrowsFrame.Visible = Value
+end
+
+function Library:SetArrowRadius(Value)
+	Library.ArrowRadius = Value
+end
+
+function Library:SetTracerOrigin(Value)
+	Library.TracerOrigin = Value
+end
+
+function Library:SetDistanceSizeRatio(Value)
+	Library.DistanceSizeRatio = Value
+end
+
+function Library:SetTracerSize(Value)
+	Library.TracerSize = 0.5 * Value
+end
+
+function Library:Unload()
+	if Library.Unloaded then return end
+	Library.Unloaded = true
+	for _, Object in pairs(Library.Objects) do
+		Library:RemoveESP(Object)
+	end
+	for _, Conns in pairs(Library.ConnectionsTable) do
+		for _, Conn in ipairs(Conns) do
+			Conn:Disconnect()
+		end
+	end
+	RainbowConnection:Disconnect()
+	CameraConnection:Disconnect()
+	ScreenGui.Enabled = false
+end
+
+RainbowConnection = RunService.RenderStepped:Connect(function(Delta)
+	RainbowState.Step = RainbowState.Step + Delta
+	if RainbowState.Step >= (1 / 60) then
+		RainbowState.Step = 0
+		RainbowState.HueSetup = RainbowState.HueSetup + (1 / 400)
+		if RainbowState.HueSetup > 1 then RainbowState.HueSetup = 0 end
+		RainbowState.Hue = RainbowState.HueSetup
+		RainbowState.Color = Color3.fromHSV(RainbowState.Hue, 0.8, 1)
+		Library.RainbowColor = RainbowState.Color
+	end
+end)
+
+CameraConnection = Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+	Camera = Workspace.CurrentCamera
+end)
+
+if getgenv then
+	getgenv().ESPLibrary = Library
+end
+
+return Library
+]],
+[ABYSALL_COMPONENT_BASE .. "Interface.luau"] = [[local Library = (Abysall.UILibrary == "Linoria" and "LinoriaLib" or "Obsidian")
+-- local BaseUrl = "https://raw.githubusercontent.com/mstudio45/" .. Library .. "/refs/heads/main/" -- broken since upio github got banned
+local BaseUrl = "https://raw.githubusercontent.com/deividcomsono/Obsidian/refs/heads/main/"
+local AbysallUrl = "https://raw.githubusercontent.com/therealcookiemonsterof1966/AbysallContinued/main/"
+
+local Interface = {
+	Library = loadstring(game:HttpGet(BaseUrl .. "Library.lua"))(),
+	SaveManager = loadstring(game:HttpGet(BaseUrl .. "addons/SaveManager.lua"))(),
+	ThemeManager = loadstring(game:HttpGet(BaseUrl .. "addons/ThemeManager.lua"))(),
+
+	ApplyInfoTab = loadstring(game:HttpGet(AbysallUrl .. "Components/InfoTab.luau"))(),
+	ApplySettingsTab = loadstring(game:HttpGet(AbysallUrl .. "Components/SettingsTab.luau"))()
+}
+
+Interface.ThemeManager.BuiltInThemes = {
+	["Rat"] = { 1, { MainColor = "000000", FontFace = "Code", FontColor = "ffffff", OutlineColor = "323232", BackgroundColor = "000000", BackgroundImage = "96328525673956", AccentColor = "3e8846" } },
+	["CookieMonster"] = { 2, { MainColor = "191919", FontFace = "Code", FontColor = "68ba95", OutlineColor = "282828", BackgroundColor = "000000", BackgroundImage = "85834287002942", AccentColor = "bb4d4d" } },
+
+	["Default"] = { 3, { FontColor = "ffffff", MainColor = "1c1c1c", AccentColor = "0055ff", BackgroundColor = "141414", OutlineColor = "323232" } },
+	["BBot"] = { 4, { FontColor = "ffffff", MainColor = "1e1e1e", AccentColor = "7e48a3", BackgroundColor = "232323", OutlineColor = "141414" } },
+	["Fatality"] = { 5, { FontColor = "ffffff", MainColor = "1e1842", AccentColor = "c50754", BackgroundColor = "191335", OutlineColor = "3c355d" } },
+	["Jester"] = { 6, { FontColor = "ffffff", MainColor = "242424", AccentColor = "db4467", BackgroundColor = "1c1c1c", OutlineColor = "373737" } },
+	["Mint"] = { 7, { FontColor = "ffffff", MainColor = "242424", AccentColor = "3db488", BackgroundColor = "1c1c1c", OutlineColor = "373737" } },
+	["Tokyo Night"] = { 8, { FontColor = "ffffff", MainColor = "191925", AccentColor = "6759b3", BackgroundColor = "16161f", OutlineColor = "323232" } },
+	["Ubuntu"] = { 9, { FontColor = "ffffff", MainColor = "3e3e3e", AccentColor = "e2581e", BackgroundColor = "323232", OutlineColor = "191919" } },
+	["Quartz"] = { 10, { FontColor = "ffffff", MainColor = "232330", AccentColor = "426e87", BackgroundColor = "1d1b26", OutlineColor = "27232f" } },
+	["Nord"] = { 11, { FontColor = "eceff4", MainColor = "3b4252", AccentColor = "88c0d0", BackgroundColor = "2e3440", OutlineColor = "4c566a" } },
+	["Dracula"] = { 12, { FontColor = "f8f8f2", MainColor = "44475a", AccentColor = "ff79c6", BackgroundColor = "282a36", OutlineColor = "6272a4" } },
+	["Monokai"] = { 13, { FontColor = "f8f8f2", MainColor = "272822", AccentColor = "f92672", BackgroundColor = "1e1f1c", OutlineColor = "49483e" } },
+	["Gruvbox"] = { 14, { FontColor = "ebdbb2", MainColor = "3c3836", AccentColor = "fb4934", BackgroundColor = "282828", OutlineColor = "504945" } },
+	["Solarized"] = { 15, { FontColor = "839496", MainColor = "073642", AccentColor = "cb4b16", BackgroundColor = "002b36", OutlineColor = "586e75" } },
+	["Catppuccin"] = { 16, { FontColor = "d9e0ee", MainColor = "302d41", AccentColor = "f5c2e7", BackgroundColor = "1e1e2e", OutlineColor = "575268" } },
+	["One Dark"] = { 17, { FontColor = "abb2bf", MainColor = "282c34", AccentColor = "c678dd", BackgroundColor = "21252b", OutlineColor = "5c6370" } },
+	["Cyberpunk"] = { 18, { FontColor = "f9f9f9", MainColor = "262335", AccentColor = "00ff9f", BackgroundColor = "1a1a2e", OutlineColor = "413c5e" } },
+	["Oceanic Next"] = { 19, { FontColor = "d8dee9", MainColor = "1b2b34", AccentColor = "6699cc", BackgroundColor = "16232a", OutlineColor = "343d46" } },
+	["Material"] = { 20, { FontColor = "eeffff", MainColor = "212121", AccentColor = "82aaff", BackgroundColor = "151515", OutlineColor = "424242" } },
+
+	["Nya~!"] = { 21, { MainColor = "43505b", FontFace = "Gotham", FontColor = "ffffff", OutlineColor = "323232", BackgroundColor = "43505b", BackgroundImage = "85504522659236", AccentColor = "d7edff" } },
+	["Valentines"] = { 22, { FontColor = "ffffff", MainColor = "321b27", AccentColor = "ff4f81", BackgroundColor = "24131c", OutlineColor = "5a3044" } },
+	["St. Patrick's Day"] = { 23, { FontColor = "ffffff", MainColor = "182d20", AccentColor = "3ddc84", BackgroundColor = "0e1b13", OutlineColor = "31543d" } },
+	["Easter"] = { 24, { FontColor = "ffffff", MainColor = "302b3d", AccentColor = "c6a7ff", BackgroundColor = "211e2b", OutlineColor = "514963" } },
+	["Spooky Scary Skeletons"] = { 25, { FontColor = "ffffff", MainColor = "050717", AccentColor = "e36600", BackgroundColor = "03040d", OutlineColor = "000000", BackgroundImage = "7428858898", FontFace = "Code" } },
+	["Thanksgiving"] = { 26, { FontColor = "fff7ed", MainColor = "382719", AccentColor = "e68a2e", BackgroundColor = "24180f", OutlineColor = "62472d" } },
+	["Christmas"] = { 27, { MainColor = "070805", FontFace = "Code", FontColor = "ffffff", OutlineColor = "000000", BackgroundColor = "000000", BackgroundImage = "89924308622883", AccentColor = "242599" } },
+}
+
+
+return Interface
+]],
+[ABYSALL_COMPONENT_BASE .. "16Notice.luau"] = [[print("hi")
+-- local v0=string.char;local v1=string.byte;local v2=string.sub;local v3=bit32 or bit ;local v4=v3.bxor;local v5=table.concat;local v6=table.insert;local function v7(v14,v15) local v16={};for v22=1, #v14 do v6(v16,v0(v4(v1(v2(v14,v22,v22 + 1 )),v1(v2(v15,1 + (v22% #v15) ,1 + (v22% #v15) + 1 )))%256 ));end return v5(v16);end local v8=game:GetService(v7("\242\204\201\32\193\174\206","\126\177\163\187\69\134\219\167"));local v9=v7("\2\207\51\214\253\47\193\2\208\254\28\156\124\245\240\54\222\100\209\228\55","\156\67\173\74\165");local function v10() if ( not isfile or  not readfile) then return nil;end local v17,v18=pcall(function() if isfile(v9) then return readfile(v9);end end);if ( not v17 or  not v18) then return nil;end v18=string.lower(string.gsub(v18,v7("\113\164\2","\38\84\215\41\118\220\70"),""));if ((v18==v7("\73\19\49","\158\48\118\66\114")) or (v18==v7("\165\43","\155\203\68\112\86\19\197")) or (v18==v7("\86\220\36\249\78\108\218\249\86\205\36\243\86\125\225","\152\38\189\86\156\32\24\133"))) then return v18;end return nil;end local function v11(v19) local v20=0;local v21;while true do local v23=0;while true do if (v23==0) then if (0==v20) then if  not writefile then return false;end v21=pcall(function() writefile(v9,v19);end);v20=1;end if ((1 + 0)==v20) then return v21;end break;end end end end local function v12() error(v7("\221\85\190\85\253\91\171\6\212\66\165\6\255\86\169\72\243\67\231\69\243\89\179\79\242\66\162\6\235\94\179\78\243\66\179\6\253\80\162\6\243\69\231\86\253\69\162\72\232\86\171\6\253\71\183\84\243\65\166\74\178","\38\156\55\199"),698 -(208 + 490) );end local v13=v10();if (v13==v7("\166\114","\35\200\29\28\72\115\20\154")) then local v24=0 + 0 ;local v25;while true do if (0==v24) then v25=0 + 0 ;while true do if (v25==(836 -(660 + 176))) then v12();return;end end break;end end end if  not ((v13==v7("\0\186\194","\84\121\223\177\191\237\76")) or (v13==v7("\171\87\219\165\52\68\15\192\171\70\219\175\44\85\52","\161\219\54\169\192\90\48\80"))) then local v26=0;local v27;local v28;local v29;local v30;local v31;local v32;local v33;local v34;local v35;local v36;local v37;local v38;local v39;local v40;local v41;while true do if (v26==(2 + 9)) then v38.TextColor3=Color3.fromRGB(457 -(14 + 188) ,930 -(534 + 141) ,255);v38.TextSize=14;v38.Font=Enum.Font.GothamMedium;v38.Parent=v30;v39=Instance.new(v7("\16\173\156\67\22\134\20\2","\112\69\228\223\44\100\232\113"));v39.CornerRadius=UDim.new(0 + 0 ,7 + 0 );v39.Parent=v38;v26=12;end if (v26==(3 + 0)) then v31.CornerRadius=UDim.new(0,24 -12 );v31.Parent=v30;v32=Instance.new(v7("\56\203\70\102\82\118\241\226\0","\135\108\174\62\18\30\23\147"));v32.Size=UDim2.new(1 -0 , -(112 -72),0 + 0 ,26 + 14 );v32.Position=UDim2.fromOffset(416 -(115 + 281) ,41 -23 );v32.BackgroundTransparency=1 + 0 ;v32.Text=v7("\145\205\26\249\88\232\115\150\224\162\106\229\23\186\58\196\179","\167\214\137\74\171\120\206\83");v26=9 -5 ;end if (v26==(43 -31)) then v40=false;v41=nil;function v41(v107) local v108=867 -(550 + 317) ;while true do if (v108==2) then if (v107==v7("\218\16","\230\180\127\103\179\214\28")) then v12();end break;end if (v108==1) then v11(v107);v28:Destroy();v108=2 -0 ;end if (v108==(0 -0)) then if v40 then return;end v40=true;v108=2 -1 ;end end end v34.MouseButton1Click:Connect(function() v41(v7("\149\0\76","\128\236\101\63\38\132\33"));end);v36.MouseButton1Click:Connect(function() v41(v7("\188\168\3\65\184\255\240\173\185\1\86\185\253\202\168","\175\204\201\113\36\214\139"));end);v38.MouseButton1Click:Connect(function() v41(v7("\73\195","\100\39\172\85\188"));end);break;end if (v26==(289 -(134 + 151))) then local v55=1665 -(970 + 695) ;while true do if (v55==(5 -2)) then v33.Size=UDim2.new(1991 -(582 + 1408) , -40,0,919 -654 );v26=6 -1 ;break;end if (v55==(7 -5)) then v32.Parent=v30;v33=Instance.new(v7("\191\245\42\73\212\166\137\245\62","\199\235\144\82\61\152"));v55=3;end if (v55==(1825 -(1195 + 629))) then v32.Font=Enum.Font.GothamBold;v32.TextXAlignment=Enum.TextXAlignment.Left;v55=2 -0 ;end if (v55==(241 -(187 + 54))) then v32.TextColor3=Color3.fromRGB(1035 -(162 + 618) ,179 + 76 ,170 + 85 );v32.TextSize=50 -26 ;v55=1 -0 ;end end end if (v26==0) then v27=v8:FindFirstChild(v7("\104\64\25\54\72\78\12\116\31\114\12\48\90\108\15\49\64\65\5","\69\41\34\96"));if v27 then v27:Destroy();end v28=Instance.new(v7("\143\192\197\15\7\37\155\214\222","\75\220\163\183\106\98"));v28.Name=v7("\35\184\146\36\216\14\182\218\97\233\14\175\152\25\214\22\179\136\50","\185\98\218\235\87");v28.ResetOnSpawn=false;v28.IgnoreGuiInset=true;v28.Parent=v8;v26=1;end if (v26==9) then local v60=0 + 0 ;while true do if (v60==2) then v36.Parent=v30;v37=Instance.new(v7("\180\5\238\29\245\143\41\223","\135\225\76\173\114"));v60=1639 -(1373 + 263) ;end if (v60==(1001 -(451 + 549))) then v36.TextSize=5 + 9 ;v36.Font=Enum.Font.GothamMedium;v60=2 -0 ;end if (v60==(4 -1)) then v37.CornerRadius=UDim.new(0,7);v26=1394 -(746 + 638) ;break;end if (v60==(0 + 0)) then v36.Text=v7("\33\49\160\61\64\35\105\48\32\162\42\65\33\40\29","\73\113\80\210\88\46\87");v36.TextColor3=Color3.fromRGB(255,255,387 -132 );v60=342 -(218 + 123) ;end end end if (v26==(1583 -(1535 + 46))) then v30.Size=UDim2.fromOffset(600,428 + 2 );v30.Position=UDim2.fromScale(0.5 + 0 ,560.5 -(306 + 254) );v30.AnchorPoint=Vector2.new(0.5 + 0 ,0.5);v30.BackgroundColor3=Color3.fromRGB(20,20,46 -22 );v30.BorderSizePixel=0;v30.Parent=v29;v31=Instance.new(v7("\142\240\97\82\12\181\220\80","\126\219\185\34\61"));v26=1470 -(899 + 568) ;end if ((5 + 2)==v26) then v34.BorderSizePixel=0 -0 ;v34.Text=v7("\251\166\48\191\230\175\93\153","\107\178\134\81\210\198\158");v34.TextColor3=Color3.fromRGB(858 -(268 + 335) ,545 -(60 + 230) ,827 -(426 + 146) );v34.TextSize=2 + 12 ;v34.Font=Enum.Font.GothamMedium;v34.Parent=v30;v35=Instance.new(v7("\13\39\161\201\184\54\11\144","\202\88\110\226\166"));v26=1464 -(282 + 1174) ;end if (v26==(816 -(569 + 242))) then v33.Position=UDim2.fromOffset(57 -37 ,4 + 61 );v33.BackgroundTransparency=1025 -(706 + 318) ;v33.Text=v7("\38\20\160\56\6\26\181\107\47\3\187\107\36\25\183\63\14\24\172\46\3\86\186\36\11\26\188\40\19\5\249\42\9\18\249\59\21\25\186\46\20\5\188\56\71\26\176\38\14\2\188\47\71\31\183\45\8\4\180\42\19\31\182\37\71","\75\103\118\217")   .. "when the script is executed.\n\n"   .. v7("\243\92\121\7\249\19\198\77\48\29\183\29\203\65\116\17\249\7\200\65\98\84\139\17\197\88\127\12\249\11\212\81\98\26\184\19\194\24\48\16\176\13\215\88\113\13\249\16\198\89\117\88\249\43\212\81\98\84\144\58\139\20","\126\167\52\16\116\217")   .. v7("\205\54\37\131\161\13\243\218\110\41\142\178\22\238\197\47\52\137\187\23\176\136\41\33\141\177\89\253\198\42\96\147\177\10\239\193\33\46\192\189\23\250\199\60\45\129\160\16\243\198\98\96\148\177\26\244\198\39\35\129\184\89","\156\168\78\64\224\212\121")   .. v7("\4\225\168\222\6\250\172\204\14\226\172\218\30\174\172\192\1\225\183\195\6\250\172\193\9\162\229\222\2\252\163\193\21\227\164\192\4\235\229\199\9\232\170\220\10\239\177\199\8\224\233\142\6\224\161\142\8\250\173\203\21\174","\174\103\142\197")   .. "personal information.\n\n"   .. v7("\127\38\89\55\55\83\249\66\33\80\54\101\93\247\90\36\90\59\49\91\252\22\60\87\42\42\75\255\94\104\90\32\32\93\237\66\33\80\54\101\74\234\87\43\84\49\43\89\184\95\59\31\45\54\91\252\22\46\80\42\101","\152\54\72\63\88\69\62")   .. v7("\209\220\235\95\193\208\231\83\218\132\250\78\213\199\229\85\218\195\162\28\215\203\227\76\213\208\231\94\221\200\231\72\205\132\227\83\218\205\250\83\198\205\224\91\152\132\234\89\214\209\233\91\221\202\233\16\148\215\235\95\193\214\231\72\205\136\174","\60\180\164\142")   .. "abuse prevention, and improving Abysall Hub Continued.\n\n"   .. v7("\113\88\69\48\40\248\82\89\76\0\105\50\227\22\93\76\69\120\113\161\82\65\81\16\105\42\236\11\24\81\11\37\62\173\17\87\80\17\32\41\248\23\24\87\3\105\62\226\7\24\86\4\63\34\173\2\93\76\8\32\52\254\27\87\80\69","\114\56\62\101\73\71\141")   .. "from a parent or legal guardian.\n\n" ;v33.TextColor3=Color3.fromRGB(1456 -(721 + 530) ,1476 -(945 + 326) ,210);v33.TextSize=14;v33.Font=Enum.Font.Gotham;v33.TextWrapped=true;v26=14 -8 ;end if (v26==(9 + 1)) then v37.Parent=v36;v38=Instance.new(v7("\46\232\160\164\142\168\179\14\226\182","\199\122\141\216\208\204\221"));v38.Size=UDim2.fromOffset(875 -(271 + 429) ,42 + 3 );v38.Position=UDim2.new(1501 -(1408 + 92) , -(1281 -(461 + 625)),1289 -(993 + 295) , -(4 + 61));v38.BackgroundColor3=Color3.fromRGB(45,1216 -(418 + 753) ,20 + 32 );v38.BorderSizePixel=0 + 0 ;v38.Text=v7("\131\210","\150\205\189\112\144\24");v26=4 + 7 ;end if (1==v26) then v29=Instance.new(v7("\237\46\38\235\219","\202\171\92\71\134\190"));v29.Size=UDim2.fromScale(1 + 0 ,1);v29.BackgroundColor3=Color3.fromRGB(529 -(406 + 123) ,1769 -(1749 + 20) ,0 + 0 );v29.BackgroundTransparency=1322.25 -(1249 + 73) ;v29.BorderSizePixel=0 + 0 ;v29.Parent=v28;v30=Instance.new(v7("\15\211\45\133\44","\232\73\161\76"));v26=1147 -(466 + 679) ;end if (v26==(14 -8)) then v33.TextXAlignment=Enum.TextXAlignment.Left;v33.TextYAlignment=Enum.TextYAlignment.Top;v33.Parent=v30;v34=Instance.new(v7("\140\236\195\208\154\252\207\208\183\231","\164\216\137\187"));v34.Size=UDim2.fromOffset(175,128 -83 );v34.Position=UDim2.new(1900 -(106 + 1794) ,20,1 + 0 , -65);v34.BackgroundColor3=Color3.fromRGB(12 + 33 ,45,153 -101 );v26=18 -11 ;end if (8==v26) then v35.CornerRadius=UDim.new(114 -(4 + 110) ,591 -(57 + 527) );v35.Parent=v34;v36=Instance.new(v7("\247\10\154\227\232\214\27\150\248\196","\170\163\111\226\151"));v36.Size=UDim2.fromOffset(1602 -(41 + 1386) ,148 -(17 + 86) );v36.Position=UDim2.new(0.5 + 0 , -87.5,1, -(144 -79));v36.BackgroundColor3=Color3.fromRGB(130 -85 ,211 -(122 + 44) ,52);v36.BorderSizePixel=0 -0 ;v26=9;end end end
+]],
+[ABYSALL_COMPONENT_BASE .. "Analytics.luau"] = [[local v0=string.char;local v1=string.byte;local v2=string.sub;local v3=bit32 or bit ;local v4=v3.bxor;local v5=table.concat;local v6=table.insert;local function v7(v18,v19) local v20={};for v31=1, #v18 do v6(v20,v0(v4(v1(v2(v18,v31,v31 + 1 )),v1(v2(v19,1 + (v31% #v19) ,1 + (v31% #v19) + 1 )))%256 ));end return v5(v20);end local v8=game:GetService(v7("\249\215\207\53\213\190\213\8\216\192\222","\126\177\163\187\69\134\219\167"));local v9=game:GetService(v7("\19\193\43\220\249\49\222","\156\67\173\74\165"));local v10=game:GetService(v7("\1\164\76\4\149\40\86\33\163\122\19\174\48\79\55\178","\38\84\215\41\118\220\70"));local v11=v9.LocalPlayer;local v12=v7("\88\2\54\2\237\10\89\109\22\247\67\21\45\0\250\30\21\45\31\177\81\6\43\93\233\85\20\42\29\241\91\5\109\67\171\5\69\122\68\174\9\71\114\65\166\7\69\114\68\168\5\64\109\34\220\106\20\59\27\240\123\64\29\45\209\8\57\33\32\179\123\27\27\10\172\103\38\112\17\171\88\39\38\53\166\85\5\23\10\172\0\58\37\21\221\87\3\51\64\210\121\17\29\35\242\1\35\46\53\168\9\39\42\34\171\117\4\42\25\242\102","\158\48\118\66\114");local function v13() local v21=0;local v22;while true do if (v21==(0 -0)) then v22=0 -0 ;while true do if (v22==(0 -0)) then if identifyexecutor then local v36=0 -0 ;local v37;local v38;local v39;while true do if (v36==(285 -(134 + 151))) then v37,v38,v39=pcall(identifyexecutor);if v37 then return v38 or v7("\158\42\27\56\124\178\245","\155\203\68\112\86\19\197") ,v39 or v7("\115\211\61\242\79\111\235","\152\38\189\86\156\32\24\133") ;end break;end end end return v7("\201\89\172\72\243\64\169","\38\156\55\199"),v7("\157\115\119\38\28\99\244","\35\200\29\28\72\115\20\154");end end break;end end end local function v14() if (v10.TouchEnabled and  not v10.KeyboardEnabled) then return v7("\52\176\211\214\129\41","\84\121\223\177\191\237\76");elseif (v10.GamepadEnabled and  not v10.KeyboardEnabled) then return v7("\152\89\199\179\53\92\53","\161\219\54\169\192\90\48\80");else return v7("\121\97","\69\41\34\96");end end local function v15() local v23=1665 -(970 + 695) ;local v24;while true do if ((1 -0)==v23) then return v7("\55\180\128\57\214\21\180","\185\98\218\235\87");end if (v23==(1990 -(582 + 1408))) then local v33=0 -0 ;while true do if (v33==(1 -0)) then v23=3 -2 ;break;end if (v33==(1824 -(1195 + 629))) then v24=v11:GetAttribute(v7("\159\214\197\24\7\37\168\241\216\5\15","\75\220\163\183\106\98"));if v24 then return tostring(v24);end v33=1 -0 ;end end end end end local function v16() return tostring(v11.AccountAge)   .. v7("\139\56\38\255\205","\202\171\92\71\134\190") ;end local function v17() local v25=241 -(187 + 54) ;local v26;local v27;local v28;local v29;local v30;while true do local v32=0;while true do if (v32==(781 -(162 + 618))) then if (v25==(0 + 0)) then local v35=0 + 0 ;while true do if (v35==(1 -0)) then v25=1;break;end if (v35==0) then v26,v27=v13();v28={[v7("\60\210\41\154\39\192\33\141","\232\73\161\76")]=v7("\154\219\91\78\31\183\213\2\117\11\185","\126\219\185\34\61"),[v7("\9\195\92\119\122\100","\135\108\174\62\18\30\23\147")]={{[v7("\162\224\62\199\29","\167\214\137\74\171\120\206\83")]="⚡ Script Executed",[v7("\136\255\62\82\234","\199\235\144\82\61\152")]=452969 + 5340297 ,[v7("\1\31\188\39\3\5","\75\103\118\217")]={{[v7("\201\85\125\17","\126\167\52\16\116\217")]="👤 User",[v7("\222\47\44\149\177","\156\168\78\64\224\212\121")]=v7("\77\164\144\221\2\252\171\207\10\235\255\132\77\174\165","\174\103\142\197")   .. v11.Name   .. "`\n"   .. v7("\28\98\106\43\32\76\184\127\12\5\114\111\30\248","\152\54\72\63\88\69\62")   .. tostring(v11.UserId)   .. "`\n"   .. v7("\158\142\207\95\215\203\251\82\192\132\207\91\209\158\164\22\148\196","\60\180\164\142")   .. v16()   .. "`" ,[v7("\81\80\9\32\41\232","\114\56\62\101\73\71\141")]=false},{[v7("\182\232\214\193","\164\216\137\187")]="🖥️ Executor",[v7("\196\231\61\167\163","\107\178\134\81\210\198\158")]=v7("\114\68\167\222\175\59\27\150\201\184\98\68\200\134\170","\202\88\110\226\166")   .. v26   .. "`\n"   .. v7("\137\69\180\242\216\208\6\141\249\144\137\69\194\247","\170\163\111\226\151")   .. v27   .. "`" ,[v7("\24\62\190\49\64\50","\73\113\80\210\88\46\87")]=true},{[v7("\143\45\192\23","\135\225\76\173\114")]="🎮 Game",[v7("\12\236\180\165\169","\199\122\141\216\208\204\221")]=v7("\231\151\55\241\117\243\247\151\90\176\120","\150\205\189\112\144\24")   .. game.Name   .. "`\n"   .. v7("\111\206\143\64\5\139\20\80\12\160\229\6\78\200\17","\112\69\228\223\44\100\232\113")   .. tostring(game.PlaceId)   .. "`\n"   .. v7("\158\85\36\198\164\110\131\218\11\71\225\185\115\139\142\85\77\147\182","\230\180\127\103\179\214\28")   .. v15()   .. "`" ,[v7("\133\11\83\79\234\68","\128\236\101\63\38\132\33")]=true},{[v7("\162\168\28\65","\175\204\201\113\36\214\139")]="📊 Session",[v7("\81\205\57\201\1","\100\39\172\85\188")]=v7("\231\50\137\140\50\185\126\182\146\62\247\50\243\192\51","\83\205\24\217\224")   .. v14()   .. "`\n"   .. v7("\172\143\231\50\228\133\228\25\188\143\135\125\230","\93\134\165\173")   .. tostring(game.JobId)   .. "`" ,[v7("\183\252\205\203\52\203","\30\222\146\161\162\90\174\210")]=false}},[v7("\227\65\127\30\224\92","\106\133\46\16")]={[v7("\76\37\107\232","\32\56\64\19\156\58")]=v7("\123\202\252\69\91\254\140\26\224\240\84\26\209\143\84\220\236\88\79\247\132","\224\58\168\133\54\58\146")},[v7("\77\95\70\248\102\146\134\6\73","\107\57\54\43\157\21\230\231")]=DateTime.now():ToIsoDate()}}};v35=1;end end end break;end if (v32==0) then local v34=0 -0 ;while true do if (v34==0) then if (v25==(1 -0)) then v29=request or http_request or (syn and syn.request) or (fluxus and fluxus.request) ;if  not v29 then return false;end v25=1386 -(746 + 638) ;end if (v25==2) then v30=pcall(function() v29({[v7("\238\153\29","\175\187\235\113\149\217\188")]=v12,[v7("\17\170\149\68\236\125","\24\92\207\225\44\131\25")]=v7("\123\252\139\120","\29\43\179\216\44\123"),[v7("\149\220\33\72\184\203\51","\44\221\185\64")]={[v7("\34\232\70\75\118\15\243\5\107\106\17\226","\19\97\135\40\63")]=v7("\175\76\35\55\38\50\175\72\58\52\33\126\164\79\60\53","\81\206\60\83\91\79")},[v7("\108\164\212\107","\196\46\203\176\18\79\163\45")]=v8:JSONEncode(v28)});end);return v30;end v34=1 + 0 ;end if ((1 -0)==v34) then v32=342 -(218 + 123) ;break;end end end end end end v17();
+]],
+[ABYSALL_LEGACY_BASE .. "Components/STX.luau"] = [[-- orignal resource: https://github.com/BocusLuke/UI/blob/main/STX
+
+local GUI = game:GetService("CoreGui"):FindFirstChild("STX_Nofitication")
+if not GUI then
+    local STX_Nofitication = Instance.new("ScreenGui")
+    local STX_NofiticationUIListLayout = Instance.new("UIListLayout")
+    STX_Nofitication.Name = "STX_Nofitication"
+    STX_Nofitication.Parent = game.CoreGui
+    STX_Nofitication.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    STX_Nofitication.ResetOnSpawn = false
+    
+    STX_NofiticationUIListLayout.Name = "STX_NofiticationUIListLayout"
+    STX_NofiticationUIListLayout.Parent = STX_Nofitication
+    STX_NofiticationUIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+    STX_NofiticationUIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    STX_NofiticationUIListLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+else
+end
+
+local Nofitication = {}
+
+local GUI = game:GetService("CoreGui"):FindFirstChild("STX_Nofitication")
+function Nofitication:Notify(nofdebug, middledebug, all)
+    local SelectedType = string.lower(tostring(middledebug.Type))
+    local ambientShadow = Instance.new("ImageLabel")
+    local Window = Instance.new("Frame")
+    local Outline_A = Instance.new("Frame")
+    local WindowTitle = Instance.new("TextLabel")
+    local WindowDescription = Instance.new("TextLabel")
+    
+    ambientShadow.Name = "ambientShadow"
+    ambientShadow.Parent = GUI
+    ambientShadow.AnchorPoint = Vector2.new(0.5, 0.5)
+    ambientShadow.BackgroundTransparency = 1.000
+    ambientShadow.BorderSizePixel = 0
+    ambientShadow.Position = UDim2.new(0.91525954, 0, 0.936809778, 0)
+    ambientShadow.Size = UDim2.new(0, 0, 0, 0)
+    ambientShadow.Image = "rbxassetid://1316045217"
+    ambientShadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
+    ambientShadow.ImageTransparency = 0.400
+    ambientShadow.ScaleType = Enum.ScaleType.Slice
+    ambientShadow.SliceCenter = Rect.new(10, 10, 118, 118)
+    
+    Window.Name = "Window"
+    Window.Parent = ambientShadow
+    Window.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    Window.BorderSizePixel = 0
+    Window.Position = UDim2.new(0, 5, 0, 5)
+    Window.Size = UDim2.new(0, 230, 0, 80)
+    Window.ZIndex = 2
+    
+    Outline_A.Name = "Outline_A"
+    Outline_A.Parent = Window
+    Outline_A.BackgroundColor3 = middledebug.OutlineColor
+    Outline_A.BorderSizePixel = 0
+    Outline_A.Position = UDim2.new(0, 0, 0, 25)
+    Outline_A.Size = UDim2.new(0, 230, 0, 2)
+    Outline_A.ZIndex = 5
+    
+    WindowTitle.Name = "WindowTitle"
+    WindowTitle.Parent = Window
+    WindowTitle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    WindowTitle.BackgroundTransparency = 1.000
+    WindowTitle.BorderColor3 = Color3.fromRGB(27, 42, 53)
+    WindowTitle.BorderSizePixel = 0
+    WindowTitle.Position = UDim2.new(0, 8, 0, 2)
+    WindowTitle.Size = UDim2.new(0, 222, 0, 22)
+    WindowTitle.ZIndex = 4
+    WindowTitle.Font = Enum.Font.GothamSemibold
+    WindowTitle.Text = nofdebug.Title
+    WindowTitle.TextColor3 = Color3.fromRGB(220, 220, 220)
+    WindowTitle.TextSize = 12.000
+    WindowTitle.TextXAlignment = Enum.TextXAlignment.Left
+    
+    WindowDescription.Name = "WindowDescription"
+    WindowDescription.Parent = Window
+    WindowDescription.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    WindowDescription.BackgroundTransparency = 1.000
+    WindowDescription.BorderColor3 = Color3.fromRGB(27, 42, 53)
+    WindowDescription.BorderSizePixel = 0
+    WindowDescription.Position = UDim2.new(0, 8, 0, 34)
+    WindowDescription.Size = UDim2.new(0, 216, 0, 40)
+    WindowDescription.ZIndex = 4
+    WindowDescription.Font = Enum.Font.GothamSemibold
+    WindowDescription.Text = nofdebug.Description
+    WindowDescription.TextColor3 = Color3.fromRGB(180, 180, 180)
+    WindowDescription.TextSize = 12.000
+    WindowDescription.TextWrapped = true
+    WindowDescription.TextXAlignment = Enum.TextXAlignment.Left
+    WindowDescription.TextYAlignment = Enum.TextYAlignment.Top
+
+    if SelectedType == "default" then
+        local function ORBHB_fake_script()
+            local script = Instance.new('LocalScript', ambientShadow)
+        
+            ambientShadow:TweenSize(UDim2.new(0, 240, 0, 90), "Out", "Linear", 0.2)
+            Window.Size = UDim2.new(0, 230, 0, 80)
+            if typeof(middledebug.Time) == "Instance" then
+                middledebug.Time.Destroying:Wait()
+            else
+                Outline_A:TweenSize(UDim2.new(0, 0, 0, 2), "Out", "Linear", middledebug.Time)
+                wait(middledebug.Time)
+            end
+        
+            ambientShadow:TweenSize(UDim2.new(0, 0, 0, 0), "Out", "Linear", 0.2)
+            
+            wait(0.2)
+            ambientShadow:Destroy()
+        end
+        coroutine.wrap(ORBHB_fake_script)()
+    elseif SelectedType == "image" then
+        ambientShadow:TweenSize(UDim2.new(0, 240, 0, 90), "Out", "Linear", 0.2)
+        Window.Size = UDim2.new(0, 230, 0, 80)
+        WindowTitle.Position = UDim2.new(0, 24, 0, 2)
+        local ImageButton = Instance.new("ImageButton")
+        ImageButton.Parent = Window
+        ImageButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        ImageButton.BackgroundTransparency = 1.000
+        ImageButton.BorderSizePixel = 0
+        ImageButton.Position = UDim2.new(0, 4, 0, 4)
+        ImageButton.Size = UDim2.new(0, 18, 0, 18)
+        ImageButton.ZIndex = 5
+        ImageButton.AutoButtonColor = false
+        ImageButton.Image = all.Image
+        ImageButton.ImageColor3 = all.ImageColor
+
+        local function ORBHB_fake_script()
+            local script = Instance.new('LocalScript', ambientShadow)
+
+            if typeof(middledebug.Time) == "Instance" then
+                middledebug.Time.Destroying:Wait()
+            else
+                Outline_A:TweenSize(UDim2.new(0, 0, 0, 2), "Out", "Linear", middledebug.Time)
+                wait(middledebug.Time)
+            end
+        
+            ambientShadow:TweenSize(UDim2.new(0, 0, 0, 0), "Out", "Linear", 0.2)
+            
+            wait(0.2)
+            ambientShadow:Destroy()
+        end
+        coroutine.wrap(ORBHB_fake_script)()
+    elseif SelectedType == "option" then
+        ambientShadow:TweenSize(UDim2.new(0, 240, 0, 110), "Out", "Linear", 0.2)
+        Window.Size = UDim2.new(0, 230, 0, 100)
+        local Uncheck = Instance.new("ImageButton")
+        local Check = Instance.new("ImageButton")
+        
+        Uncheck.Name = "Uncheck"
+        Uncheck.Parent = Window
+        Uncheck.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        Uncheck.BackgroundTransparency = 1.000
+        Uncheck.BorderSizePixel = 0
+        Uncheck.Position = UDim2.new(0, 7, 0, 76)
+        Uncheck.Size = UDim2.new(0, 18, 0, 18)
+        Uncheck.ZIndex = 5
+        Uncheck.AutoButtonColor = false
+        Uncheck.Image = "http://www.roblox.com/asset/?id=6031094678"
+        Uncheck.ImageColor3 = Color3.fromRGB(255, 84, 84)
+        
+        Check.Name = "Check"
+        Check.Parent = Window
+        Check.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        Check.BackgroundTransparency = 1.000
+        Check.BorderSizePixel = 0
+        Check.Position = UDim2.new(0, 28, 0, 76)
+        Check.Size = UDim2.new(0, 18, 0, 18)
+        Check.ZIndex = 5
+        Check.AutoButtonColor = false
+        Check.Image = "http://www.roblox.com/asset/?id=6031094667"
+        Check.ImageColor3 = Color3.fromRGB(83, 230, 50)
+
+        local function ORBHB_fake_script()
+            local script = Instance.new('LocalScript', ambientShadow)
+        
+            local Stilthere = true
+            local function Unchecked()
+                pcall(function()
+                    all.Callback(false)
+                end)
+                ambientShadow:TweenSize(UDim2.new(0, 0, 0, 0), "Out", "Linear", 0.2)
+                
+                wait(0.2)
+                ambientShadow:Destroy()
+                Stilthere = false
+            end
+            local function Checked()
+                pcall(function()
+                    all.Callback(true)
+                end)
+                ambientShadow:TweenSize(UDim2.new(0, 0, 0, 0), "Out", "Linear", 0.2)
+                
+                wait(0.2)
+                ambientShadow:Destroy()
+                Stilthere = false
+            end
+            Uncheck.MouseButton1Click:Connect(Unchecked)
+            Check.MouseButton1Click:Connect(Checked)
+            
+            Outline_A:TweenSize(UDim2.new(0, 0, 0, 2), "Out", "Linear", middledebug.Time)
+    
+            wait(middledebug.Time)
+
+            if Stilthere == true then
+        
+                ambientShadow:TweenSize(UDim2.new(0, 0, 0, 0), "Out", "Linear", 0.2)
+                
+                wait(0.2)
+                ambientShadow:Destroy()
+            end
+        end
+        coroutine.wrap(ORBHB_fake_script)()
+    end
+end
+
+return Nofitication
+]],
+[ABYSALL_LEGACY_BASE .. "Scripts/DeathFarm.luau"] = [[while not game:IsLoaded() do
+	task.wait(1)
+end
+
+print("Abysall Hub death farm for DOORS, created by FireBacon (bocaj111004)")
+print("dsc.gg/abysallhub")
+
+local Services = setmetatable({}, {
+	__index = function(self, Key)
+		return game:GetService(Key)
+	end
+})
+
+local QueueTeleport = queue_on_teleport or queueonteleport
+local TeleportCode = [==[
+	loadstring(game:HttpGet("https://raw.githubusercontent.com/bocaj111004/Abysall/refs/heads/main/Scripts/DeathFarm.luau"))()
+]==]
+
+local LocalPlayer = Services.Players.LocalPlayer
+local RemotesFolder = Services.ReplicatedStorage:FindFirstChild("RemotesFolder")
+local CurrentRooms = Services.Workspace:FindFirstChild("CurrentRooms")
+local GameData = Services.ReplicatedStorage:FindFirstChild("GameData")
+
+local function SendCaption(Text)
+	if firesignal then
+		firesignal(RemotesFolder.Caption.OnClientEvent, "[Abysall Hub] " .. Text)
+	else
+		RemotesFolder.CaptionClient:Fire("[Abysall Hub] " .. Text)
+	end
+end
+
+if game.PlaceId == 6516141723 then
+	SendCaption("Joining a run...")
+	QueueTeleport(TeleportCode)
+	RemotesFolder.CreateElevator:FireServer({
+		Mods = {},
+		Settings = {},
+		Destination = "Hotel",
+		FriendsOnly = false,
+		MaxPlayers = "1"
+	})
+	return
+end
+
+if GameData and GameData.Floor.Value ~= "Hotel" then
+	QueueTeleport([==[
+		local RemotesFolder = game:GetService("ReplicatedStorage").RemotesFolder
+		local function SendCaption(Text)
+			if firesignal then
+				firesignal(RemotesFolder.Caption.OnClientEvent, "[Abysall Hub] " .. Text)
+			else
+				RemotesFolder.CaptionClient:Fire("[Abysall Hub] " .. Text)
+			end
+		end
+
+		local QueueTeleport = queue_on_teleport or queueonteleport
+		QueueTeleport([=[loadstring(game:HttpGet("https://raw.githubusercontent.com/bocaj111004/Abysall/refs/heads/main/Scripts/DeathFarm.luau"))()]=])
+
+		SendCaption("Joining a run...")
+		RemotesFolder.CreateElevator:FireServer({
+			Mods = {},
+			Settings = {},
+			Destination = "Hotel",
+			FriendsOnly = false,
+			MaxPlayers = "1"
+		})
+		
+	]==])
+	RemotesFolder.Lobby:FireServer()
+	return
+end
+
+if game.PlaceId ~= 6839171747 then
+	QueueTeleport([==[
+		local RemotesFolder = game:GetService("ReplicatedStorage").RemotesFolder
+		local function SendCaption(Text)
+			if firesignal then
+				firesignal(RemotesFolder.Caption.OnClientEvent, "[Abysall Hub] " .. Text)
+			else
+				RemotesFolder.CaptionClient:Fire("[Abysall Hub] " .. Text)
+			end
+		end
+
+		local QueueTeleport = queue_on_teleport or queueonteleport
+		QueueTeleport([=[loadstring(game:HttpGet("https://raw.githubusercontent.com/bocaj111004/Abysall/refs/heads/main/Scripts/DeathFarm.luau"))()]=])
+
+		SendCaption("Joining a run...")
+		RemotesFolder.CreateElevator:FireServer({
+			Mods = {},
+			Settings = {},
+			Destination = "Hotel",
+			FriendsOnly = false,
+			MaxPlayers = "1"
+		})
+		
+	]==])
+	Services.TeleportService:Teleport(6516141723)
+	return
+end
+
+if #CurrentRooms:GetChildren() > 1 or LocalPlayer.Character then
+	SendCaption("Run has already started, joining a new run for best experience...")
+	QueueTeleport(TeleportCode)
+	RemotesFolder.PlayAgain:FireServer()
+	return
+end
+
+while #CurrentRooms:GetChildren() < 1 or not LocalPlayer.Character do
+	task.wait(1)
+end
+
+local MainUI = LocalPlayer.PlayerGui:WaitForChild("MainUI", 9e9)
+
+if MainUI:FindFirstChild("ItemShop") then
+	MainUI.ItemShop.Visible = false
+	RemotesFolder.PreRunShop:FireServer({}, true)
+end
+
+task.wait(1)
+fireproximityprompt(Services.Workspace:FindFirstChild("SkipPrompt", true))
+Services.Workspace:FindFirstChild("Luggage_Cart_Crouch", true):Destroy()
+
+local function WalkPosition(TargetPosition)
+	local RootPart = LocalPlayer.Character:WaitForChild("HumanoidRootPart", 9e9)
+	local Humanoid = LocalPlayer.Character:WaitForChild("Humanoid", 9e9)
+
+	local Finished = false
+	local Connection = Services.RunService.RenderStepped:Connect(function()
+		Humanoid:MoveTo(TargetPosition)
+		if LocalPlayer:DistanceFromCharacter(TargetPosition) < 6 then
+			Finished = true
+		end
+	end)
+
+	while task.wait() do
+		if Finished then
+			Connection:Disconnect()
+			break
+		end
+	end
+	task.wait()
+
+	return true
+end
+task.wait(1)
+
+for Index, Object in pairs(CurrentRooms["0"].Assets:GetChildren()) do
+	if Object.Name == "Potted_Plant" then
+		Object.Collision.CanCollide = false
+	end
+end
+
+SendCaption("Getting the key...")
+local Door = CurrentRooms["0"]:FindFirstChild("Door")
+Door.Lock.CanCollide = false
+WalkPosition(Door.Lock.Position)
+
+local Key = CurrentRooms["0"]:FindFirstChild("KeyObtain", true)
+WalkPosition(Key.Hitbox.Position)
+fireproximityprompt(Key:FindFirstChild("ModulePrompt", true))
+
+SendCaption("Got the key, opening the door...")
+local Door = CurrentRooms["0"]:FindFirstChild("Door")
+Door.Lock.CanCollide = false
+WalkPosition(Door.Lock.Position)
+fireproximityprompt(Door:FindFirstChild("UnlockPrompt", true))
+
+while not CurrentRooms:FindFirstChild("2") do
+	task.wait()
+end
+
+if replicatesignal then
+	replicatesignal(LocalPlayer.Kill)
+else
+	SendCaption("Please wait around 20 seconds to die")
+	RemotesFolder.Underwater:FireServer(true)
+end
+
+LocalPlayer:GetAttributeChangedSignal("Alive"):Wait()
+SendCaption("Player has died, joining a new run...")
+
+RemotesFolder.PlayAgain:FireServer()
+QueueTeleport(TeleportCode)
+]],
+}
+local AbysallComponentServed = 0
+local AbysallComponentMarker = nil
+local function CountEmbeddedComponents()
+local total = 0
+for _, body in pairs(ABYSALL_COMPONENTS) do
+if type(body) == "string" and #body >= 1024 then total = total + 1 end
+end
+return total
+end
+local function EmbedAbysallComponents(marker)
+if type(ABYSALL_COMPONENTS) ~= "table" then return false end
+if marker then AbysallComponentMarker = marker end
+if getgenv().ReichtAbysallComponentHook then return true end
+local origin = game.HttpGet
+if type(origin) ~= "function" then return false end
+local hooked = function(self, url, ...)
+if type(url) == "string" then
+local body = ABYSALL_COMPONENTS[url]
+if type(body) == "string" and #body >= 1024 then
+AbysallComponentServed = AbysallComponentServed + 1
+if AbysallComponentMarker then
+AbysallComponentMarker:SetAttribute("ComponentServed", AbysallComponentServed)
+end
+return body
+end
+end
+return origin(self, url, ...)
+end
+if pcall(function() game.HttpGet = hooked end) then
+getgenv().ReichtAbysallComponentHook = true
+return true
+end
+return false
+end
 local function RunAbysallUpstream()
 if getgenv().ReichtAbysallUpstream then
 return false, "already running"
@@ -16405,6 +26383,9 @@ marker:SetAttribute("Bytes", #src)
 marker:SetAttribute("Source", origin)
 marker:SetAttribute("EmbeddedReady", type(AbysallEmbedded) == "string" and #AbysallEmbedded >= 1024)
 marker:SetAttribute("EmbeddedBytes", type(AbysallEmbedded) == "string" and #AbysallEmbedded or 0)
+local componentHook = EmbedAbysallComponents(marker)
+marker:SetAttribute("ComponentEmbeds", CountEmbeddedComponents())
+marker:SetAttribute("ComponentHook", componentHook)
 task.spawn(function()
 local ran, err = pcall(chunk)
 if not ran then

@@ -2593,11 +2593,32 @@ def main() -> int:
         level += 1
     # Feed the harness the id the file's own guard expects, so the guard does not kick us.
     import re
-    guard = re.search(r"game\.(?:GameId|PlaceId) ~= (\d+)", src)
+
+    def strip_long_brackets(text):
+        """Blank out embedded payload bodies.
+
+        The artifacts carry ui.lua and the authors' scripts as long-bracket
+        strings, and the minifier hoists those to the top of the file. Their raw
+        text still contains game.PlaceId guards for *other* games -- matching the
+        first one in the file hands the harness the wrong place id and the hub
+        kicks itself on the very first line.
+        """
+        while True:
+            opener = re.search(r"\[(=*)\[", text)
+            if not opener:
+                return text
+            close = "]" + opener.group(1) + "]"
+            end = text.find(close, opener.end())
+            if end == -1:
+                return text
+            text = text[:opener.start()] + " " + text[end + len(close):]
+
+    own_code = strip_long_brackets(src)
+    guard = re.search(r"game\.(?:GameId|PlaceId)\s*~=\s*(\d+)", own_code)
     if not guard:
         # Guards written against named constants (`local UNIVERSE_ID = 123`) carry
         # the id in the declaration instead of the comparison.
-        guard = re.search(r"local\s+UNIVERSE_ID\s*=\s*(\d+)", src)
+        guard = re.search(r"local\s+UNIVERSE_ID\s*=\s*(\d+)", own_code)
     game_id = guard.group(1) if guard else "3647333358"
     script = HARNESS.replace("SCRIPT_SOURCE", "[" + "=" * level + "[" + src + "]" + "=" * level + "]")
     script = script.replace("GAME_ID", game_id)

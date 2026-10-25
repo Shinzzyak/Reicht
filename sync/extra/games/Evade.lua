@@ -19,6 +19,10 @@ local LocalPlayer = Players.LocalPlayer
 
 local UI_URL = "https://raw.githubusercontent.com/Shinzzyak/Reicht/refs/heads/main/ui.lua"
 local SAVE_FOLDER = "Reicht/Evade"
+-- Standalone copy: build.py replaces this call with the library file itself. Network
+-- stays first so a UI hotfix needs no rebuild; this is the floor under it, so a dead
+-- or renamed repo costs freshness instead of the whole menu.
+local UI_EMBEDDED = REICHT_EMBED("reicht_ui.lua")
 
 local function Alert(text)
     warn("[Reicht/Evade] " .. text)
@@ -38,6 +42,7 @@ end
 -- Floating button manager. The payload ships it as a separate library; it is
 -- vendored into the hub so a dead upstream cannot take the buttons with it.
 local FBM_URL = "https://raw.githubusercontent.com/Shinzzyak/Reicht/refs/heads/main/FloatingButton.lua"
+local FBM_EMBEDDED = REICHT_EMBED("reicht_floating.lua")
 
 -- Module paths move when the game updates; a failed require must cost the
 -- features that need it, never the whole menu.
@@ -47,13 +52,28 @@ local function Safe(fn)
     return nil
 end
 
+-- Network first (fresh), build copy second. Both routes are pcall'd: a dead host
+-- raises instead of returning nil, and that exception used to take the script down.
+local function FetchSource(url, embedded)
+    local ok, src = pcall(game.HttpGet, game, url)
+    if ok and type(src) == "string" and #src >= 1024 then return src, "network" end
+    if type(embedded) == "string" and #embedded >= 1024 then return embedded, "embedded" end
+    return nil, "none"
+end
+
+local FbmOrigin = "none"
+
 local FBM = Safe(function()
-    local src = game:HttpGet(FBM_URL)
+    local src, origin = FetchSource(FBM_URL, FBM_EMBEDDED)
+    FbmOrigin = origin or "none"
     if type(src) ~= "string" or #src < 1024 then return nil end
     local lib = loadstring(src)()
     if type(lib) ~= "table" or type(lib.AddButton) ~= "function" then return nil end
     return lib
 end)
+warn(string.format("[Reicht/Evade] floating button source: %s (embedded ready: %s)",
+    tostring(FbmOrigin),
+    tostring(type(FBM_EMBEDDED) == "string" and #FBM_EMBEDDED > 1024)))
 if not FBM then
     FBM = { Buttons = {} }
     function FBM:SetLibrary() end
@@ -74,11 +94,18 @@ local isfolder = isfolder or function() return false end
 local getcustomasset = getcustomasset or function() return "" end
 local request = http_request or (syn and syn.request) or request
 
-local body = game:HttpGet(UI_URL)
+local body, uiOrigin = FetchSource(UI_URL, UI_EMBEDDED)
 if type(body) ~= "string" or not body:sub(-64):find("return Library%s*$") then
     Alert("Could not download the menu. Check the connection and try again.")
     return
 end
+-- Evidence line: which route supplied the menu, so "menu is blank" can be told
+-- apart from "the fetch was blocked".
+getgenv().ReichtUiSource = uiOrigin
+warn(string.format("[Reicht/Evade] ui source: %s (embedded ready: %s, %d bytes)",
+    tostring(uiOrigin),
+    tostring(type(UI_EMBEDDED) == "string" and #UI_EMBEDDED > 1024),
+    type(UI_EMBEDDED) == "string" and #UI_EMBEDDED or 0))
 local chunk = loadstring(body)
 local Library = chunk and select(2, pcall(chunk))
 if type(Library) ~= "table" then
