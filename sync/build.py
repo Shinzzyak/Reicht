@@ -939,7 +939,13 @@ def extra_games():
         return {}, root
     with open(manifest, encoding="utf-8") as handle:
         data = json.load(handle)
-    table = {int(entry["id"]): entry["name"] for entry in data.values()}
+    table = {}
+    for entry in data.values():
+        # `id` is the normal case. `ids` is for a game that shipped under more than
+        # one universe (a rebrand leaves the old one alive), so one script answers
+        # to every id it was published under.
+        for gid in entry.get("ids") or [entry["id"]]:
+            table[int(gid)] = entry["name"]
     for stem in data:
         if not os.path.isfile(os.path.join(root, "games", stem + ".lua")):
             raise SystemExit(f"extra/games.json lists {stem} but extra/games/{stem}.lua is missing")

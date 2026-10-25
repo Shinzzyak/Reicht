@@ -1,11 +1,21 @@
 {
+  "Doors": {
+    "id": 2440500124,
+    "name": "Doors"
+  },
   "Evade": {
     "id": 3647333358,
     "name": "Evade"
   },
-  "Doors": {
-    "id": 2440500124,
-    "name": "Doors"
+  "Hush": {
+    "ids": [
+      91445552037955,
+      133927229860262,
+      10768728930,
+      10767946926
+    ],
+    "name": "Hush",
+    "note": "Two live universes: HUSH [Zombie Extraction] and HUSH: They can hear. (BETA)"
   },
   "Tongue Escape": {
     "id": 122245938604556,
