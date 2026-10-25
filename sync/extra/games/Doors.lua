@@ -488,6 +488,7 @@ end
 local Window = Library:CreateWindow({
     Title = "Reicht",
     SubTitle = "Doors - Lonely Hub",
+    Footer = "Shinzzyak/Reicht",
     MenuKey = Enum.KeyCode.LeftControl,
     ConfigFolder = SAVE_FOLDER,
     Language = "Auto",
@@ -597,8 +598,10 @@ do
         label.Name = "ReichtESPText"
         label.BackgroundTransparency = 1
         label.Size = UDim2.fromScale(1, 1)
-        label.Font = Enum.Font.Code
+        label.Font = spec.Font or Enum.Font.Code
         label.TextSize = spec.TextSize or 16
+        label.TextTransparency = spec.TextTransparency or 0
+        label.TextStrokeTransparency = spec.TextStrokeTransparency or 1
         label.TextColor3 = spec.TextColor or spec.FillColor or Color3.fromRGB(255, 255, 255)
         label.Text = tostring(spec.Name or "")
         label.Parent = billboard
@@ -645,6 +648,10 @@ do
             if fields.OutlineTransparency then highlight.OutlineTransparency = fields.OutlineTransparency end
             if fields.FillColor then highlight.FillColor = fields.FillColor end
             if fields.TextSize then label.TextSize = fields.TextSize end
+            if fields.Font then label.Font = fields.Font end
+            if fields.TextTransparency then label.TextTransparency = fields.TextTransparency end
+            if fields.TextStrokeTransparency then label.TextStrokeTransparency = fields.TextStrokeTransparency end
+            self.TracerOrigin = fields.TracerOrigin or self.TracerOrigin
             if fields.Thickness then self:SetThickness(fields.Thickness) end
         end
         function instance:SetVisible(visible)
@@ -711,7 +718,16 @@ do
                 local point, onScreen = nil, false
                 if part then point, onScreen = camera:WorldToViewportPoint(part.Position) end
                 if onScreen and instance.Visible then
-                    tracer.From = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y)
+                    local vp = camera.ViewportSize
+                    local fx, fy = vp.X / 2, vp.Y
+                    local origin = instance.TracerOrigin or "Bottom"
+                    if origin == "Center" then fx, fy = vp.X / 2, vp.Y / 2
+                    elseif origin == "Top" then fx, fy = vp.X / 2, 0
+                    elseif origin == "Mouse" then
+                        local mouse = UserInputService and UserInputService.GetMouseLocation and UserInputService:GetMouseLocation()
+                        if mouse then fx, fy = mouse.X, mouse.Y end
+                    end
+                    tracer.From = Vector2.new(fx, fy)
                     tracer.To = Vector2.new(point.X, point.Y)
                     tracer.Visible = true
                 else
@@ -947,6 +963,7 @@ do
     local LocalESP = ESPLibrary.ESP
     local ESP = {
         Objects = {},
+        Order = {},
         ColorTable = {},
         TextTable = {},
         Settings = {
@@ -961,13 +978,54 @@ do
     local function setter(key)
         return function(_, value) S[key] = value end
     end
-    for _, key in ipairs({
-        "Rainbow", "Tracers", "ShowDistance", "Arrows", "TextTransparency",
-        "FillTransparency", "OutlineTransparency", "TextOutlineTransparency", "FadeTime",
-        "RenderLimit", "TracerSize", "ArrowRadius", "TextSize", "DistanceSizeRatio",
-        "Font", "TracerOrigin",
-    }) do
+    -- ponytail: Arrows/ArrowRadius need triangle drawings, DistanceSizeRatio needs per-frame
+    -- distance rescaling, FadeTime needs a fade pass after removal -- the shared engine has
+    -- none of those primitives yet, so these three stay stored-only.
+    for _, key in ipairs({ "Arrows", "ArrowRadius", "FadeTime", "DistanceSizeRatio" }) do
         ESP["Set" .. key] = setter(key)
+    end
+    local function each(apply)
+        for _, entry in pairs(ESP.Objects) do
+            if entry.Instance then apply(entry.Instance) end
+        end
+    end
+    local function cap()
+        while #ESP.Order > (S.RenderLimit or 0) do
+            local object = table.remove(ESP.Order, 1)
+            if object then ESP.RemoveESP(ESP, object) end
+        end
+    end
+    ESP.SetRenderLimit = function(_, value)
+        S.RenderLimit = value
+        cap()
+    end
+    ESP.SetTextSize = function(_, value)
+        S.TextSize = value
+        each(function(inst) inst:Update({ TextSize = value }) end)
+    end
+    ESP.SetTextTransparency = function(_, value)
+        S.TextTransparency = value
+        each(function(inst) inst:Update({ TextTransparency = value }) end)
+    end
+    ESP.SetTextOutlineTransparency = function(_, value)
+        S.TextOutlineTransparency = value
+        each(function(inst) inst:Update({ TextStrokeTransparency = value }) end)
+    end
+    ESP.SetFillTransparency = function(_, value)
+        S.FillTransparency = value
+        each(function(inst) inst:Update({ FillTransparency = value }) end)
+    end
+    ESP.SetOutlineTransparency = function(_, value)
+        S.OutlineTransparency = value
+        each(function(inst) inst:Update({ OutlineTransparency = value }) end)
+    end
+    ESP.SetFont = function(_, value)
+        S.Font = value
+        each(function(inst) inst:Update({ Font = value }) end)
+    end
+    ESP.SetTracerOrigin = function(_, value)
+        S.TracerOrigin = value
+        each(function(inst) inst:Update({ TracerOrigin = value }) end)
     end
     -- Abysall spells one of the two; the upstream switcher has one key. Both land there.
     ESP.SetTracersOrigin = ESP.SetTracerOrigin
@@ -1025,12 +1083,16 @@ do
                 Text = text,
                 Name = text,
                 TextSize = S.TextSize,
+                TextStrokeTransparency = S.TextOutlineTransparency,
+                Font = S.Font,
             })
         end)
         if not instance then return end
         ESP.Objects[object] = { Instance = instance }
         ESP.ColorTable[object] = color
         ESP.TextTable[object] = text
+        table.insert(ESP.Order, object)
+        cap()
     end
     ESP.RemoveESP = function(_, object)
         local entry = ESP.Objects[object]
@@ -2279,7 +2341,7 @@ local ReichtWindow = Window
 
 
 
-    -- info tab: Reicht ships its own
+    if Window.AddInfoTab then Window:AddInfoTab() end
 
     local Tabs = {
     	General = Window:AddTab("General", "house"),
@@ -9351,7 +9413,7 @@ local ReichtWindow = Window
     do local MainUIDeadline = os.clock() + 5
        for _ = 1, 300 do if Globals.MainUI then break end task.wait() end end
 
-    -- settings tab: Reicht ships its own
+    if Window.AddSettingsTab then Window:AddSettingsTab() end
     Functions.Notify({ Title = "Successfully loaded in " .. math.floor((tick() - LoadStart) * 1000) / 1000 .. " seconds." , Body = "Press '" .. tostring(Options.MenuKeybind and Options.MenuKeybind.Value or "RightShift") .. "' to toggle the UI."})
     -- Init reached the end. In the live game that is the difference between "the menu
     -- opened" and "the features are wired": the layer used to park or throw halfway and
