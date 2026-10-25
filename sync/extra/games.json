@@ -15,7 +15,7 @@
       10767946926
     ],
     "name": "Hush",
-    "note": "Two live universes: HUSH [Zombie Extraction] and HUSH: They can hear. (BETA)"
+    "note": "Two live universes: HUSH [Zombie Extraction] and HUSH: They can hear. (BETA). Script is a clean rebuild from the VM bytecode (delta/hush/reverse); the VM payload is not shipped."
   },
   "Tongue Escape": {
     "id": 122245938604556,
@@ -24,15 +24,5 @@
   "Tower of Hell": {
     "id": 1962086868,
     "name": "Tower of Hell"
-  },
-  "Hush Clean": {
-    "ids": [
-      91445552037955,
-      133927229860262,
-      10768728930,
-      10767946926
-    ],
-    "name": "Hush Clean",
-    "note": "Clean-room rebuild from VM bytecode reverse (delta/hush/reverse). Same feature set, no VM, no remote chunks."
   }
 }
