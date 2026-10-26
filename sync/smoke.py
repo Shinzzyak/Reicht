@@ -1005,6 +1005,29 @@ do
     end
 end
 
+-- Bare-name remotes: older artifacts resolve `remote("Name")` by scanning
+-- ReplicatedStorage.Shared.Remotes, so the class has to be RemoteEvent and the
+-- name has to exist or every fire is a silent nil.
+do
+    local sharedFolder = childOf(rs, "Shared")
+    if not sharedFolder then
+        sharedFolder = seedPath("Shared")
+    end
+    local remotesFolder = childOf(sharedFolder, "Remotes")
+    if not remotesFolder then
+        remotesFolder = newInstance("Folder", "Remotes")
+        addChild(sharedFolder, remotesFolder)
+    end
+    remotesFolder.Permissive = true
+    for _, name in ipairs(__BARE_REMOTES__) do
+        if not childOf(remotesFolder, name) then
+            local remote = newInstance("RemoteEvent", name)
+            addChild(remotesFolder, remote)
+            remote.Permissive = true
+        end
+    end
+end
+
 local roomsFolder = addChild(ws, newInstance("Folder", "CurrentRooms"))
 roomsFolder.Permissive = true
 local roomZero = addChild(roomsFolder, newInstance("Model", "0"))
@@ -1561,6 +1584,11 @@ __MOCK_LIBRARY = {}
 function __MOCK_LIBRARY:CreateWindow()
     local win = { Tabs = {} }
     function win:AddTab(name, icon, desc)
+        -- Two menu families pass a descriptor table here instead of a bare name;
+        -- recording the table itself blows up the tabs report with a concat error.
+        if type(name) == "table" then
+            name = name.Title or name.Name or "?"
+        end
         local t = { Name = name }
         table.insert(RECORD.tabs, name)
         function t:AddLeftGroupbox(gname) return mkContainer(name, gname) end
@@ -2639,6 +2667,9 @@ def main() -> int:
         r'Remote\(\s*"([A-Za-z0-9_]+)"\s*,\s*"([A-Za-z0-9_]+)"', src)))
     lua_pairs = "{" + ", ".join('{"%s", "%s"}' % (f, n) for f, n in pairs) + "}"
     script = script.replace("__REMOTE_PAIRS__", lua_pairs)
+    # Bare remotes the artifact asks for through its own remote("Name") resolver.
+    bare = sorted(set(re.findall(r'\bremote\(\s*"([A-Za-z0-9_]+)"\s*\)', src)))
+    script = script.replace("__BARE_REMOTES__", "{" + ", ".join('"%s"' % n for n in bare) + "}")
     script = script.replace("__STRICT_WFC__", "true" if os.environ.get("REICHT_STRICT_WFC") == "1" else "false")
     script = script.replace("__NO_FPP__", "true" if os.environ.get("REICHT_NO_FPP") == "1" else "false")
     script = script.replace("__NO_MAINUI__", "true" if os.environ.get("REICHT_NO_MAINUI") == "1" else "false")

@@ -48,9 +48,15 @@ local function notify(text, duration)
 end
 
 local function get(id, fallback)
-	local opt = Options[id]
+	local opt = Options[id] or (Library.Options and Library.Options[id])
+	if not opt and Library.Toggles then
+		opt = Library.Toggles[id]
+	end
 	if not opt then
 		return fallback
+	end
+	if type(opt) ~= "table" then
+		return opt
 	end
 	local v = opt.Value
 	if v == nil then
