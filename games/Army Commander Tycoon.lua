@@ -17,14 +17,14 @@ Center = true,
 AutoShow = true,
 ShowCustomCursor = true,
 })
-local Tabs = {
-Farm = WIN:AddTab({ Title = "Farm", Icon = "zap" }),
-Army = WIN:AddTab({ Title = "Army", Icon = "flag" }),
-Combat = WIN:AddTab({ Title = "Combat", Icon = "crosshair" }),
-Visuals = WIN:AddTab({ Title = "Visuals", Icon = "eye" }),
-Player = WIN:AddTab({ Title = "Player", Icon = "user" }),
-Misc = WIN:AddTab({ Title = "Misc", Icon = "settings" }),
-Settings = WIN:AddTab({ Title = "Settings", Icon = "sliders" }),
+Tabs = {
+Farm = WIN:AddTab({ Name = "Farm", Icon = "zap" }),
+Army = WIN:AddTab({ Name = "Army", Icon = "flag" }),
+Combat = WIN:AddTab({ Name = "Combat", Icon = "crosshair" }),
+Visuals = WIN:AddTab({ Name = "Visuals", Icon = "eye" }),
+Player = WIN:AddTab({ Name = "Player", Icon = "user" }),
+Misc = WIN:AddTab({ Name = "Misc", Icon = "settings" }),
+Settings = WIN:AddTab({ Name = "Settings", Icon = "sliders" }),
 }
 local function notify(text, duration)
 pcall(function()
@@ -717,68 +717,69 @@ end
 end
 notify("Remote not found: " .. wanted)
 end
-Tabs.Farm:AddLeftGroupbox("Prompts")
-Tabs.Farm:AddToggle("AutoPrompt", { Text = "Auto trigger prompts", Default = false, Callback = function(v)
+local menuOK, menuErr = pcall(function()
+local gb_farm_Prompts = Tabs.Farm:AddLeftGroupbox("Prompts")
+gb_farm_Prompts:AddToggle("AutoPrompt", { Text = "Auto trigger prompts", Default = false, Callback = function(v)
 if v then ensureScan(true) end
 end })
-Tabs.Farm:AddDropdown("PromptMode", { Text = "Prompt filter", Values = { "All", "Build", "Buy", "Oil", "Crate", "Capture", "Promote" }, Default = "All", Multi = false })
-Tabs.Farm:AddSlider("PromptDelay", { Text = "Trigger delay", Default = 0.35, Min = 0.1, Max = 3, Rounding = 2 })
-Tabs.Farm:AddSlider("PromptRange", { Text = "Range (studs)", Default = 250, Min = 5, Max = 2000, Rounding = 0 })
-Tabs.Farm:AddSlider("PromptCooldown", { Text = "Per prompt cooldown", Default = 3, Min = 0.5, Max = 30, Rounding = 1 })
-Tabs.Farm:AddRightGroupbox("Cash and clicks")
-Tabs.Farm:AddToggle("AutoClick", { Text = "Auto click detectors", Default = false })
-Tabs.Farm:AddSlider("ClickDelay", { Text = "Click delay", Default = 0.5, Min = 0.1, Max = 5, Rounding = 2 })
-Tabs.Farm:AddToggle("AutoCash", { Text = "Auto touch cash parts", Default = false })
-Tabs.Farm:AddSlider("CashRange", { Text = "Cash range", Default = 120, Min = 5, Max = 800, Rounding = 0 })
-Tabs.Army:AddLeftGroupbox("Orders")
-Tabs.Army:AddToggle("AutoCapture", { Text = "Auto capture points", Default = false })
-Tabs.Army:AddSlider("CaptureDelay", { Text = "Capture delay", Default = 1, Min = 0.2, Max = 10, Rounding = 2 })
-Tabs.Army:AddToggle("KeepArmy", { Text = "Keep army on auto", Default = false })
+gb_farm_Prompts:AddDropdown("PromptMode", { Text = "Prompt filter", Values = { "All", "Build", "Buy", "Oil", "Crate", "Capture", "Promote" }, Default = "All", Multi = false })
+gb_farm_Prompts:AddSlider("PromptDelay", { Text = "Trigger delay", Default = 0.35, Min = 0.1, Max = 3, Rounding = 2 })
+gb_farm_Prompts:AddSlider("PromptRange", { Text = "Range (studs)", Default = 250, Min = 5, Max = 2000, Rounding = 0 })
+gb_farm_Prompts:AddSlider("PromptCooldown", { Text = "Per prompt cooldown", Default = 3, Min = 0.5, Max = 30, Rounding = 1 })
+local gb_farm_Cashandclicks = Tabs.Farm:AddRightGroupbox("Cash and clicks")
+gb_farm_Cashandclicks:AddToggle("AutoClick", { Text = "Auto click detectors", Default = false })
+gb_farm_Cashandclicks:AddSlider("ClickDelay", { Text = "Click delay", Default = 0.5, Min = 0.1, Max = 5, Rounding = 2 })
+gb_farm_Cashandclicks:AddToggle("AutoCash", { Text = "Auto touch cash parts", Default = false })
+gb_farm_Cashandclicks:AddSlider("CashRange", { Text = "Cash range", Default = 120, Min = 5, Max = 800, Rounding = 0 })
+local gb_army_Orders = Tabs.Army:AddLeftGroupbox("Orders")
+gb_army_Orders:AddToggle("AutoCapture", { Text = "Auto capture points", Default = false })
+gb_army_Orders:AddSlider("CaptureDelay", { Text = "Capture delay", Default = 1, Min = 0.2, Max = 10, Rounding = 2 })
+gb_army_Orders:AddToggle("KeepArmy", { Text = "Keep army on auto", Default = false })
 buildTeleportGroup()
-Tabs.Combat:AddLeftGroupbox("Combat")
-Tabs.Combat:AddToggle("AutoFire", { Text = "Auto activate tool", Default = false })
-Tabs.Combat:AddToggle("Aura", { Text = "Multi activate (aura)", Default = false })
-Tabs.Combat:AddSlider("AuraCount", { Text = "Aura targets", Default = 5, Min = 2, Max = 20, Rounding = 0 })
-Tabs.Combat:AddSlider("CombatRange", { Text = "Combat range", Default = 180, Min = 10, Max = 1000, Rounding = 0 })
-Tabs.Combat:AddToggle("FaceTarget", { Text = "Face nearest target", Default = true })
-Tabs.Visuals:AddLeftGroupbox("ESP")
-Tabs.Visuals:AddToggle("PlayerEsp", { Text = "Player ESP", Default = false })
-Tabs.Visuals:AddToggle("PromptEsp", { Text = "Prompt ESP (action text)", Default = false })
-Tabs.Visuals:AddToggle("UnitEsp", { Text = "Unit count in notify", Default = false })
-Tabs.Visuals:AddRightGroupbox("World")
-Tabs.Visuals:AddToggle("Fullbright", { Text = "Fullbright", Default = false })
-Tabs.Visuals:AddToggle("NoFog", { Text = "No fog", Default = false })
-Tabs.Player:AddLeftGroupbox("Movement")
-Tabs.Player:AddToggle("SpeedEnabled", { Text = "WalkSpeed", Default = false, Callback = applySpeed })
-Tabs.Player:AddSlider("WalkSpeed", { Text = "Speed", Default = 16, Min = 8, Max = 200, Rounding = 0, Callback = applySpeed })
-Tabs.Player:AddToggle("JumpEnabled", { Text = "JumpPower", Default = false, Callback = applyJump })
-Tabs.Player:AddSlider("JumpPower", { Text = "Jump", Default = 50, Min = 50, Max = 400, Rounding = 0, Callback = applyJump })
-Tabs.Player:AddToggle("InfJump", { Text = "Infinite jump", Default = false })
-Tabs.Player:AddRightGroupbox("Fly and noclip")
-Tabs.Player:AddToggle("Fly", { Text = "Fly", Default = false, Callback = function(v)
+local gb_combat_Combat = Tabs.Combat:AddLeftGroupbox("Combat")
+gb_combat_Combat:AddToggle("AutoFire", { Text = "Auto activate tool", Default = false })
+gb_combat_Combat:AddToggle("Aura", { Text = "Multi activate (aura)", Default = false })
+gb_combat_Combat:AddSlider("AuraCount", { Text = "Aura targets", Default = 5, Min = 2, Max = 20, Rounding = 0 })
+gb_combat_Combat:AddSlider("CombatRange", { Text = "Combat range", Default = 180, Min = 10, Max = 1000, Rounding = 0 })
+gb_combat_Combat:AddToggle("FaceTarget", { Text = "Face nearest target", Default = true })
+local gb_visuals_ESP = Tabs.Visuals:AddLeftGroupbox("ESP")
+gb_visuals_ESP:AddToggle("PlayerEsp", { Text = "Player ESP", Default = false })
+gb_visuals_ESP:AddToggle("PromptEsp", { Text = "Prompt ESP (action text)", Default = false })
+gb_visuals_ESP:AddToggle("UnitEsp", { Text = "Unit count in notify", Default = false })
+local gb_visuals_World = Tabs.Visuals:AddRightGroupbox("World")
+gb_visuals_World:AddToggle("Fullbright", { Text = "Fullbright", Default = false })
+gb_visuals_World:AddToggle("NoFog", { Text = "No fog", Default = false })
+local gb_player_Movement = Tabs.Player:AddLeftGroupbox("Movement")
+gb_player_Movement:AddToggle("SpeedEnabled", { Text = "WalkSpeed", Default = false, Callback = applySpeed })
+gb_player_Movement:AddSlider("WalkSpeed", { Text = "Speed", Default = 16, Min = 8, Max = 200, Rounding = 0, Callback = applySpeed })
+gb_player_Movement:AddToggle("JumpEnabled", { Text = "JumpPower", Default = false, Callback = applyJump })
+gb_player_Movement:AddSlider("JumpPower", { Text = "Jump", Default = 50, Min = 50, Max = 400, Rounding = 0, Callback = applyJump })
+gb_player_Movement:AddToggle("InfJump", { Text = "Infinite jump", Default = false })
+local gb_player_Flyandnoclip = Tabs.Player:AddRightGroupbox("Fly and noclip")
+gb_player_Flyandnoclip:AddToggle("Fly", { Text = "Fly", Default = false, Callback = function(v)
 if v then startFly() else stopFly() end
 end })
-Tabs.Player:AddSlider("FlySpeed", { Text = "Fly speed", Default = 60, Min = 10, Max = 300, Rounding = 0 })
-Tabs.Player:AddToggle("Noclip", { Text = "Noclip", Default = false, Callback = function(v)
+gb_player_Flyandnoclip:AddSlider("FlySpeed", { Text = "Fly speed", Default = 60, Min = 10, Max = 300, Rounding = 0 })
+gb_player_Flyandnoclip:AddToggle("Noclip", { Text = "Noclip", Default = false, Callback = function(v)
 if v then startNoclip() end
 end })
-Tabs.Player:AddToggle("AntiAfk", { Text = "Anti AFK", Default = true })
-Tabs.Misc:AddLeftGroupbox("Session")
-Tabs.Misc:AddButton({ Text = "Rejoin", Func = function()
+gb_player_Flyandnoclip:AddToggle("AntiAfk", { Text = "Anti AFK", Default = true })
+local gb_misc_Session = Tabs.Misc:AddLeftGroupbox("Session")
+gb_misc_Session:AddButton({ Text = "Rejoin", Func = function()
 pcall(function() TeleportService:Teleport(game.PlaceId, LocalPlayer) end)
 end })
-Tabs.Misc:AddButton({ Text = "Copy remote list", Func = dumpRemotes })
-Tabs.Misc:AddInput("RemoteName", { Text = "Remote name", Default = "", Placeholder = "e.g. BuildRequest" })
-Tabs.Misc:AddButton({ Text = "Fire named remote", Func = fireRemoteByName })
-Tabs.Misc:AddRightGroupbox("Client")
-Tabs.Misc:AddSlider("FpsCap", { Text = "FPS cap (0 = off)", Default = 0, Min = 0, Max = 240, Rounding = 0, Callback = function(v)
+gb_misc_Session:AddButton({ Text = "Copy remote list", Func = dumpRemotes })
+gb_misc_Session:AddInput("RemoteName", { Text = "Remote name", Default = "", Placeholder = "e.g. BuildRequest" })
+gb_misc_Session:AddButton({ Text = "Fire named remote", Func = fireRemoteByName })
+local gb_misc_Client = Tabs.Misc:AddRightGroupbox("Client")
+gb_misc_Client:AddSlider("FpsCap", { Text = "FPS cap (0 = off)", Default = 0, Min = 0, Max = 240, Rounding = 0, Callback = function(v)
 pcall(function()
 if type(setfpscap) == "function" then
 setfpscap(v)
 end
 end)
 end })
-Tabs.Misc:AddButton({ Text = "Low graphics", Func = function()
+gb_misc_Client:AddButton({ Text = "Low graphics", Func = function()
 pcall(function()
 local lighting = game:GetService("Lighting")
 lighting.GlobalShadows = false
@@ -791,15 +792,21 @@ end
 end
 notify("Graphics flattened")
 end })
-Tabs.Settings:AddLeftGroupbox("Build")
-Tabs.Settings:AddButton({ Text = "Refresh scan", Func = function() ensureScan(true); notify("Rescanned world") end })
-Tabs.Settings:AddButton({ Text = "Unload", Func = function()
+local gb_settings_Build = Tabs.Settings:AddLeftGroupbox("Build")
+gb_settings_Build:AddButton({ Text = "Refresh scan", Func = function() ensureScan(true); notify("Rescanned world") end })
+gb_settings_Build:AddButton({ Text = "Unload", Func = function()
 releaseDrawings()
 stopFly()
 pcall(function() if PlayerState.noclipConn then PlayerState.noclipConn:Disconnect() end end)
 pcall(function() if PlayerState.idleConn then PlayerState.idleConn:Disconnect() end end)
 pcall(function() Library:Unload() end)
 end })
+end)
+if not menuOK then
+notify("Menu build failed: " .. tostring(menuErr))
+pcall(function() Library:Unload() end)
+return
+end
 local function step()
 if not LocalPlayer then return end
 pcall(runPrompts)
