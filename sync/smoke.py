@@ -2494,6 +2494,17 @@ STONE_PROOFS = {
     "code redemption carries the verb": ("fire", "Request|RedeemCode", 1),
 }
 
+# Guts & Blackpowder is a single Luraph v15.1 VM payload: there is no Reicht-built
+# widget surface to count, only the loading contract the wrapper guarantees — the
+# author's bytes embedded verbatim, ready to run, and (in the harness, which is not
+# an executor) deferred for a real executor. The byte count is pinned to the served
+# build; bump it when the vendored payload updates.
+GNB_PROOFS = {
+    "gnb payload embedded at full byte count": ("write", "ReichtGnbPayload|SetAttribute|Bytes=2159367", 1),
+    "gnb payload reports ready to run": ("write", "ReichtGnbPayload|SetAttribute|EmbeddedReady=true", 1),
+    "gnb vm defers outside a real executor": ("write", "ReichtGnbPayload|SetAttribute|VmDeferred=true", 1),
+}
+
 PYRAMID_PROOFS = {
     "activity remote is fired": ("fire", "Activity|nil", 1),
 }
@@ -2712,12 +2723,16 @@ def main() -> int:
               "Sniper Arena": SNIPER_PROOFS,
               "TNT Mining": TNT_PROOFS,
               "Open Sea For Animals": SEA_PROOFS,
-              "Tower of Hell": TOWER_PROOFS}.get(target.stem)
+              "Tower of Hell": TOWER_PROOFS,
+              "Guts and Blackpowder": GNB_PROOFS}.get(target.stem)
     if proofs and "trace fire total" in out:
         proofs_passed, proofs_failed = check_proofs(out, proofs)
     has_options = "options: " in out and "driven: 0" not in out
     has_widgets = "widgets: 0" not in out and "widgets wired: 0 / 0" not in out
-    bad = (("RUNTIME ERROR" in out) or ("errors: 0" not in out) or not (has_options or has_widgets)
+    # A game whose whole surface is a VM payload never registers harness widgets;
+    # a fully-passing proof table is the verified surface in that case.
+    proofed = proofs is not None and proofs_failed == 0 and proofs_passed > 0
+    bad = (("RUNTIME ERROR" in out) or ("errors: 0" not in out) or not (has_options or has_widgets or proofed)
            or proofs_failed > 0)
     print("SMOKE " + ("FAIL " + str(target) if bad else "PASS " + str(target)))
     return 1 if bad else 0

@@ -6,6 +6,7 @@ local GAMES = {
 [1962086868] = "Tower of Hell",
 [2440500124] = "Doors",
 [3647333358] = "Evade",
+[4342047058] = "Guts and Blackpowder",
 [10767946926] = "Hush",
 [10768458048] = "Army Commander Tycoon",
 [10768728930] = "Hush",

@@ -15,6 +15,11 @@
     "id": 3647333358,
     "name": "Evade"
   },
+  "Guts and Blackpowder": {
+    "id": 4342047058,
+    "name": "Guts and Blackpowder",
+    "note": "jnkie Luraph v15.1 payload vendored verbatim (sha256 ca5e3299...948b7); loadstringed as the author's own loader does."
+  },
   "Hush": {
     "ids": [
       91445552037955,
