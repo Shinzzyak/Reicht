@@ -7,10 +7,10 @@ local GAMES = {
 [2440500124] = "Doors",
 [3647333358] = "Evade",
 [4342047058] = "Guts and Blackpowder",
+[4777817887] = "Blade Ball",
 [10767946926] = "Hush",
 [10768458048] = "Army Commander Tycoon",
 [10768728930] = "Hush",
-[13772394625] = "Blade Ball",
 [91445552037955] = "Hush",
 [119263815547952] = "Army Commander Tycoon",
 [122245938604556] = "Tongue Escape",
@@ -74,7 +74,7 @@ return nil, why
 end
 local name = GAMES[game.GameId] or GAMES[game.PlaceId]
 if not name then
-Notify("This game is not supported yet. Open the repo issues tab for the list.")
+Notify("This game is not supported yet. Open the repo issues tab for the list. PlaceId=" .. game.PlaceId .. " GameId=" .. game.GameId)
 return
 end
 local source, why = Fetch(BASE .. (name:gsub(" ", "%%20")) .. ".lua")
