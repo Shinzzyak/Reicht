@@ -10,6 +10,7 @@ local GAMES = {
 [10767946926] = "Hush",
 [10768458048] = "Army Commander Tycoon",
 [10768728930] = "Hush",
+[13772394625] = "Blade Ball",
 [91445552037955] = "Hush",
 [119263815547952] = "Army Commander Tycoon",
 [122245938604556] = "Tongue Escape",
