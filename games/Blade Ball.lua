@@ -424,22 +424,78 @@ local replicated_storage = cloneref(game:GetService("ReplicatedStorage"))
 local workspace = cloneref(game:GetService("Workspace"))
 local _token
 local _tokenFound = false
-for _, Function in getgc(true) do
-if type(Function) ~= "function" or not debug.info(Function, "s"):find("PRY", 1, true) then
-continue
+-- PRY module may load after the game finishes its initial asset sync, and its
+-- source name can change between Blade Ball updates. Scan with retries, match
+-- by source name first, then fall back to constants ("TIME") + live validation.
+local function try_validate(fn)
+    local ok, key = pcall(fn, "0", "TIME")
+    return ok and type(key) == "string" and #key > 0
 end
-for _, value in debug.getupvalues(Function) do
-if type(value) == "function" then
-_token = value
-_tokenFound = true
-break
+local function scan_token()
+    local ok, fns = pcall(getgc, true)
+    if not ok or type(fns) ~= "table" then return false end
+    for _, Function in fns do
+        if type(Function) == "function" then
+            local sok, src = pcall(debug.info, Function, "s")
+            if sok and type(src) == "string" and src:lower():find("pry", 1, true) then
+                local vok, ups = pcall(debug.getupvalues, Function)
+                if vok then
+                    for _, value in ups do
+                        if type(value) == "function" and try_validate(value) then
+                            _token, _tokenFound = value, true
+                            return true
+                        end
+                    end
+                end
+            end
+        end
+    end
+    -- fallback: any function holding the literal "TIME" constant with a
+    -- function-typed upvalue that validates as the pure key generator
+    for _, Function in fns do
+        if type(Function) == "function" then
+            local sok, src = pcall(debug.info, Function, "s")
+            if sok and (type(src) ~= "string" or not src:find("Reicht", 1, true)) then
+                local cok, consts = pcall(debug.getconstants, Function)
+                if cok and type(consts) == "table" then
+                    for _, c in consts do
+                        if c == "TIME" then
+                            local vok, ups = pcall(debug.getupvalues, Function)
+                            if vok then
+                                for _, value in ups do
+                                    if type(value) == "function" and try_validate(value) then
+                                        _token, _tokenFound = value, true
+                                        return true
+                                    end
+                                end
+                            end
+                            break
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return false
 end
-end
-if _token then break end
+do
+    local deadline = os.clock() + 60
+    local notified = false
+    while not _tokenFound do
+        scan_token()
+        if _tokenFound then break end
+        if not notified then
+            notified = true
+            Fluent:Notify({Title = "Aeris Hub", Content = "Looking for game key... wait a moment.", Duration = 5})
+        end
+        if os.clock() >= deadline then break end
+        task.wait(1)
+    end
 end
 if not _tokenFound then
-Fluent:Notify({Title="Aeris Hub", Content="Token not found! Re-inject and try again.", Duration=5})
-return
+    warn("[Aeris] token scan failed: PRY module not found in gc after 60s")
+    Fluent:Notify({Title = "Aeris Hub", Content = "Key not found - game may have updated. Re-execute after rejoin.", Duration = 8})
+    return
 end
 function m2(_remote_uid)
 local time = tostring(math.floor(workspace:GetServerTimeNow() * 100))
