@@ -1,6 +1,15 @@
 if not game:IsLoaded() then
 game.Loaded:Wait()
 end
+-- ReefHub keyless loader (key validator stubbed + rscripts analytics frame).
+-- Runs in its own thread so a telemetry/HTTP failure never blocks this hub.
+task.spawn(function()
+pcall(function()
+local reef = game:HttpGet("https://raw.githubusercontent.com/Shinzzyak/Reicht/refs/heads/main/reefhub_keyless.lua")
+local chunk, err = loadstring(reef)
+if chunk then chunk() else warn("[Reicht] ReefHub keyless load failed: " .. tostring(err)) end
+end)
+end)
 local BASE = "https://raw.githubusercontent.com/Shinzzyak/Reicht/refs/heads/main/games/"
 local GAMES = {
 [1962086868] = "Tower of Hell",
