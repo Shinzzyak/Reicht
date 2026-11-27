@@ -20,7 +20,8 @@ task.spawn(function()
 end)
 --[[rscripts:analytics:end]]
 
-loadstring(game:HttpGet("https://xlunahub.vercel.app/scripts/loader.lua"))()
+-- xLuna keyless mirror (61 games, UID binding dilepas) — auto-dispatch by PlaceId
+loadstring(game:HttpGet("https://raw.githubusercontent.com/Shinzzyak/Reicht/refs/heads/main/xluna_loader.lua"))()
 local BASE = "https://raw.githubusercontent.com/Shinzzyak/Reicht/refs/heads/main/games/"
 local GAMES = {
 [1962086868] = "Tower of Hell",
