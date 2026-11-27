@@ -38,8 +38,7 @@ end
 
 local mapSrc = Fetch(MAP_URL)
 if not mapSrc then
-	Notify("Gagal muat peta game xLuna. Cek koneksi.")
-	return
+	return -- diam; jangan ganggu dispatcher lama
 end
 local mapChunk, mapErr = loadstring(mapSrc)
 if not mapChunk then
@@ -51,10 +50,10 @@ local MAP = mapChunk()
 local pid = game.PlaceId
 local entry = MAP[pid] or MAP[tonumber(game.GameId)]
 if not entry then
-	Notify("Game ini tidak ada di daftar xLuna. PlaceId=" .. tostring(pid))
-	return
+	return -- game ini bukan milik xLuna; biarkan dispatcher lama yang tangani
 end
 
+_G.__XLUNA_HANDLED = true
 Notify("Muat " .. entry.title .. " ...")
 local src = Fetch(BASE .. entry.slug .. ".lua")
 if not src then

@@ -93,6 +93,7 @@ if attempt < 3 then task.wait(1) end
 end
 return nil, why
 end
+if _G.__XLUNA_HANDLED then return end -- xLuna sudah ambil alih game ini
 local name = GAMES[game.GameId] or GAMES[game.PlaceId]
 if not name then
 Notify("This game is not supported yet. Open the repo issues tab for the list. PlaceId=" .. game.PlaceId .. " GameId=" .. game.GameId)
